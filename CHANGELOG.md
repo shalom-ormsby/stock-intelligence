@@ -7,8 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.5.3] - 2025-10-23
+
+### Added
+- **Centralized Scoring Configuration**: Introduced `ScoringConfig` class with documented rationale for all thresholds
+  - All magic numbers now have clear financial/technical justifications
+  - Market cap thresholds based on SEC definitions and industry standards
+  - P/E ratio ranges based on historical S&P 500 averages (~15-20 long-term)
+  - RSI thresholds based on Wilder (1978) technical analysis conventions
+  - MACD settings using standard 12-26-9 configuration (Appel, 1979)
+  - Macro thresholds based on Fed policy ranges and historical economic data
+  - Volatility and beta thresholds for risk assessment
+  - Easy to tune scoring strategy by adjusting config values
+
+### Changed
+- All scoring methods now reference `ScoringConfig` instead of hardcoded values
+- Improved code transparency: every threshold explains "why this number?"
+- **100% backward compatible**: All scores produce identical results
+
+### Documentation
+- Added inline documentation for every threshold with financial context
+- Scoring logic now self-documenting and audit-ready
+
+## [Unreleased - Prior Changes]
+
 ### Fixed
 - Fixed timestamp bug: Analysis Date now correctly displays in Pacific Time without +1 hour offset in Notion databases
+
+### Changed
+- **Roadmap Reorganization**: Updated IMPROVEMENT_ROADMAP.md to prioritize decision-making clarity over infrastructure
+  - New Phase 1 focuses on: Scoring Config, Pattern Validation, and Comparative Analysis
+  - Deferred logging, caching, and rate limiting (solve non-problems for 1-3 stocks/day workflow)
+  - Aligned priorities with actual use case: personal decision-support tool for daily earnings plays
+
+### Documentation
+- Added design philosophy to roadmap: "Impeccable but simple. Personal decision-support tool for daily stock analyses ahead of earnings. Not enterprise software."
 
 ## [2.5.2] - 2025-10-22
 

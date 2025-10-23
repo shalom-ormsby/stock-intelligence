@@ -1,10 +1,11 @@
 # ==================================================================================================
-# Stock Analyzer — v2.5.2 (Single Cell, Hybrid Dual‑API, Copy‑Paste Ready)
+# Stock Analyzer — v2.5.3 (Single Cell, Hybrid Dual‑API, Copy‑Paste Ready)
 # - Technical: Polygon
 # - Fundamental: Alpha Vantage
 # - Macro: FRED
 # - Scores: Technical, Fundamental, Macro, Risk, Sentiment (unweighted), Composite
-# - NEW: Pattern Score, Pattern Signal, Detected Patterns (1.0–5.0, NOT included in Composite)
+# - Pattern Score, Pattern Signal, Detected Patterns (1.0–5.0, NOT included in Composite)
+# - NEW v2.5.3: Centralized Scoring Configuration with documented thresholds
 # - Syncs to Notion: Stock Analyses (upsert) + Stock History (append)
 # ==================================================================================================
 
@@ -20,7 +21,7 @@ from dotenv import load_dotenv
 load_dotenv()  # Load environment variables from .env file
 
 PACIFIC_TZ = pytz.timezone("America/Los_Angeles")
-VERSION = "v2.5.2"
+VERSION = "v2.5.3"
 
 # =============================================================================
 # CONFIGURATION — REQUIRED: Set via environment variables
@@ -412,11 +413,205 @@ def compute_pattern_score(tech: dict) -> Tuple[float, str, List[str]]:
     return score, signal, detected
 
 # =============================================================================
+# Scoring Configuration — Centralized Thresholds
+# =============================================================================
+
+class ScoringConfig:
+    """
+    Centralized scoring thresholds and constants with documented rationale.
+
+    All thresholds based on:
+    - Financial industry standards (P/E ratios, debt levels)
+    - Technical analysis conventions (RSI overbought/oversold)
+    - Economic indicators (Fed policy ranges)
+    - Market cap classifications (SEC definitions)
+
+    Adjust these values to customize scoring sensitivity.
+
+    Philosophy: Every magic number should have a documented reason.
+    """
+
+    # =========================================================================
+    # MARKET CAP THRESHOLDS
+    # Based on industry standard classifications and SEC definitions
+    # =========================================================================
+    MARKET_CAP_MEGA = 200e9       # $200B+ = Mega cap (Apple, Microsoft, NVDA)
+                                  # Only ~20 companies globally reach this tier
+
+    MARKET_CAP_LARGE = 10e9       # $10B+ = Large cap (S&P 500 typical range)
+                                  # Institutional-grade stability
+
+    MARKET_CAP_MID = 2e9          # $2B+ = Mid cap
+                                  # Russell 2000 upper range
+
+    MARKET_CAP_RISK_SAFE = 100e9  # $100B+ for risk scoring
+                                  # Too-big-to-fail territory
+
+    # =========================================================================
+    # P/E RATIO RANGES
+    # Based on historical S&P 500 averages (~15-20 long-term)
+    # =========================================================================
+    PE_RATIO_OPTIMAL_MIN = 10     # Below this = potentially undervalued
+                                  # Value territory: Graham/Buffett zone
+
+    PE_RATIO_OPTIMAL_MAX = 25     # Above this = potentially overvalued
+                                  # Historical S&P 500 median ~18-20
+
+    PE_RATIO_ACCEPTABLE_MIN = 5   # Extreme undervalue or distressed
+                                  # Requires investigation (value trap?)
+
+    PE_RATIO_ACCEPTABLE_MAX = 35  # Growth stock territory
+                                  # Tech/growth premium justified if earnings growing >20%
+
+    # =========================================================================
+    # RSI THRESHOLDS
+    # Standard technical analysis ranges (Wilder, 1978)
+    # =========================================================================
+
+    # Technical Scoring RSI Bands
+    RSI_NEUTRAL_MIN = 40          # Below = oversold bias forming
+    RSI_NEUTRAL_MAX = 60          # Above = overbought bias forming
+                                  # 40-60 = healthy neutral momentum zone
+
+    RSI_MODERATE_LOW_MIN = 30     # Classic oversold threshold (Wilder)
+    RSI_MODERATE_LOW_MAX = 40     # Transitioning to oversold
+
+    RSI_MODERATE_HIGH_MIN = 60    # Transitioning to overbought
+    RSI_MODERATE_HIGH_MAX = 70    # Classic overbought threshold (Wilder)
+
+    # Sentiment Scoring RSI Bands (tighter ranges)
+    RSI_SENTIMENT_NEUTRAL_MIN = 45     # Tighter neutral band for sentiment
+    RSI_SENTIMENT_NEUTRAL_MAX = 55     # Indicates balanced sentiment
+
+    RSI_SENTIMENT_MODERATE_LOW_MIN = 35    # Mild oversold sentiment
+    RSI_SENTIMENT_MODERATE_LOW_MAX = 45
+
+    RSI_SENTIMENT_MODERATE_HIGH_MIN = 55   # Mild overbought sentiment
+    RSI_SENTIMENT_MODERATE_HIGH_MAX = 65
+
+    # =========================================================================
+    # MACD SETTINGS
+    # Standard 12-26-9 configuration (Appel, 1979)
+    # =========================================================================
+    MACD_SIGNAL_CONVERGENCE = 0.9  # MACD at 90% of signal = near crossover
+                                    # Anticipates momentum shift
+
+    # =========================================================================
+    # VOLUME THRESHOLDS
+    # Institutional flow detection
+    # =========================================================================
+    VOLUME_SPIKE_RATIO = 1.2       # 120% of 20-day avg = unusual activity
+                                    # Suggests institutional interest
+
+    VOLUME_SURGE_RATIO = 1.5       # 150%+ = strong conviction
+                                    # Often precedes breakouts
+
+    # =========================================================================
+    # PRICE CHANGE THRESHOLDS
+    # Momentum classification
+    # =========================================================================
+    PRICE_CHANGE_STRONG = 0.10     # 10%+ monthly gain = strong momentum
+                                    # Outperforming S&P 500 typical monthly range
+
+    PRICE_CHANGE_POSITIVE = 0.0    # Any gain = positive momentum
+
+    PRICE_CHANGE_MODERATE_1D = 0.02  # 2% daily = moderate intraday move
+                                      # Above noise threshold
+
+    PRICE_CHANGE_STRONG_1M_SENTIMENT = 0.05  # 5%+ monthly for sentiment scoring
+                                              # Indicates positive market perception
+
+    # =========================================================================
+    # DEBT RATIOS
+    # Conservative financial health standards
+    # =========================================================================
+    DEBT_TO_EQUITY_IDEAL = 0.5     # <0.5 = excellent balance sheet
+                                    # Tech companies often operate here
+
+    DEBT_TO_EQUITY_ACCEPTABLE = 1.0  # <1.0 = acceptable leverage
+                                      # Traditional corporate finance standard
+
+    # =========================================================================
+    # REVENUE THRESHOLDS
+    # Scale and operational maturity
+    # =========================================================================
+    REVENUE_SIGNIFICANT = 10e9     # $10B+ TTM = significant enterprise
+                                    # Fortune 500 territory
+
+    # =========================================================================
+    # EPS THRESHOLDS
+    # Profitability benchmarks
+    # =========================================================================
+    EPS_STRONG = 5.0               # $5+ EPS = strong profitability
+                                    # Mega-cap earnings power
+
+    EPS_POSITIVE = 0.0             # Positive = profitable (vs loss-making)
+
+    # =========================================================================
+    # MACRO ECONOMIC THRESHOLDS
+    # Fed policy ranges and historical economic data
+    # =========================================================================
+
+    # Fed Funds Rate (Federal Reserve target rate)
+    FED_FUNDS_LOW = 2.0            # <2% = accommodative monetary policy
+                                    # Risk-on environment
+
+    FED_FUNDS_MODERATE = 4.0       # <4% = neutral policy territory
+                                    # Balanced stance
+
+    FED_FUNDS_HIGH = 6.0           # <6% = restrictive but not extreme
+                                    # Volcker era was 15%+; current high is relative
+
+    # Unemployment Rate
+    UNEMPLOYMENT_HEALTHY = 4.5     # <4.5% = strong labor market
+                                    # Full employment by Fed definition
+
+    UNEMPLOYMENT_ACCEPTABLE = 6.0  # <6% = acceptable conditions
+                                    # Historical average ~5-6%
+
+    # Consumer Sentiment (University of Michigan Index)
+    CONSUMER_SENTIMENT_STRONG = 80      # >80 = strong confidence
+                                         # Correlates with consumer spending
+
+    CONSUMER_SENTIMENT_MODERATE = 60    # >60 = moderate confidence
+                                         # Below 60 = recession risk
+
+    # =========================================================================
+    # VOLATILITY THRESHOLDS
+    # 30-day volatility (standard deviation of daily returns)
+    # =========================================================================
+    VOLATILITY_LOW = 0.02          # <2% daily std dev = low volatility
+                                    # Blue chip / defensive territory
+
+    VOLATILITY_MODERATE = 0.05     # <5% = moderate volatility
+                                    # Typical for quality growth stocks
+
+    VOLATILITY_HIGH = 0.10         # <10% = high but not extreme
+                                    # Small caps / growth stage
+
+    # =========================================================================
+    # BETA THRESHOLDS
+    # Market correlation (1.0 = moves exactly with market)
+    # =========================================================================
+    BETA_LOW = 0.8                 # <0.8 = defensive stock
+                                    # Less volatile than market (utilities, staples)
+
+    BETA_MODERATE = 1.2            # <1.2 = moderate correlation
+                                    # Typical for quality large-caps
+
+    # =========================================================================
+    # VOLUME COMPARISON (for sentiment)
+    # =========================================================================
+    VOLUME_POSITIVE_RATIO = 1.0    # Volume > avg = positive sentiment
+                                    # Indicates increased interest
+
+# =============================================================================
 # Scoring
 # =============================================================================
 class StockScorer:
     def __init__(self):
         self.weights = {"technical": 0.30, "fundamental": 0.35, "macro": 0.20, "risk": 0.15}
+        self.config = ScoringConfig()  # Centralized scoring configuration
 
     def calculate_scores(self, data: dict) -> dict:
         tech  = data["technical"]
@@ -449,22 +644,30 @@ class StockScorer:
         rsi = tech.get("rsi")
         if rsi is not None:
             maxp += 2
-            if 40 <= rsi <= 60:                      points += 2
-            elif 30 <= rsi < 40 or 60 < rsi <= 70:   points += 1
+            if self.config.RSI_NEUTRAL_MIN <= rsi <= self.config.RSI_NEUTRAL_MAX:
+                points += 2
+            elif (self.config.RSI_MODERATE_LOW_MIN <= rsi < self.config.RSI_MODERATE_LOW_MAX or
+                  self.config.RSI_MODERATE_HIGH_MIN < rsi <= self.config.RSI_MODERATE_HIGH_MAX):
+                points += 1
         macd, sig = tech.get("macd"), tech.get("macd_signal")
         if macd is not None and sig is not None:
             maxp += 2
-            if macd > sig:              points += 2
-            elif macd > sig * 0.9:      points += 1
+            if macd > sig:
+                points += 2
+            elif macd > sig * self.config.MACD_SIGNAL_CONVERGENCE:
+                points += 1
         vol, avg = tech.get("volume"), tech.get("avg_volume_20d")
         if vol is not None and avg is not None:
             maxp += 1
-            if vol > avg * 1.2:         points += 1
+            if vol > avg * self.config.VOLUME_SPIKE_RATIO:
+                points += 1
         ch1m = tech.get("price_change_1m")
         if ch1m is not None:
             maxp += 2
-            if ch1m > 0.10:             points += 2
-            elif ch1m > 0:              points += 1
+            if ch1m > self.config.PRICE_CHANGE_STRONG:
+                points += 2
+            elif ch1m > self.config.PRICE_CHANGE_POSITIVE:
+                points += 1
         if maxp == 0: return 3.0
         return round(1.0 + (points / maxp) * 4.0, 2)
 
@@ -473,28 +676,39 @@ class StockScorer:
         mcap = fund.get("market_cap")
         if mcap is not None:
             maxp += 3
-            if mcap > 200e9:   points += 3
-            elif mcap > 10e9:  points += 2
-            elif mcap > 2e9:   points += 1
+            if mcap > self.config.MARKET_CAP_MEGA:
+                points += 3
+            elif mcap > self.config.MARKET_CAP_LARGE:
+                points += 2
+            elif mcap > self.config.MARKET_CAP_MID:
+                points += 1
         pe = fund.get("pe_ratio")
         if pe is not None:
             maxp += 2
-            if 10 <= pe <= 25:      points += 2
-            elif 5 <= pe < 10 or 25 < pe <= 35: points += 1
+            if self.config.PE_RATIO_OPTIMAL_MIN <= pe <= self.config.PE_RATIO_OPTIMAL_MAX:
+                points += 2
+            elif (self.config.PE_RATIO_ACCEPTABLE_MIN <= pe < self.config.PE_RATIO_OPTIMAL_MIN or
+                  self.config.PE_RATIO_OPTIMAL_MAX < pe <= self.config.PE_RATIO_ACCEPTABLE_MAX):
+                points += 1
         de = fund.get("debt_to_equity")
         if de is not None:
             maxp += 2
-            if de < 0.5:      points += 2
-            elif de < 1.0:    points += 1
+            if de < self.config.DEBT_TO_EQUITY_IDEAL:
+                points += 2
+            elif de < self.config.DEBT_TO_EQUITY_ACCEPTABLE:
+                points += 1
         rev = fund.get("revenue_ttm")
         if rev is not None:
             maxp += 1
-            if rev > 10e9:    points += 1
+            if rev > self.config.REVENUE_SIGNIFICANT:
+                points += 1
         eps = fund.get("eps")
         if eps is not None:
             maxp += 2
-            if eps > 5:       points += 2
-            elif eps > 0:     points += 1
+            if eps > self.config.EPS_STRONG:
+                points += 2
+            elif eps > self.config.EPS_POSITIVE:
+                points += 1
         if maxp == 0: return 3.0
         return round(1.0 + (points / maxp) * 4.0, 2)
 
@@ -503,19 +717,26 @@ class StockScorer:
         rate = macro.get("fed_funds_rate")
         if rate is not None:
             maxp += 3
-            if rate < 2.0: points += 3
-            elif rate < 4.0: points += 2
-            elif rate < 6.0: points += 1
+            if rate < self.config.FED_FUNDS_LOW:
+                points += 3
+            elif rate < self.config.FED_FUNDS_MODERATE:
+                points += 2
+            elif rate < self.config.FED_FUNDS_HIGH:
+                points += 1
         un = macro.get("unemployment")
         if un is not None:
             maxp += 2
-            if un < 4.5: points += 2
-            elif un < 6.0: points += 1
+            if un < self.config.UNEMPLOYMENT_HEALTHY:
+                points += 2
+            elif un < self.config.UNEMPLOYMENT_ACCEPTABLE:
+                points += 1
         cs = macro.get("consumer_sentiment")
         if cs is not None:
             maxp += 2
-            if cs > 80: points += 2
-            elif cs > 60: points += 1
+            if cs > self.config.CONSUMER_SENTIMENT_STRONG:
+                points += 2
+            elif cs > self.config.CONSUMER_SENTIMENT_MODERATE:
+                points += 1
         if maxp == 0: return 3.0
         return round(1.0 + (points / maxp) * 4.0, 2)
 
@@ -524,19 +745,26 @@ class StockScorer:
         vol = tech.get("volatility_30d")
         if vol is not None:
             maxp += 3
-            if vol < 0.02: points += 3
-            elif vol < 0.05: points += 2
-            elif vol < 0.10: points += 1
+            if vol < self.config.VOLATILITY_LOW:
+                points += 3
+            elif vol < self.config.VOLATILITY_MODERATE:
+                points += 2
+            elif vol < self.config.VOLATILITY_HIGH:
+                points += 1
         mcap = fund.get("market_cap")
         if mcap is not None:
             maxp += 2
-            if mcap > 100e9: points += 2
-            elif mcap > 10e9: points += 1
+            if mcap > self.config.MARKET_CAP_RISK_SAFE:
+                points += 2
+            elif mcap > self.config.MARKET_CAP_LARGE:
+                points += 1
         beta = fund.get("beta")
         if beta is not None:
             maxp += 2
-            if beta < 0.8: points += 2
-            elif beta < 1.2: points += 1
+            if beta < self.config.BETA_LOW:
+                points += 2
+            elif beta < self.config.BETA_MODERATE:
+                points += 1
         if maxp == 0: return 3.0
         return round(1.0 + (points / maxp) * 4.0, 2)
 
@@ -545,17 +773,23 @@ class StockScorer:
         rsi = tech.get("rsi")
         if rsi is not None:
             maxp += 2
-            if 45 <= rsi <= 55: points += 2
-            elif 35 <= rsi < 45 or 55 < rsi <= 65: points += 1
+            if self.config.RSI_SENTIMENT_NEUTRAL_MIN <= rsi <= self.config.RSI_SENTIMENT_NEUTRAL_MAX:
+                points += 2
+            elif (self.config.RSI_SENTIMENT_MODERATE_LOW_MIN <= rsi < self.config.RSI_SENTIMENT_MODERATE_LOW_MAX or
+                  self.config.RSI_SENTIMENT_MODERATE_HIGH_MIN < rsi <= self.config.RSI_SENTIMENT_MODERATE_HIGH_MAX):
+                points += 1
         vol, avg = tech.get("volume"), tech.get("avg_volume_20d")
         if vol is not None and avg is not None:
             maxp += 1
-            if vol > avg: points += 1
+            if vol > avg * self.config.VOLUME_POSITIVE_RATIO:
+                points += 1
         ch1m = tech.get("price_change_1m")
         if ch1m is not None:
             maxp += 2
-            if ch1m > 0.05: points += 2
-            elif ch1m > 0:  points += 1
+            if ch1m > self.config.PRICE_CHANGE_STRONG_1M_SENTIMENT:
+                points += 2
+            elif ch1m > self.config.PRICE_CHANGE_POSITIVE:
+                points += 1
         if maxp == 0: return 3.0
         return round(1.0 + (points / maxp) * 4.0, 2)
 
