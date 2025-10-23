@@ -1,10 +1,11 @@
 # ==================================================================================================
-# Stock Analyzer — v2.5.3 (Single Cell, Hybrid Dual‑API, Copy‑Paste Ready)
+# Stock Analyzer — v2.5.4 (Single Cell, Hybrid Dual‑API, Copy‑Paste Ready)
 # - Technical: Polygon
 # - Fundamental: Alpha Vantage
 # - Macro: FRED
 # - Scores: Technical, Fundamental, Macro, Risk, Sentiment (unweighted), Composite
 # - Pattern Score, Pattern Signal, Detected Patterns (1.0–5.0, NOT included in Composite)
+# - NEW v2.5.4: Pattern Backtesting to validate if patterns predict price movements
 # - NEW v2.5.3: Centralized Scoring Configuration with documented thresholds
 # - Syncs to Notion: Stock Analyses (upsert) + Stock History (append)
 # ==================================================================================================
@@ -21,7 +22,7 @@ from dotenv import load_dotenv
 load_dotenv()  # Load environment variables from .env file
 
 PACIFIC_TZ = pytz.timezone("America/Los_Angeles")
-VERSION = "v2.5.3"
+VERSION = "v2.5.4"
 
 # =============================================================================
 # CONFIGURATION — REQUIRED: Set via environment variables
@@ -606,6 +607,271 @@ class ScoringConfig:
                                     # Indicates increased interest
 
 # =============================================================================
+# Pattern Backtester — v2.5.4
+# =============================================================================
+class PatternBacktester:
+    """
+    Validates whether detected patterns actually predict future price movements.
+
+    Backtests pattern predictions against actual outcomes to calculate accuracy.
+    Answers: "Do these patterns have real predictive value?"
+
+    Usage:
+        backtester = PatternBacktester(polygon_client)
+        result = backtester.backtest_pattern(ticker, pattern_score, pattern_signal, detected_patterns)
+    """
+
+    def __init__(self, polygon_client: PolygonClient):
+        self.polygon = polygon_client
+        self.config = ScoringConfig()
+
+    def backtest_pattern(
+        self,
+        ticker: str,
+        pattern_score: float,
+        pattern_signal: str,
+        detected_patterns: List[str],
+        lookback_days: int = 30
+    ) -> Dict[str, Any]:
+        """
+        Backtest a pattern's prediction against actual price movement.
+
+        Args:
+            ticker: Stock ticker symbol
+            pattern_score: Current pattern score (1.0-5.0)
+            pattern_signal: Current pattern signal (emoji + text)
+            detected_patterns: List of detected pattern names
+            lookback_days: Days forward to validate prediction (default 30)
+
+        Returns:
+            {
+                "accuracy": float (0-100),          # Pattern prediction accuracy
+                "expected_move": float,             # Expected % move based on pattern
+                "actual_move": float,               # Actual % move observed
+                "days_to_breakout": int,            # Days until pattern resolved
+                "prediction_correct": bool,         # Did pattern predict correctly?
+                "confidence": str                   # High/Medium/Low confidence
+            }
+        """
+        print(f"\n[Backtester] Validating pattern prediction for {ticker}...")
+
+        # Classify pattern direction and expected move
+        direction = self._get_pattern_direction(pattern_score, pattern_signal)
+        expected_move = self._get_expected_move(pattern_score, detected_patterns)
+
+        # Get historical price data for validation
+        to_date = datetime.now().strftime("%Y-%m-%d")
+        from_date = (datetime.now() - timedelta(days=lookback_days + 10)).strftime("%Y-%m-%d")
+
+        aggs = self.polygon.get_aggregates(ticker, from_date, to_date, timespan="day")
+        if not aggs or "results" not in aggs or len(aggs["results"]) < lookback_days:
+            print(f"[Backtester] Insufficient data for {ticker} (need {lookback_days}+ days)")
+            return self._no_data_result()
+
+        bars = aggs["results"]
+        if len(bars) < 2:
+            return self._no_data_result()
+
+        # Use pattern detection point as reference (most recent bar)
+        pattern_price = safe_float(bars[-1].get("c"))
+        if pattern_price is None:
+            return self._no_data_result()
+
+        # Find breakout day and actual move
+        breakout_day, actual_move = self._find_breakout_day(
+            bars,
+            pattern_price,
+            expected_move,
+            direction
+        )
+
+        # Evaluate if prediction was correct
+        prediction_correct = self._evaluate_pattern_success(
+            direction,
+            actual_move,
+            expected_move
+        )
+
+        # Calculate accuracy score (0-100)
+        accuracy = self._calculate_accuracy(
+            prediction_correct,
+            actual_move,
+            expected_move,
+            direction
+        )
+
+        # Determine confidence level
+        confidence = self._determine_confidence(accuracy, breakout_day, lookback_days)
+
+        result = {
+            "accuracy": round(accuracy, 1),
+            "expected_move": round(expected_move * 100, 2),  # Convert to percentage
+            "actual_move": round(actual_move * 100, 2),      # Convert to percentage
+            "days_to_breakout": breakout_day if breakout_day else lookback_days,
+            "prediction_correct": prediction_correct,
+            "confidence": confidence,
+            "direction": direction,
+        }
+
+        print(f"[Backtester] Pattern Accuracy: {accuracy:.1f}% | "
+              f"Expected: {result['expected_move']:.2f}% | "
+              f"Actual: {result['actual_move']:.2f}% | "
+              f"Correct: {prediction_correct}")
+
+        return result
+
+    def _get_pattern_direction(self, pattern_score: float, pattern_signal: str) -> str:
+        """Classify pattern as bullish, bearish, or neutral."""
+        if pattern_score >= 3.5:
+            return "bullish"
+        elif pattern_score <= 2.5:
+            return "bearish"
+        else:
+            return "neutral"
+
+    def _get_expected_move(self, pattern_score: float, detected_patterns: List[str]) -> float:
+        """
+        Calculate expected price move based on pattern type and strength.
+
+        Returns expected move as decimal (e.g., 0.05 = 5% move expected)
+        """
+        # Base expected move from pattern score
+        if pattern_score >= 4.5:
+            base_move = 0.10    # 10% for extremely bullish/bearish
+        elif pattern_score >= 4.0:
+            base_move = 0.07    # 7% for strong patterns
+        elif pattern_score >= 3.5:
+            base_move = 0.05    # 5% for moderate bullish
+        elif pattern_score <= 2.0:
+            base_move = -0.10   # -10% for extremely bearish
+        elif pattern_score <= 2.5:
+            base_move = -0.07   # -7% for strong bearish
+        else:
+            base_move = 0.02    # 2% for neutral (noise)
+
+        # Adjust for high-conviction patterns
+        if not isinstance(detected_patterns, list):
+            return base_move
+
+        high_conviction = ["Golden Cross", "Death Cross", "Bullish Volume Surge", "Bearish Volume Dump"]
+        if any(p in detected_patterns for p in high_conviction):
+            base_move *= 1.3  # +30% expected move for strong patterns
+
+        return base_move
+
+    def _find_breakout_day(
+        self,
+        bars: List[dict],
+        pattern_price: float,
+        expected_move: float,
+        direction: str
+    ) -> Tuple[Optional[int], float]:
+        """
+        Find the day when pattern prediction was confirmed (breakout).
+
+        Returns: (days_to_breakout, actual_move_percentage)
+        """
+        if len(bars) < 2:
+            return None, 0.0
+
+        threshold = abs(expected_move) * 0.5  # 50% of expected move = breakout threshold
+
+        for i in range(1, len(bars)):
+            close = safe_float(bars[-i].get("c"))
+            if close is None:
+                continue
+
+            move = (close - pattern_price) / pattern_price
+
+            # Check if breakout occurred in expected direction
+            if direction == "bullish" and move >= threshold:
+                return i, move
+            elif direction == "bearish" and move <= -threshold:
+                return i, abs(move)
+            elif direction == "neutral" and abs(move) <= 0.03:  # 3% range
+                return i, move
+
+        # No breakout found - return final move
+        final_close = safe_float(bars[-1].get("c"))
+        final_move = (final_close - pattern_price) / pattern_price if final_close else 0.0
+
+        return None, final_move
+
+    def _evaluate_pattern_success(
+        self,
+        direction: str,
+        actual_move: float,
+        expected_move: float
+    ) -> bool:
+        """Determine if pattern prediction was correct."""
+        # For neutral patterns, success = price stayed in ±3% range
+        if direction == "neutral":
+            return abs(actual_move) <= 0.03
+
+        # For directional patterns, success = moved in predicted direction
+        if direction == "bullish":
+            return actual_move > 0
+        else:  # bearish
+            return actual_move < 0
+
+    def _calculate_accuracy(
+        self,
+        prediction_correct: bool,
+        actual_move: float,
+        expected_move: float,
+        direction: str
+    ) -> float:
+        """
+        Calculate pattern accuracy score (0-100).
+
+        Scoring:
+        - Correct direction: 50 base points
+        - Magnitude accuracy: +0-50 points (how close actual vs expected)
+        """
+        if not prediction_correct:
+            # Wrong direction = 0-25% accuracy depending on how wrong
+            error_ratio = abs(actual_move - expected_move) / abs(expected_move) if expected_move != 0 else 1.0
+            return max(0, 25 - (error_ratio * 25))
+
+        # Correct direction: base 50 points
+        accuracy = 50.0
+
+        # Add magnitude accuracy (0-50 points)
+        if expected_move != 0:
+            magnitude_accuracy = 1.0 - min(1.0, abs(actual_move - expected_move) / abs(expected_move))
+            accuracy += magnitude_accuracy * 50
+        else:
+            # Neutral pattern: score based on how stable price was
+            stability = 1.0 - min(1.0, abs(actual_move) / 0.05)  # 5% threshold
+            accuracy += stability * 50
+
+        return min(100.0, max(0.0, accuracy))
+
+    def _determine_confidence(self, accuracy: float, breakout_day: Optional[int], lookback_days: int) -> str:
+        """Determine confidence level based on accuracy and timing."""
+        # High accuracy + quick breakout = high confidence
+        if accuracy >= 80 and (breakout_day and breakout_day <= lookback_days * 0.3):
+            return "High"
+        # Good accuracy or reasonable timing
+        elif accuracy >= 60 or (breakout_day and breakout_day <= lookback_days * 0.5):
+            return "Medium"
+        # Low accuracy or no breakout
+        else:
+            return "Low"
+
+    def _no_data_result(self) -> Dict[str, Any]:
+        """Return default result when data is insufficient."""
+        return {
+            "accuracy": 0.0,
+            "expected_move": 0.0,
+            "actual_move": 0.0,
+            "days_to_breakout": None,
+            "prediction_correct": False,
+            "confidence": "Low",
+            "direction": "unknown",
+        }
+
+# =============================================================================
 # Scoring
 # =============================================================================
 class StockScorer:
@@ -959,12 +1225,34 @@ class NotionClient:
             if isinstance(det, list):
                 props["Detected Patterns"] = {"rich_text": [{"text": {"content": ", ".join(det)}}]}
 
+            # Pattern Backtesting fields (v2.5.4)
+            backtest = patt.get("backtest")
+            if isinstance(backtest, dict):
+                if backtest.get("accuracy") is not None:
+                    props["Pattern Accuracy"] = {"number": float(backtest["accuracy"])}
+                if backtest.get("days_to_breakout") is not None:
+                    props["Days to Breakout"] = {"number": int(backtest["days_to_breakout"])}
+                if backtest.get("expected_move") is not None:
+                    props["Expected Move (%)"] = {"number": float(backtest["expected_move"])}
+                if backtest.get("actual_move") is not None:
+                    props["Actual Move (%)"] = {"number": float(backtest["actual_move"])}
+                pred_correct = backtest.get("prediction_correct")
+                if isinstance(pred_correct, bool):
+                    props["Prediction Correct"] = {"checkbox": pred_correct}
+
         return props
 
 # =============================================================================
 # Orchestrator
 # =============================================================================
-def analyze_and_sync_to_notion(ticker: str):
+def analyze_and_sync_to_notion(ticker: str, backtest_patterns: bool = False):
+    """
+    Main analysis orchestrator.
+
+    Args:
+        ticker: Stock ticker symbol to analyze
+        backtest_patterns: If True, validate pattern predictions (adds 1 API call)
+    """
     print("\n" + "="*60)
     print(f"STOCK ANALYZER {VERSION} — HYBRID DUAL‑API")
     print("="*60)
@@ -985,6 +1273,12 @@ def analyze_and_sync_to_notion(ticker: str):
         p_score, p_signal, patterns = compute_pattern_score(tech)
         data["pattern"] = {"score": p_score, "signal": p_signal, "detected": patterns}
         print(f"Pattern → score={p_score}, signal={p_signal}, detected={patterns}")
+
+        # Optional: Backtest pattern accuracy
+        if backtest_patterns:
+            backtester = PatternBacktester(polygon)
+            backtest_result = backtester.backtest_pattern(ticker, p_score, p_signal, patterns)
+            data["pattern"]["backtest"] = backtest_result
     else:
         print("Pattern → skipped (no technical data).")
 
@@ -1011,5 +1305,6 @@ def analyze_and_sync_to_notion(ticker: str):
 # =============================================================================
 # EXECUTION
 # =============================================================================
-# Change ticker as needed
-analyze_and_sync_to_notion("AMZN")
+# Change ticker and backtest_patterns flag as needed
+# backtest_patterns=True adds pattern validation (1 additional API call)
+analyze_and_sync_to_notion("AMZN", backtest_patterns=True)

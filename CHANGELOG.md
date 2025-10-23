@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.5.4] - 2025-10-23
+
+### Added
+- **Pattern Backtesting System**: Validate if detected patterns actually predict price movements
+  - `PatternBacktester` class to test pattern predictions against actual outcomes
+  - Pattern Accuracy (0-100%): How well did the pattern predict the move?
+  - Expected vs Actual Move: Compare predicted and observed price changes
+  - Days to Breakout: How long until pattern resolved?
+  - Prediction Correct: Boolean flag for directional accuracy
+  - Optional `backtest_patterns` parameter in `analyze_and_sync_to_notion()`
+  - Adds 1 additional Polygon API call when enabled (30-day lookback window)
+
+### New Notion Fields (requires manual addition to databases)
+- **Pattern Accuracy** (Number): 0-100 accuracy score
+- **Expected Move (%)** (Number): Predicted price change percentage
+- **Actual Move (%)** (Number): Observed price change percentage
+- **Days to Breakout** (Number): Days until pattern resolved
+- **Prediction Correct** (Checkbox): True if direction prediction was correct
+
+### Changed
+- Main function signature: `analyze_and_sync_to_notion(ticker, backtest_patterns=False)`
+- Backtesting is opt-in to avoid extra API calls unless needed
+
+### Documentation
+- Added comprehensive docstrings to PatternBacktester class
+- Documented backtesting methodology and accuracy scoring logic
+- **ROADMAP.md progress**: Phase 1.2 (Pattern Validation) implementation complete
+
 ## [2.5.3] - 2025-10-23
 
 ### Added

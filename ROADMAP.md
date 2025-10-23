@@ -2,7 +2,7 @@
 
 **Design Philosophy:** Impeccable but simple. Personal decision-support tool for daily stock analyses ahead of earnings. Not enterprise software.
 
-**Current Version:** v2.5.3
+**Current Version:** v2.5.4
 
 For detailed change history, see [CHANGELOG.md](CHANGELOG.md)
 
@@ -12,15 +12,9 @@ For detailed change history, see [CHANGELOG.md](CHANGELOG.md)
 
 **Goal:** Understand and trust the scoring system for better investment decisions.
 
-**Time estimate:** 4-7 hours remaining
+**Time estimate:** 3-4 hours remaining
 
 ### 🎯 In Progress
-
-**Pattern Validation** (2-3 hours)
-- Test if detected patterns actually predict price movements
-- Backtest historical patterns against actual outcomes
-- Determine if patterns add value or are just noise
-- Add Pattern Accuracy field to Notion
 
 **Comparative Analysis** (3-4 hours)
 - Build tool to compare multiple stocks side-by-side
@@ -69,10 +63,10 @@ For detailed change history, see [CHANGELOG.md](CHANGELOG.md)
 ## Success Criteria
 
 **Phase 1 complete when:**
-- ✅ Can explain why any stock scores what it does
-- ✅ Know if patterns have predictive value (data-driven answer)
-- ✅ Can run comparative analysis in seconds
-- ✅ Confident in system's recommendations for real money decisions
+- ✅ Can explain why any stock scores what it does (v2.5.3 - Scoring Config)
+- ✅ Know if patterns have predictive value (v2.5.4 - Pattern Backtesting)
+- ⏳ Can run comparative analysis in seconds (In Progress)
+- ⏳ Confident in system's recommendations for real money decisions
 
 ---
 
