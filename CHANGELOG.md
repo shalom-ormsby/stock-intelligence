@@ -33,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Protects commercial interests while remaining community-friendly
 - Updated README with clear licensing terms and usage guidelines
 - Renamed main file from `stock_intelligence_v2.5.2_secure.py` to `stock_intelligence.py` (version tracked internally)
+- **ROADMAP.md updated**: Marked Phase 1.1 (Scoring Config) as completed
+  - Removed completed implementation details
+  - Updated success metrics to reflect progress
+  - Phase 1.2 (Pattern Validation) and 1.3 (Comparative Analysis) remain pending
 
 ## [Unreleased - Prior Changes]
 
