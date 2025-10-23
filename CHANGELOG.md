@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.5.5] - 2025-10-23
+
+### Added
+- **Comparative Analysis System**: Answer "Which stock should I buy?" with multi-stock comparisons
+  - `StockComparator` class for side-by-side stock analysis
+  - `compare_stocks()` convenience function for easy multi-stock comparison
+  - Multi-dimensional rankings: Overall, Value (P/E), Momentum, Safety, Fundamentals
+  - Clear buy recommendation with rationale and alternatives
+  - Beautiful formatted output with emoji-enhanced tables
+
+### Rankings Provided
+- **Overall**: Ranked by composite score (best investment overall)
+- **Value**: Ranked by P/E ratio (best value for money)
+- **Momentum**: Ranked by 1-month price change (strongest recent performance)
+- **Safety**: Ranked by risk score and volatility (lowest risk)
+- **Fundamentals**: Ranked by fundamental score (best financials)
+
+### Recommendation Engine
+- Automatically identifies best stock to buy now
+- Highlights if top pick is also best value, momentum, or safest
+- Suggests alternatives for value investors, momentum traders, or risk-averse buyers
+- Includes pattern signals in recommendation rationale
+
+### Usage Examples
+```python
+# Compare mega-cap tech stocks
+compare_stocks(['NVDA', 'MSFT', 'AMZN'])
+
+# Compare quantum computing plays
+compare_stocks(['IONQ', 'QBTS', 'QUBT'])
+
+# Get results programmatically
+results = compare_stocks(['AAPL', 'GOOGL'], print_results=False)
+buy_recommendation = results['recommendation']['buy_now']
+```
+
+### Documentation
+- **ROADMAP.md progress**: Phase 1.3 (Comparative Analysis) complete
+- **Phase 1 (Decision Clarity & Confidence) COMPLETE**: All three priorities delivered
+
 ## [2.5.4] - 2025-10-23
 
 ### Added

@@ -1,10 +1,11 @@
 # ==================================================================================================
-# Stock Analyzer — v2.5.4 (Single Cell, Hybrid Dual‑API, Copy‑Paste Ready)
+# Stock Analyzer — v2.5.5 (Single Cell, Hybrid Dual‑API, Copy‑Paste Ready)
 # - Technical: Polygon
 # - Fundamental: Alpha Vantage
 # - Macro: FRED
 # - Scores: Technical, Fundamental, Macro, Risk, Sentiment (unweighted), Composite
 # - Pattern Score, Pattern Signal, Detected Patterns (1.0–5.0, NOT included in Composite)
+# - NEW v2.5.5: Comparative Analysis to compare multiple stocks and get buy recommendations
 # - NEW v2.5.4: Pattern Backtesting to validate if patterns predict price movements
 # - NEW v2.5.3: Centralized Scoring Configuration with documented thresholds
 # - Syncs to Notion: Stock Analyses (upsert) + Stock History (append)
@@ -22,7 +23,7 @@ from dotenv import load_dotenv
 load_dotenv()  # Load environment variables from .env file
 
 PACIFIC_TZ = pytz.timezone("America/Los_Angeles")
-VERSION = "v2.5.4"
+VERSION = "v2.5.5"
 
 # =============================================================================
 # CONFIGURATION — REQUIRED: Set via environment variables
@@ -1069,6 +1070,273 @@ class StockScorer:
         return "Strong Sell"
 
 # =============================================================================
+# Stock Comparator — v2.5.5
+# =============================================================================
+class StockComparator:
+    """
+    Compare multiple stocks side-by-side to answer: "Which should I buy?"
+
+    Ranks stocks across composite score, value, momentum, risk, and fundamentals.
+    Provides clear recommendations based on relative strengths.
+
+    Usage:
+        comparator = StockComparator(polygon, alpha_vantage, fred)
+        results = comparator.compare_stocks(['NVDA', 'MSFT', 'AMZN'])
+        comparator.print_comparison(results)
+    """
+
+    def __init__(self, polygon: PolygonClient, alpha_vantage: AlphaVantageClient, fred: FREDClient):
+        self.collector = DataCollector(polygon, alpha_vantage, fred)
+        self.scorer = StockScorer()
+        self.config = ScoringConfig()
+
+    def compare_stocks(self, tickers: List[str]) -> dict:
+        """
+        Analyze and compare multiple stocks.
+
+        Args:
+            tickers: List of stock symbols to compare
+
+        Returns:
+            {
+                'tickers': list of tickers,
+                'analyses': {ticker: {data, scores, ...}},
+                'rankings': {
+                    'overall': [(ticker, score), ...],
+                    'value': [(ticker, score), ...],
+                    'momentum': [(ticker, score), ...],
+                    'safety': [(ticker, score), ...],
+                    'fundamentals': [(ticker, score), ...]
+                },
+                'recommendation': {
+                    'buy_now': ticker,
+                    'best_value': ticker,
+                    'best_momentum': ticker,
+                    'safest': ticker,
+                    'rationale': str
+                }
+            }
+        """
+        print("\n" + "="*60)
+        print(f"STOCK COMPARATOR — Analyzing {len(tickers)} stocks")
+        print("="*60)
+
+        # Collect data and scores for all tickers
+        analyses = {}
+        for ticker in tickers:
+            print(f"\n[{ticker}] Collecting data...")
+            try:
+                data = self.collector.collect_all_data(ticker)
+
+                # Add pattern analysis
+                tech = data.get("technical", {}) or {}
+                if tech:
+                    p_score, p_signal, patterns = compute_pattern_score(tech)
+                    data["pattern"] = {"score": p_score, "signal": p_signal, "detected": patterns}
+
+                scores = self.scorer.calculate_scores(data)
+
+                analyses[ticker] = {
+                    'data': data,
+                    'scores': scores,
+                    'metrics': self._extract_key_metrics(data, scores)
+                }
+
+                print(f"[{ticker}] ✅ Composite: {scores['composite']:.2f} — {scores['recommendation']}")
+
+            except Exception as e:
+                print(f"[{ticker}] ❌ Error: {e}")
+                continue
+
+        if len(analyses) < 2:
+            print("\n⚠️  Need at least 2 valid analyses for comparison")
+            return {'error': 'Insufficient data for comparison'}
+
+        # Calculate rankings
+        rankings = self._calculate_rankings(analyses)
+
+        # Generate recommendation
+        recommendation = self._generate_recommendation(analyses, rankings)
+
+        return {
+            'tickers': list(analyses.keys()),
+            'analyses': analyses,
+            'rankings': rankings,
+            'recommendation': recommendation
+        }
+
+    def _extract_key_metrics(self, data: dict, scores: dict) -> dict:
+        """Extract key metrics for comparison."""
+        tech = data.get('technical', {}) or {}
+        fund = data.get('fundamental', {}) or {}
+
+        return {
+            'price': safe_float(tech.get('current_price')),
+            'market_cap': safe_float(fund.get('market_cap')),
+            'pe_ratio': safe_float(fund.get('pe_ratio')),
+            'price_change_1m': safe_float(tech.get('price_change_1m'), 0.0),
+            'volatility': safe_float(tech.get('volatility_30d')),
+            'beta': safe_float(fund.get('beta')),
+            'debt_to_equity': safe_float(fund.get('debt_to_equity')),
+            'rsi': safe_float(tech.get('rsi')),
+            'composite': scores.get('composite', 0.0),
+            'technical': scores.get('technical', 0.0),
+            'fundamental': scores.get('fundamental', 0.0),
+            'risk': scores.get('risk', 0.0),
+        }
+
+    def _calculate_rankings(self, analyses: dict) -> dict:
+        """Calculate rankings across multiple dimensions."""
+
+        # Overall ranking (composite score)
+        overall = sorted(
+            [(t, a['scores']['composite']) for t, a in analyses.items()],
+            key=lambda x: x[1],
+            reverse=True
+        )
+
+        # Value ranking (P/E ratio - lower is better)
+        value = []
+        for ticker, analysis in analyses.items():
+            pe = analysis['metrics'].get('pe_ratio')
+            if pe and pe > 0:
+                # Invert P/E for ranking (lower P/E = higher value score)
+                value_score = 100.0 / pe
+                value.append((ticker, value_score))
+        value.sort(key=lambda x: x[1], reverse=True)
+
+        # Momentum ranking (1-month price change)
+        momentum = sorted(
+            [(t, a['metrics'].get('price_change_1m', 0.0)) for t, a in analyses.items()],
+            key=lambda x: x[1],
+            reverse=True
+        )
+
+        # Safety ranking (inverse of risk - higher risk score = safer)
+        safety = sorted(
+            [(t, a['scores']['risk']) for t, a in analyses.items()],
+            key=lambda x: x[1],
+            reverse=True
+        )
+
+        # Fundamentals ranking
+        fundamentals = sorted(
+            [(t, a['scores']['fundamental']) for t, a in analyses.items()],
+            key=lambda x: x[1],
+            reverse=True
+        )
+
+        return {
+            'overall': overall,
+            'value': value,
+            'momentum': momentum,
+            'safety': safety,
+            'fundamentals': fundamentals
+        }
+
+    def _generate_recommendation(self, analyses: dict, rankings: dict) -> dict:
+        """Generate clear buy recommendation with rationale."""
+
+        buy_now = rankings['overall'][0][0]
+        best_value = rankings['value'][0][0] if rankings['value'] else None
+        best_momentum = rankings['momentum'][0][0]
+        safest = rankings['safety'][0][0]
+
+        # Build rationale
+        buy_analysis = analyses[buy_now]
+        buy_score = buy_analysis['scores']['composite']
+        buy_rec = buy_analysis['scores']['recommendation']
+
+        rationale_parts = [
+            f"{buy_now} ranks #1 overall with composite score {buy_score:.2f} ({buy_rec})."
+        ]
+
+        # Add supporting reasons
+        if buy_now == best_value:
+            rationale_parts.append(f"Also the best value (lowest P/E ratio).")
+
+        if buy_now == best_momentum:
+            momentum_pct = buy_analysis['metrics'].get('price_change_1m', 0.0) * 100
+            rationale_parts.append(f"Strongest momentum ({momentum_pct:+.1f}% this month).")
+
+        if buy_now == safest:
+            risk_score = buy_analysis['scores']['risk']
+            rationale_parts.append(f"Also the safest option (risk score {risk_score:.2f}).")
+
+        # Add pattern signal if available
+        pattern = buy_analysis['data'].get('pattern', {})
+        if pattern.get('signal'):
+            rationale_parts.append(f"Pattern signal: {pattern['signal']}.")
+
+        return {
+            'buy_now': buy_now,
+            'best_value': best_value,
+            'best_momentum': best_momentum,
+            'safest': safest,
+            'rationale': ' '.join(rationale_parts)
+        }
+
+    def print_comparison(self, results: dict):
+        """Print formatted comparison results."""
+        if 'error' in results:
+            print(f"\n⚠️  {results['error']}")
+            return
+
+        print("\n" + "="*80)
+        print("COMPARATIVE ANALYSIS RESULTS")
+        print("="*80)
+
+        # Overall rankings
+        print("\n📊 OVERALL RANKINGS (Composite Score)")
+        print("-" * 80)
+        for i, (ticker, score) in enumerate(results['rankings']['overall'], 1):
+            analysis = results['analyses'][ticker]
+            rec = analysis['scores']['recommendation']
+            print(f"{i}. {ticker:6} — {score:.2f}  ({rec})")
+
+        # Value rankings
+        if results['rankings']['value']:
+            print("\n💰 VALUE RANKINGS (P/E Ratio)")
+            print("-" * 80)
+            for i, (ticker, _) in enumerate(results['rankings']['value'], 1):
+                pe = results['analyses'][ticker]['metrics'].get('pe_ratio')
+                print(f"{i}. {ticker:6} — P/E: {pe:.1f}" if pe else f"{i}. {ticker:6} — P/E: N/A")
+
+        # Momentum rankings
+        print("\n🚀 MOMENTUM RANKINGS (1-Month Price Change)")
+        print("-" * 80)
+        for i, (ticker, change) in enumerate(results['rankings']['momentum'], 1):
+            pct = change * 100
+            print(f"{i}. {ticker:6} — {pct:+.1f}%")
+
+        # Safety rankings
+        print("\n🛡️  SAFETY RANKINGS (Risk Score)")
+        print("-" * 80)
+        for i, (ticker, risk_score) in enumerate(results['rankings']['safety'], 1):
+            vol = results['analyses'][ticker]['metrics'].get('volatility')
+            vol_str = f"Vol: {vol*100:.1f}%" if vol else "Vol: N/A"
+            print(f"{i}. {ticker:6} — Risk: {risk_score:.2f}  ({vol_str})")
+
+        # Recommendation
+        print("\n" + "="*80)
+        print("🎯 RECOMMENDATION")
+        print("="*80)
+        rec = results['recommendation']
+        print(f"\n✅ BUY NOW: {rec['buy_now']}")
+        print(f"\n{rec['rationale']}")
+
+        if rec['buy_now'] != rec['best_value'] and rec['best_value']:
+            print(f"\n💡 Alternative: {rec['best_value']} offers best value (lowest P/E)")
+
+        if rec['buy_now'] != rec['best_momentum']:
+            print(f"💡 Alternative: {rec['best_momentum']} has strongest momentum")
+
+        if rec['buy_now'] != rec['safest']:
+            print(f"💡 Alternative: {rec['safest']} is the safest pick")
+
+        print("\n" + "="*80 + "\n")
+
+# =============================================================================
 # Notion Client — explicit per-DB props (no overrides forwarded)
 # =============================================================================
 class NotionClient:
@@ -1243,6 +1511,37 @@ class NotionClient:
         return props
 
 # =============================================================================
+# Convenience Functions
+# =============================================================================
+def compare_stocks(tickers: List[str], print_results: bool = True) -> dict:
+    """
+    Compare multiple stocks and get buy recommendation.
+
+    Args:
+        tickers: List of stock symbols to compare
+        print_results: If True, print formatted comparison table
+
+    Returns:
+        Comparison results dict with rankings and recommendation
+
+    Example:
+        compare_stocks(['NVDA', 'MSFT', 'AMZN'])
+        compare_stocks(['IONQ', 'QBTS', 'QUBT'])
+        results = compare_stocks(['AAPL', 'GOOGL'], print_results=False)
+    """
+    polygon = PolygonClient(POLYGON_API_KEY)
+    alpha = AlphaVantageClient(ALPHA_VANTAGE_API_KEY)
+    fred = FREDClient(FRED_API_KEY)
+
+    comparator = StockComparator(polygon, alpha, fred)
+    results = comparator.compare_stocks(tickers)
+
+    if print_results:
+        comparator.print_comparison(results)
+
+    return results
+
+# =============================================================================
 # Orchestrator
 # =============================================================================
 def analyze_and_sync_to_notion(ticker: str, backtest_patterns: bool = False):
@@ -1305,6 +1604,12 @@ def analyze_and_sync_to_notion(ticker: str, backtest_patterns: bool = False):
 # =============================================================================
 # EXECUTION
 # =============================================================================
+
+# SINGLE STOCK ANALYSIS
 # Change ticker and backtest_patterns flag as needed
 # backtest_patterns=True adds pattern validation (1 additional API call)
-analyze_and_sync_to_notion("AMZN", backtest_patterns=True)
+# analyze_and_sync_to_notion("AMZN", backtest_patterns=True)
+
+# COMPARATIVE ANALYSIS (v2.5.5)
+# Compare multiple stocks side-by-side to answer: "Which should I buy?"
+compare_stocks(['NVDA', 'MSFT', 'AMZN'])

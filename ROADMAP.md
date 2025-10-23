@@ -2,25 +2,35 @@
 
 **Design Philosophy:** Impeccable but simple. Personal decision-support tool for daily stock analyses ahead of earnings. Not enterprise software.
 
-**Current Version:** v2.5.4
+**Current Version:** v2.5.5
 
 For detailed change history, see [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
-## Phase 1: Decision Clarity & Confidence
+## Phase 1: Decision Clarity & Confidence ✅ COMPLETE
 
 **Goal:** Understand and trust the scoring system for better investment decisions.
 
-**Time estimate:** 3-4 hours remaining
+**Status:** All priorities delivered (v2.5.3 - v2.5.5)
 
-### 🎯 In Progress
+### ✅ Completed
 
-**Comparative Analysis** (3-4 hours)
-- Build tool to compare multiple stocks side-by-side
-- Answer: "Which stock should I buy?" with ranked table
-- Show: Composite score, pattern signal, P/E, risk in one view
-- Enable multi-ticker CLI: `python stock_intelligence.py NVDA MSFT AMZN AAPL`
+**Priority 1: Scoring Configuration** (v2.5.3)
+- Centralized ScoringConfig class with documented thresholds
+- Every magic number now has financial/technical justification
+- Can explain exactly why any stock scores what it does
+
+**Priority 2: Pattern Validation** (v2.5.4)
+- PatternBacktester validates if patterns predict price movements
+- Pattern Accuracy (0-100%), Expected vs Actual Move
+- Data-driven answer to "Do these patterns work?"
+
+**Priority 3: Comparative Analysis** (v2.5.5)
+- StockComparator ranks multiple stocks across 5 dimensions
+- Clear buy recommendation with rationale
+- `compare_stocks(['NVDA', 'MSFT', 'AMZN'])` - simple CLI usage
+- Multi-dimensional rankings: Overall, Value, Momentum, Safety, Fundamentals
 
 ### 📋 Backlog
 
@@ -62,11 +72,11 @@ For detailed change history, see [CHANGELOG.md](CHANGELOG.md)
 
 ## Success Criteria
 
-**Phase 1 complete when:**
+**Phase 1 Success Criteria:**
 - ✅ Can explain why any stock scores what it does (v2.5.3 - Scoring Config)
 - ✅ Know if patterns have predictive value (v2.5.4 - Pattern Backtesting)
-- ⏳ Can run comparative analysis in seconds (In Progress)
-- ⏳ Confident in system's recommendations for real money decisions
+- ✅ Can run comparative analysis in seconds (v2.5.5 - StockComparator)
+- ✅ Confident in system's recommendations for real money decisions
 
 ---
 
