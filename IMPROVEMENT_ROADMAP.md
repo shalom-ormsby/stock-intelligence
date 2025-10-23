@@ -291,6 +291,177 @@ class DataCollector:
 
 ---
 
+### 1.4 Scoring Configuration Centralization ⭐ PRIORITY 4
+
+**Why:** Magic numbers scattered throughout scoring logic make maintenance difficult and obscure rationale.
+
+**Current Issue:**
+
+```python
+# Line 476 - Why $200B? Why these specific P/E ranges?
+if mcap > 200e9:   points += 3
+elif mcap > 10e9:  points += 2
+
+if 10 <= pe <= 25:      points += 2
+elif 5 <= pe < 10 or 25 < pe <= 35: points += 1
+
+if 40 <= rsi <= 60:     points += 2  # Why 40-60?
+```
+
+**Problems:**
+- No documentation of why thresholds were chosen
+- Hard to adjust scoring strategy
+- Difficult to A/B test different configurations
+- Not clear if based on financial theory or arbitrary
+- Maintenance burden when optimizing
+
+**Implementation:**
+
+```python
+class ScoringConfig:
+    """
+    Centralized scoring thresholds and constants.
+
+    All thresholds are based on:
+    - Financial industry standards (P/E ratios, debt levels)
+    - Technical analysis conventions (RSI overbought/oversold)
+    - Economic indicators (Fed policy ranges)
+    - Market cap classifications (SEC definitions)
+
+    Adjust these values to customize scoring sensitivity.
+    """
+
+    # === MARKET CAP THRESHOLDS ===
+    # Based on industry standard classifications
+    MARKET_CAP_MEGA = 200e9   # $200B+ = Mega cap (Apple, Microsoft)
+    MARKET_CAP_LARGE = 10e9   # $10B+ = Large cap (S&P 500 range)
+    MARKET_CAP_MID = 2e9      # $2B+ = Mid cap
+    MARKET_CAP_RISK_SAFE = 100e9  # $100B+ for risk assessment
+
+    # === P/E RATIO RANGES ===
+    # Based on historical market averages (S&P 500 ~15-20 long-term)
+    PE_RATIO_OPTIMAL_MIN = 10    # Below = potentially undervalued
+    PE_RATIO_OPTIMAL_MAX = 25    # Above = potentially overvalued
+    PE_RATIO_ACCEPTABLE_MIN = 5  # Extreme undervalue territory
+    PE_RATIO_ACCEPTABLE_MAX = 35 # Growth stock territory
+
+    # === RSI THRESHOLDS ===
+    # Standard technical analysis ranges
+    RSI_NEUTRAL_MIN = 40         # Below = oversold bias
+    RSI_NEUTRAL_MAX = 60         # Above = overbought bias
+    RSI_MODERATE_LOW_MIN = 30    # Classic oversold threshold
+    RSI_MODERATE_LOW_MAX = 40
+    RSI_MODERATE_HIGH_MIN = 60
+    RSI_MODERATE_HIGH_MAX = 70   # Classic overbought threshold
+    RSI_SENTIMENT_NEUTRAL_MIN = 45
+    RSI_SENTIMENT_NEUTRAL_MAX = 55
+    RSI_SENTIMENT_MODERATE_LOW_MIN = 35
+    RSI_SENTIMENT_MODERATE_LOW_MAX = 45
+    RSI_SENTIMENT_MODERATE_HIGH_MIN = 55
+    RSI_SENTIMENT_MODERATE_HIGH_MAX = 65
+
+    # === MACD SETTINGS ===
+    MACD_SIGNAL_CONVERGENCE = 0.9  # 90% of signal = near crossover
+
+    # === VOLUME THRESHOLDS ===
+    VOLUME_SPIKE_RATIO = 1.2       # 120% of 20-day average = unusual activity
+    VOLUME_SURGE_RATIO = 1.5       # 150% = strong surge
+
+    # === PRICE CHANGE THRESHOLDS ===
+    PRICE_CHANGE_STRONG = 0.10     # 10%+ monthly gain = strong momentum
+    PRICE_CHANGE_POSITIVE = 0.0    # Any gain = positive
+    PRICE_CHANGE_MODERATE_1D = 0.02  # 2% daily = moderate move
+
+    # === DEBT RATIOS ===
+    # Based on conservative financial health standards
+    DEBT_TO_EQUITY_IDEAL = 0.5     # <0.5 = excellent balance sheet
+    DEBT_TO_EQUITY_ACCEPTABLE = 1.0  # <1.0 = acceptable leverage
+
+    # === REVENUE THRESHOLDS ===
+    REVENUE_SIGNIFICANT = 10e9     # $10B+ TTM = significant enterprise
+
+    # === EPS THRESHOLDS ===
+    EPS_STRONG = 5.0               # $5+ = strong profitability
+    EPS_POSITIVE = 0.0             # Positive = profitable
+
+    # === MACRO ECONOMIC THRESHOLDS ===
+    # Based on Fed policy ranges and historical economic data
+    FED_FUNDS_LOW = 2.0            # <2% = accommodative policy
+    FED_FUNDS_MODERATE = 4.0       # <4% = neutral territory
+    FED_FUNDS_HIGH = 6.0           # <6% = restrictive but not extreme
+
+    UNEMPLOYMENT_HEALTHY = 4.5     # <4.5% = strong labor market
+    UNEMPLOYMENT_ACCEPTABLE = 6.0  # <6% = acceptable
+
+    CONSUMER_SENTIMENT_STRONG = 80  # >80 = strong consumer confidence
+    CONSUMER_SENTIMENT_MODERATE = 60  # >60 = moderate confidence
+
+    # === VOLATILITY THRESHOLDS ===
+    # 30-day volatility (standard deviation of returns)
+    VOLATILITY_LOW = 0.02          # <2% = low volatility (blue chip)
+    VOLATILITY_MODERATE = 0.05     # <5% = moderate volatility
+    VOLATILITY_HIGH = 0.10         # <10% = high but not extreme
+
+    # === BETA THRESHOLDS ===
+    # Market correlation (1.0 = moves with market)
+    BETA_LOW = 0.8                 # <0.8 = defensive stock
+    BETA_MODERATE = 1.2            # <1.2 = moderate correlation
+
+
+# Usage in StockScorer class
+class StockScorer:
+    def __init__(self):
+        self.config = ScoringConfig()
+        # ... existing code ...
+
+    def _score_fundamental(self, fund: dict) -> float:
+        points, maxp = 0.0, 0.0
+        mcap = fund.get("market_cap")
+        if mcap is not None:
+            maxp += 3
+            if mcap > self.config.MARKET_CAP_MEGA:
+                points += 3
+            elif mcap > self.config.MARKET_CAP_LARGE:
+                points += 2
+            elif mcap > self.config.MARKET_CAP_MID:
+                points += 1
+
+        pe = fund.get("pe_ratio")
+        if pe is not None:
+            maxp += 2
+            if self.config.PE_RATIO_OPTIMAL_MIN <= pe <= self.config.PE_RATIO_OPTIMAL_MAX:
+                points += 2
+            elif (self.config.PE_RATIO_ACCEPTABLE_MIN <= pe < self.config.PE_RATIO_OPTIMAL_MIN or
+                  self.config.PE_RATIO_OPTIMAL_MAX < pe <= self.config.PE_RATIO_ACCEPTABLE_MAX):
+                points += 1
+        # ... rest of scoring ...
+```
+
+**Files to modify:**
+- Add `ScoringConfig` class at top of file (after imports)
+- Update `StockScorer.__init__()` to instantiate config
+- Replace all magic numbers in:
+  - `_score_technical()`
+  - `_score_fundamental()`
+  - `_score_macro()`
+  - `_score_risk()`
+  - `_score_sentiment()`
+
+**Benefits:**
+- **Transparency:** Clear documentation of why each threshold exists
+- **Maintainability:** Single place to adjust scoring strategy
+- **Testability:** Easy to create alternative configs for A/B testing
+- **User confidence:** Users understand the logic behind scores
+- **Future optimization:** Can tune thresholds based on backtesting results
+
+**Migration path:**
+- No database schema changes needed
+- Scores remain identical with default config values
+- Can be done incrementally (one scoring method at a time)
+- Backward compatible with existing data
+
+---
+
 ## PHASE 2: Pattern Recognition Enhancements (MEDIUM PRIORITY - 5-7 days)
 
 ### 2.1 Pattern Backtesting ⭐ IMPORTANT
