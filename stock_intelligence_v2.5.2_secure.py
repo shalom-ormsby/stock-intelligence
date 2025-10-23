@@ -669,7 +669,7 @@ class NotionClient:
 
         if fund.get("company_name"):
             props["Company Name"] = {"rich_text": [{"text": {"content": str(fund["company_name"])}}]}
-        props["Analysis Date"] = {"date": {"start": ts.astimezone(timezone.utc).isoformat()}}
+        props["Analysis Date"] = {"date": {"start": ts.isoformat()}}
         if tech.get("current_price") is not None:
             props["Current Price"] = {"number": float(tech["current_price"])}
 
