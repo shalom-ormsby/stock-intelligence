@@ -1,4 +1,4 @@
-# Stock Analyzer v2.5.2
+# Stock Analyzer v2.5.3
 
 Professional-grade stock analysis system with institutional-quality data sources and sophisticated multi-factor scoring.
 
@@ -183,7 +183,13 @@ Each analysis uses approximately:
 
 ## Version History
 
-**v2.5.2** (Current)
+**v2.5.3** (Current)
+- Centralized scoring configuration with documented thresholds
+- All magic numbers now have clear financial/technical justifications
+- 100% backward compatible scoring
+- Improved code transparency and maintainability
+
+**v2.5.2**
 - Added pattern recognition
 - Added pattern score and signal
 - Added detected patterns tracking
@@ -197,7 +203,31 @@ Each analysis uses approximately:
 
 ## License
 
-[Your License Here]
+This project is licensed under the **Business Source License 1.1**.
+
+### What This Means
+
+**✅ You CAN:**
+- Use this software for personal, educational, and non-commercial purposes
+- View and study the source code
+- Modify it for your own personal use
+- Fork it on GitHub for non-commercial projects
+- Learn from the implementation
+
+**❌ You CANNOT:**
+- Use this software to provide a commercial stock analysis service
+- Sell this software or derivative works
+- Use it in a way that competes with the original author's offerings
+
+**⏰ Future:**
+- On **October 23, 2029**, this software will automatically become available under the **MIT License**
+- After that date, it will be fully open source with no restrictions
+
+### Commercial Licensing
+
+Interested in using this software commercially? Contact: shalom.ormsby@gmail.com
+
+For full license terms, see the [LICENSE](LICENSE) file.
 
 ## Support
 

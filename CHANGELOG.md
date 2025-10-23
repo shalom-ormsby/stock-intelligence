@@ -28,6 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 - Added inline documentation for every threshold with financial context
 - Scoring logic now self-documenting and audit-ready
+- **Added Business Source License 1.1**: Allows personal/educational use, restricts commercial competition
+  - Automatically converts to MIT License on October 23, 2029
+  - Protects commercial interests while remaining community-friendly
+- Updated README with clear licensing terms and usage guidelines
+- Renamed main file from `stock_intelligence_v2.5.2_secure.py` to `stock_intelligence.py` (version tracked internally)
 
 ## [Unreleased - Prior Changes]
 
