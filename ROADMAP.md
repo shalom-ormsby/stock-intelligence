@@ -1,4 +1,4 @@
-# Stock Intelligence v2.5.2 - Improvement Roadmap & Context
+# Stock Intelligence v2.5.3 - Roadmap & Context
 
 ## 📋 Project Overview
 

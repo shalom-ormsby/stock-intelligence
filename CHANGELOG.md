@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed timestamp bug: Analysis Date now correctly displays in Pacific Time without +1 hour offset in Notion databases
 
 ### Changed
-- **Roadmap Reorganization**: Updated IMPROVEMENT_ROADMAP.md to prioritize decision-making clarity over infrastructure
+- **Roadmap Reorganization**: Updated ROADMAP.md to prioritize decision-making clarity over infrastructure
   - New Phase 1 focuses on: Scoring Config, Pattern Validation, and Comparative Analysis
   - Deferred logging, caching, and rate limiting (solve non-problems for 1-3 stocks/day workflow)
   - Aligned priorities with actual use case: personal decision-support tool for daily earnings plays
