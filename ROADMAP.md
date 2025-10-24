@@ -2,7 +2,7 @@
 
 **Design Philosophy:** Impeccable but simple. Personal decision-support tool for daily stock analyses ahead of earnings. Not enterprise software.
 
-**Current Version:** v2.5.5
+**Current Version:** v2.5.6
 
 For detailed change history, see [CHANGELOG.md](CHANGELOG.md)
 

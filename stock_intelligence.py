@@ -1,14 +1,15 @@
 # ==================================================================================================
-# Stock Analyzer — v2.5.5 (Single Cell, Hybrid Dual‑API, Copy‑Paste Ready)
+# Stock Analyzer — v2.5.6 (Single Cell, Hybrid Dual‑API, Copy‑Paste Ready)
 # - Technical: Polygon
 # - Fundamental: Alpha Vantage
 # - Macro: FRED
 # - Scores: Technical, Fundamental, Macro, Risk, Sentiment (unweighted), Composite
 # - Pattern Score, Pattern Signal, Detected Patterns (1.0–5.0, NOT included in Composite)
+# - NEW v2.5.6: Notion Comparison Sync to save multi-stock comparisons to Notion
 # - NEW v2.5.5: Comparative Analysis to compare multiple stocks and get buy recommendations
 # - NEW v2.5.4: Pattern Backtesting to validate if patterns predict price movements
 # - NEW v2.5.3: Centralized Scoring Configuration with documented thresholds
-# - Syncs to Notion: Stock Analyses (upsert) + Stock History (append)
+# - Syncs to Notion: Stock Analyses (upsert) + Stock History (append) + Stock Comparisons (create)
 # ==================================================================================================
 
 import os
@@ -23,7 +24,7 @@ from dotenv import load_dotenv
 load_dotenv()  # Load environment variables from .env file
 
 PACIFIC_TZ = pytz.timezone("America/Los_Angeles")
-VERSION = "v2.5.5"
+VERSION = "v2.5.6"
 
 # =============================================================================
 # CONFIGURATION — REQUIRED: Set via environment variables
@@ -36,6 +37,7 @@ FRED_API_KEY           = os.environ.get("FRED_API_KEY")
 NOTION_API_KEY         = os.environ.get("NOTION_API_KEY")
 STOCK_ANALYSES_DB_ID   = os.environ.get("STOCK_ANALYSES_DB_ID")
 STOCK_HISTORY_DB_ID    = os.environ.get("STOCK_HISTORY_DB_ID")
+STOCK_COMPARISONS_DB_ID = os.environ.get("STOCK_COMPARISONS_DB_ID")
 
 def _require(val: str, label: str):
     if not val:
@@ -53,6 +55,10 @@ for _v, _l in [
     (STOCK_HISTORY_DB_ID, "STOCK_HISTORY_DB_ID"),
 ]:
     _require(_v, _l)
+
+# STOCK_COMPARISONS_DB_ID is optional - only required when syncing comparisons
+if not STOCK_COMPARISONS_DB_ID:
+    print("⚠️  STOCK_COMPARISONS_DB_ID not set - comparison sync to Notion will be disabled")
 
 # =============================================================================
 # Helpers
@@ -1337,6 +1343,251 @@ class StockComparator:
         print("\n" + "="*80 + "\n")
 
 # =============================================================================
+# Notion Comparison Sync — v2.5.6
+# =============================================================================
+class NotionComparisonSync:
+    """
+    Syncs stock comparison results to Notion's Stock Comparisons database.
+
+    Creates timestamped comparison records with:
+    - Properties: Winner, Best Value, Best Momentum, Safest, Rationale, etc.
+    - Page content: Formatted rankings tables and recommendation
+
+    Usage:
+        sync = NotionComparisonSync(NOTION_API_KEY, COMPARISONS_DB_ID)
+        sync.sync_comparison(results)
+    """
+
+    def __init__(self, api_key: str, comparisons_db_id: str):
+        self.api_key = api_key
+        self.comparisons_db_id = comparisons_db_id
+        self.headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Notion-Version": "2022-06-28"
+        }
+
+    def sync_comparison(self, results: dict) -> Optional[str]:
+        """
+        Sync comparison results to Notion.
+
+        Args:
+            results: Comparison results dict from StockComparator.compare_stocks()
+
+        Returns:
+            Page ID if successful, None otherwise
+        """
+        if 'error' in results:
+            print(f"\n⚠️  Cannot sync comparison: {results['error']}")
+            return None
+
+        print("\n" + "="*60)
+        print("Syncing comparison to Notion...")
+        print("="*60)
+
+        # Build properties
+        timestamp = datetime.now(PACIFIC_TZ)
+        tickers = results['tickers']
+        rec = results['recommendation']
+
+        # Format name: "NVDA vs MSFT vs AMZN - Oct 23, 2025 5:05 PM"
+        name = f"{' vs '.join(tickers)} - {timestamp.strftime('%b %d, %Y %I:%M %p')}"
+
+        # Build composite scores summary
+        composite_scores = ", ".join([
+            f"{t}: {results['analyses'][t]['scores']['composite']:.2f}"
+            for t in tickers
+        ])
+
+        properties = {
+            "Name": {"title": [{"text": {"content": name}}]},
+            "Comparison Date": {"date": {"start": timestamp.isoformat()}},
+            "Tickers Compared": {"rich_text": [{"text": {"content": ", ".join(tickers)}}]},
+            "Winner": {"rich_text": [{"text": {"content": rec['buy_now']}}]},
+            "Best Momentum": {"rich_text": [{"text": {"content": rec['best_momentum']}}]},
+            "Safest": {"rich_text": [{"text": {"content": rec['safest']}}]},
+            "Rationale": {"rich_text": [{"text": {"content": rec['rationale']}}]},
+            "Composite Scores": {"rich_text": [{"text": {"content": composite_scores}}]},
+            "Number of Stocks": {"number": len(tickers)}
+        }
+
+        # Add Best Value if it exists
+        if rec.get('best_value'):
+            properties["Best Value"] = {"rich_text": [{"text": {"content": rec['best_value']}}]}
+
+        # Build page content
+        content = self._build_comparison_content(results)
+
+        # Create page
+        url = "https://api.notion.com/v1/pages"
+        body = {
+            "parent": {"database_id": self.comparisons_db_id},
+            "properties": properties,
+            "children": content
+        }
+
+        try:
+            r = requests.post(url, headers=self.headers, json=body, timeout=40)
+            if r.status_code in (200, 201):
+                page_id = r.json().get("id")
+                print(f"✅ Comparison synced to Notion")
+                print("="*60 + "\n")
+                return page_id
+            else:
+                print(f"[Notion] Comparison sync failed: {r.status_code} {r.text[:300]}")
+                print("="*60 + "\n")
+                return None
+        except Exception as e:
+            print(f"[Notion] Exception during sync: {e}")
+            print("="*60 + "\n")
+            return None
+
+    def _build_comparison_content(self, results: dict) -> list:
+        """Build Notion blocks for comparison page content."""
+        blocks = []
+
+        # Header callout
+        rec = results['recommendation']
+        blocks.append({
+            "object": "block",
+            "type": "callout",
+            "callout": {
+                "rich_text": [{"type": "text", "text": {"content": f"✅ BUY NOW: {rec['buy_now']}"}}],
+                "icon": {"emoji": "🎯"},
+                "color": "green_background"
+            }
+        })
+
+        # Rationale
+        blocks.append({
+            "object": "block",
+            "type": "paragraph",
+            "paragraph": {
+                "rich_text": [{"type": "text", "text": {"content": rec['rationale']}}]
+            }
+        })
+
+        # Divider
+        blocks.append({"object": "block", "type": "divider", "divider": {}})
+
+        # Overall Rankings
+        blocks.append({
+            "object": "block",
+            "type": "heading_2",
+            "heading_2": {
+                "rich_text": [{"type": "text", "text": {"content": "📊 Overall Rankings"}}]
+            }
+        })
+
+        for i, (ticker, score) in enumerate(results['rankings']['overall'], 1):
+            analysis = results['analyses'][ticker]
+            rec_text = analysis['scores']['recommendation']
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [
+                        {"type": "text", "text": {"content": f"{i}. {ticker} — {score:.2f} ({rec_text})"}},
+                    ]
+                }
+            })
+
+        # Value Rankings
+        if results['rankings']['value']:
+            blocks.append({
+                "object": "block",
+                "type": "heading_2",
+                "heading_2": {
+                    "rich_text": [{"type": "text", "text": {"content": "💰 Value Rankings"}}]
+                }
+            })
+
+            for i, (ticker, _) in enumerate(results['rankings']['value'], 1):
+                pe = results['analyses'][ticker]['metrics'].get('pe_ratio')
+                pe_text = f"P/E: {pe:.1f}" if pe else "P/E: N/A"
+                blocks.append({
+                    "object": "block",
+                    "type": "paragraph",
+                    "paragraph": {
+                        "rich_text": [{"type": "text", "text": {"content": f"{i}. {ticker} — {pe_text}"}}]
+                    }
+                })
+
+        # Momentum Rankings
+        blocks.append({
+            "object": "block",
+            "type": "heading_2",
+            "heading_2": {
+                "rich_text": [{"type": "text", "text": {"content": "🚀 Momentum Rankings"}}]
+            }
+        })
+
+        for i, (ticker, change) in enumerate(results['rankings']['momentum'], 1):
+            pct = change * 100
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"type": "text", "text": {"content": f"{i}. {ticker} — {pct:+.1f}%"}}]
+                }
+            })
+
+        # Safety Rankings
+        blocks.append({
+            "object": "block",
+            "type": "heading_2",
+            "heading_2": {
+                "rich_text": [{"type": "text", "text": {"content": "🛡️ Safety Rankings"}}]
+            }
+        })
+
+        for i, (ticker, risk_score) in enumerate(results['rankings']['safety'], 1):
+            vol = results['analyses'][ticker]['metrics'].get('volatility')
+            vol_text = f"Vol: {vol*100:.1f}%" if vol else "Vol: N/A"
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"type": "text", "text": {"content": f"{i}. {ticker} — Risk: {risk_score:.2f} ({vol_text})"}}]
+                }
+            })
+
+        # Alternative suggestions
+        if rec['buy_now'] != rec.get('best_value') and rec.get('best_value'):
+            blocks.append({
+                "object": "block",
+                "type": "divider",
+                "divider": {}
+            })
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"type": "text", "text": {"content": f"💡 Alternative: {rec['best_value']} offers best value (lowest P/E)"}}]
+                }
+            })
+
+        if rec['buy_now'] != rec['best_momentum']:
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"type": "text", "text": {"content": f"💡 Alternative: {rec['best_momentum']} has strongest momentum"}}]
+                }
+            })
+
+        if rec['buy_now'] != rec['safest']:
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"type": "text", "text": {"content": f"💡 Alternative: {rec['safest']} is the safest pick"}}]
+                }
+            })
+
+        return blocks
+
+# =============================================================================
 # Notion Client — explicit per-DB props (no overrides forwarded)
 # =============================================================================
 class NotionClient:
@@ -1513,13 +1764,14 @@ class NotionClient:
 # =============================================================================
 # Convenience Functions
 # =============================================================================
-def compare_stocks(tickers: List[str], print_results: bool = True) -> dict:
+def compare_stocks(tickers: List[str], print_results: bool = True, sync_to_notion: bool = True) -> dict:
     """
     Compare multiple stocks and get buy recommendation.
 
     Args:
         tickers: List of stock symbols to compare
         print_results: If True, print formatted comparison table
+        sync_to_notion: If True, sync comparison to Notion Stock Comparisons database
 
     Returns:
         Comparison results dict with rankings and recommendation
@@ -1527,7 +1779,7 @@ def compare_stocks(tickers: List[str], print_results: bool = True) -> dict:
     Example:
         compare_stocks(['NVDA', 'MSFT', 'AMZN'])
         compare_stocks(['IONQ', 'QBTS', 'QUBT'])
-        results = compare_stocks(['AAPL', 'GOOGL'], print_results=False)
+        results = compare_stocks(['AAPL', 'GOOGL'], print_results=False, sync_to_notion=False)
     """
     polygon = PolygonClient(POLYGON_API_KEY)
     alpha = AlphaVantageClient(ALPHA_VANTAGE_API_KEY)
@@ -1538,6 +1790,15 @@ def compare_stocks(tickers: List[str], print_results: bool = True) -> dict:
 
     if print_results:
         comparator.print_comparison(results)
+
+    # Sync to Notion if enabled and database ID is configured
+    if sync_to_notion and 'error' not in results:
+        if not STOCK_COMPARISONS_DB_ID:
+            print("\n⚠️  Comparison sync skipped: STOCK_COMPARISONS_DB_ID not configured")
+            print("Add STOCK_COMPARISONS_DB_ID to your .env file to enable Notion sync\n")
+        else:
+            notion_sync = NotionComparisonSync(NOTION_API_KEY, STOCK_COMPARISONS_DB_ID)
+            notion_sync.sync_comparison(results)
 
     return results
 
@@ -1610,6 +1871,7 @@ def analyze_and_sync_to_notion(ticker: str, backtest_patterns: bool = False):
 # backtest_patterns=True adds pattern validation (1 additional API call)
 # analyze_and_sync_to_notion("AMZN", backtest_patterns=True)
 
-# COMPARATIVE ANALYSIS (v2.5.5)
+# COMPARATIVE ANALYSIS (v2.5.6)
 # Compare multiple stocks side-by-side to answer: "Which should I buy?"
+# Syncs to Notion automatically (requires STOCK_COMPARISONS_DB_ID in .env)
 compare_stocks(['NVDA', 'MSFT', 'AMZN'])

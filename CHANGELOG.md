@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.5.6] - 2025-10-23
+
+### Added
+- **Notion Comparison Sync**: Automatically save multi-stock comparisons to Notion for historical tracking
+  - `NotionComparisonSync` class to handle syncing comparison results
+  - Creates timestamped pages in Stock Comparisons database with:
+    - Properties: Name, Comparison Date, Tickers, Winner, Best Value, Best Momentum, Safest, Rationale, Composite Scores, Number of Stocks
+    - Formatted page content: Rankings tables, recommendation callout, alternative suggestions
+  - `sync_to_notion` parameter in `compare_stocks()` (default: True)
+  - Automatic fallback with helpful warning if STOCK_COMPARISONS_DB_ID not configured
+
+### New Environment Variable
+- **STOCK_COMPARISONS_DB_ID**: Optional database ID for Stock Comparisons (add to `.env` to enable sync)
+
+### Enhanced
+- `compare_stocks()` now has 3 output modes:
+  1. Print to console (default)
+  2. Sync to Notion (default, if database configured)
+  3. Return results programmatically (always)
+
+### Configuration
+- Made STOCK_COMPARISONS_DB_ID optional - shows warning instead of error if not set
+- Updated `.env.example` with new database ID template
+
+### Usage
+```python
+# Full experience - print + sync to Notion
+compare_stocks(['NVDA', 'MSFT', 'AMZN'])
+
+# Programmatic only - no console output, no Notion sync
+results = compare_stocks(['AAPL', 'GOOGL'], print_results=False, sync_to_notion=False)
+```
+
 ## [2.5.5] - 2025-10-23
 
 ### Added
