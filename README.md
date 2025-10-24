@@ -1,6 +1,6 @@
-# Stock Analyzer v2.5.3
+# Stock Intelligence, v2.x
 
-Professional-grade stock analysis system with institutional-quality data sources and sophisticated multi-factor scoring.
+A professional-grade stock analysis system with institutional-quality data sources and sophisticated multi-factor scoring.
 
 ## Features
 
