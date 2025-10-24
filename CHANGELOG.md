@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.5.6] - 2025-10-23
+## [0.2.6] - 2025-10-24
 
 ### Added
 - **Notion Comparison Sync**: Automatically save multi-stock comparisons to Notion for historical tracking
@@ -40,7 +40,7 @@ compare_stocks(['NVDA', 'MSFT', 'AMZN'])
 results = compare_stocks(['AAPL', 'GOOGL'], print_results=False, sync_to_notion=False)
 ```
 
-## [2.5.5] - 2025-10-23
+## [0.2.5] - 2025-10-23
 
 ### Added
 - **Comparative Analysis System**: Answer "Which stock should I buy?" with multi-stock comparisons
@@ -80,7 +80,7 @@ buy_recommendation = results['recommendation']['buy_now']
 - **ROADMAP.md progress**: Phase 1.3 (Comparative Analysis) complete
 - **Phase 1 (Decision Clarity & Confidence) COMPLETE**: All three priorities delivered
 
-## [2.5.4] - 2025-10-23
+## [0.2.4] - 2025-10-23
 
 ### Added
 - **Pattern Backtesting System**: Validate if detected patterns actually predict price movements
@@ -108,7 +108,7 @@ buy_recommendation = results['recommendation']['buy_now']
 - Documented backtesting methodology and accuracy scoring logic
 - **ROADMAP.md progress**: Phase 1.2 (Pattern Validation) implementation complete
 
-## [2.5.3] - 2025-10-23
+## [0.2.3] - 2025-10-23
 
 ### Added
 - **Centralized Scoring Configuration**: Introduced `ScoringConfig` class with documented rationale for all thresholds
@@ -133,7 +133,7 @@ buy_recommendation = results['recommendation']['buy_now']
   - Automatically converts to MIT License on October 23, 2029
   - Protects commercial interests while remaining community-friendly
 - Updated README with clear licensing terms and usage guidelines
-- Renamed main file from `stock_intelligence_v2.5.2_secure.py` to `stock_intelligence.py` (version tracked internally)
+- Renamed main file from `stock_intelligence_v0.2.2_secure.py` to `stock_intelligence.py` (version tracked internally)
 - **ROADMAP.md updated**: Marked Phase 1.1 (Scoring Config) as completed
   - Removed completed implementation details
   - Updated success metrics to reflect progress
@@ -153,7 +153,7 @@ buy_recommendation = results['recommendation']['buy_now']
 ### Documentation
 - Added design philosophy to roadmap: "Impeccable but simple. Personal decision-support tool for daily stock analyses ahead of earnings. Not enterprise software."
 
-## [2.5.2] - 2025-10-22
+## [0.2.2] - 2025-10-22
 
 ### Added
 - **Pattern Recognition System**: New scoring dimension for chart patterns
@@ -170,7 +170,7 @@ buy_recommendation = results['recommendation']['buy_now']
 ### Changed
 - Composite Score remains unchanged (patterns not double-counted in technical score)
 
-## [2.5.0] - 2025-10-22
+## [0.2.1] - 2025-10-22
 
 ### Added
 - **Hybrid Dual-API Architecture**: Best-in-class data from multiple sources
@@ -193,7 +193,7 @@ buy_recommendation = results['recommendation']['buy_now']
 - Total API calls per analysis: ~19-21 (Polygon: 8-10, Alpha Vantage: 6, FRED: 5)
 - Monthly cost: $29 (Polygon Starter only, Alpha Vantage free tier)
 
-## [2.4.1] - 2025-10-21
+## [0.2.0] - 2025-10-21
 
 ### Fixed
 - **Critical scoring bug**: Removed hardcoded default values that severely limited accuracy
@@ -212,7 +212,7 @@ buy_recommendation = results['recommendation']['buy_now']
 - True differentiation between stocks based on actual performance
 - More actionable recommendations
 
-## [2.4.0] - 2025-10-21
+## [0.1.9] - 2025-10-21
 
 ### Added
 - Migrated to Polygon.io Stocks Starter plan for technical data
@@ -226,9 +226,9 @@ buy_recommendation = results['recommendation']['buy_now']
 - Unlimited daily analyses (no more 2-3 stock per day limit)
 
 ### Known Limitations
-- Fundamental data limited on Polygon Starter plan (resolved in v2.5)
+- Fundamental data limited on Polygon Starter plan (resolved in v0.2.1)
 
-## [2.3.4] - 2025-10-21
+## [0.1.8] - 2025-10-21
 
 ### Fixed
 - Stock History sync error: Corrected schema mismatch between databases
@@ -239,9 +239,9 @@ buy_recommendation = results['recommendation']['buy_now']
 ### Changed
 - Updated language from "real-time" to "latest available" to reflect EOD data accurately
 - Added comprehensive debug logging
-- Protocol version updated to v2.3.4
+- Protocol version updated to v0.1.8
 
-## [2.3.2] - 2025-10-21
+## [0.1.7] - 2025-10-21
 
 ### Added
 - Real-time pricing via GLOBAL_QUOTE endpoint
@@ -252,7 +252,7 @@ buy_recommendation = results['recommendation']['buy_now']
 - API calls increased to 9 per stock (from 8)
 - Daily capacity reduced to 2 stocks (from 3) due to additional API call
 
-## [2.3.1] - 2025-10-21
+## [0.1.6] - 2025-10-21
 
 ### Added
 - Timestamp support: Analysis Date now includes exact time (not just date)
@@ -262,7 +262,7 @@ buy_recommendation = results['recommendation']['buy_now']
 ### Changed
 - ISO-8601 datetime format for all timestamps
 
-## [2.3.0] - 2025-10-21
+## [0.1.5] - 2025-10-21
 
 ### Added
 - **Dual-Database Architecture**: Historical tracking system
@@ -283,7 +283,7 @@ buy_recommendation = results['recommendation']['buy_now']
 - Historical data enables trend analysis and better entry/exit timing
 - Cleaner code organization and error handling
 
-## [2.2.0] - 2025-10-21
+## [0.1.4] - 2025-10-21
 
 ### Added
 - 50-day and 200-day moving averages
@@ -297,7 +297,7 @@ buy_recommendation = results['recommendation']['buy_now']
 - Data completeness tracking
 - Error handling for missing API data
 
-## [2.1.0] - 2025-10
+## [0.1.3] - 2025-10
 
 ### Added
 - Protocol version tracking in database
@@ -309,7 +309,7 @@ buy_recommendation = results['recommendation']['buy_now']
 - API efficiency
 - Notion property mapping
 
-## [2.0.0] - 2025-10
+## [0.1.0] - 2025-10
 
 ### Added
 - **Complete system redesign** with Master Control Protocol (MCP)
@@ -331,7 +331,7 @@ buy_recommendation = results['recommendation']['buy_now']
 - Daily capacity: 3 complete stock analyses (Alpha Vantage free tier: 25 calls/day)
 - FRED macroeconomic data (1000 calls/day)
 
-## [1.x] - Prior to 2025-10
+## [0.0.x] - Prior to 2025-10
 
 ### Features
 - Basic stock data fetching
@@ -343,6 +343,8 @@ buy_recommendation = results['recommendation']['buy_now']
 
 ## Version Naming Convention
 
-- **Major version** (e.g., v2.x): Significant architectural changes, new databases, major features
-- **Minor version** (e.g., v2.3): Bug fixes, refinements, additional metrics, improvements
-- **Patch version** (e.g., v2.3.1): Small fixes and patches
+**Pre-1.0 Status**: This software is not yet a true product. v1.0 will only be released when it supports multi-user Notion integration (anyone can use with their own Notion workspace).
+
+- **Major version** (e.g., v0.x): Pre-product releases for personal use only
+- **Minor version** (e.g., v0.2.x): Feature additions and improvements
+- **Patch version** (e.g., v0.2.3): Bug fixes and refinements

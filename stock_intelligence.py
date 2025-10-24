@@ -1,14 +1,14 @@
 # ==================================================================================================
-# Stock Analyzer — v2.5.6 (Single Cell, Hybrid Dual‑API, Copy‑Paste Ready)
+# Stock Analyzer — v0.2.6 (Single Cell, Hybrid Dual‑API, Copy‑Paste Ready)
 # - Technical: Polygon
 # - Fundamental: Alpha Vantage
 # - Macro: FRED
 # - Scores: Technical, Fundamental, Macro, Risk, Sentiment (unweighted), Composite
 # - Pattern Score, Pattern Signal, Detected Patterns (1.0–5.0, NOT included in Composite)
-# - NEW v2.5.6: Notion Comparison Sync to save multi-stock comparisons to Notion
-# - NEW v2.5.5: Comparative Analysis to compare multiple stocks and get buy recommendations
-# - NEW v2.5.4: Pattern Backtesting to validate if patterns predict price movements
-# - NEW v2.5.3: Centralized Scoring Configuration with documented thresholds
+# - NEW v0.2.6: Notion Comparison Sync to save multi-stock comparisons to Notion
+# - NEW v0.2.5: Comparative Analysis to compare multiple stocks and get buy recommendations
+# - NEW v0.2.4: Pattern Backtesting to validate if patterns predict price movements
+# - NEW v0.2.3: Centralized Scoring Configuration with documented thresholds
 # - Syncs to Notion: Stock Analyses (upsert) + Stock History (append) + Stock Comparisons (create)
 # ==================================================================================================
 
@@ -24,7 +24,7 @@ from dotenv import load_dotenv
 load_dotenv()  # Load environment variables from .env file
 
 PACIFIC_TZ = pytz.timezone("America/Los_Angeles")
-VERSION = "v2.5.6"
+VERSION = "v0.2.6"
 
 # =============================================================================
 # CONFIGURATION — REQUIRED: Set via environment variables
@@ -324,7 +324,7 @@ class DataCollector:
         return fund
 
 # =============================================================================
-# Pattern Detection — v2.5.2
+# Pattern Detection — v0.2.2
 # =============================================================================
 def _detect_cross(prev_a: Optional[float], prev_b: Optional[float], cur_a: Optional[float], cur_b: Optional[float]) -> Tuple[bool, bool]:
     if None in (prev_a, prev_b, cur_a, cur_b):
@@ -614,7 +614,7 @@ class ScoringConfig:
                                     # Indicates increased interest
 
 # =============================================================================
-# Pattern Backtester — v2.5.4
+# Pattern Backtester — v0.2.4
 # =============================================================================
 class PatternBacktester:
     """
@@ -1076,7 +1076,7 @@ class StockScorer:
         return "Strong Sell"
 
 # =============================================================================
-# Stock Comparator — v2.5.5
+# Stock Comparator — v0.2.5
 # =============================================================================
 class StockComparator:
     """
@@ -1343,7 +1343,7 @@ class StockComparator:
         print("\n" + "="*80 + "\n")
 
 # =============================================================================
-# Notion Comparison Sync — v2.5.6
+# Notion Comparison Sync — v0.2.6
 # =============================================================================
 class NotionComparisonSync:
     """
@@ -1744,7 +1744,7 @@ class NotionClient:
             if isinstance(det, list):
                 props["Detected Patterns"] = {"rich_text": [{"text": {"content": ", ".join(det)}}]}
 
-            # Pattern Backtesting fields (v2.5.4)
+            # Pattern Backtesting fields (v0.2.4)
             backtest = patt.get("backtest")
             if isinstance(backtest, dict):
                 if backtest.get("accuracy") is not None:
@@ -1871,7 +1871,7 @@ def analyze_and_sync_to_notion(ticker: str, backtest_patterns: bool = False):
 # backtest_patterns=True adds pattern validation (1 additional API call)
 # analyze_and_sync_to_notion("AMZN", backtest_patterns=True)
 
-# COMPARATIVE ANALYSIS (v2.5.6)
+# COMPARATIVE ANALYSIS (v0.2.6)
 # Compare multiple stocks side-by-side to answer: "Which should I buy?"
 # Syncs to Notion automatically (requires STOCK_COMPARISONS_DB_ID in .env)
 compare_stocks(['NVDA', 'MSFT', 'AMZN'])

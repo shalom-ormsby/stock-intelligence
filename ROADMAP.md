@@ -2,7 +2,7 @@
 
 **Design Philosophy:** Impeccable but simple. Personal decision-support tool for daily stock analyses ahead of earnings. Not enterprise software.
 
-**Current Version:** v2.5.6
+**Current Version:** v0.2.6
 
 For detailed change history, see [CHANGELOG.md](CHANGELOG.md)
 
@@ -12,21 +12,21 @@ For detailed change history, see [CHANGELOG.md](CHANGELOG.md)
 
 **Goal:** Understand and trust the scoring system for better investment decisions.
 
-**Status:** All priorities delivered (v2.5.3 - v2.5.5)
+**Status:** All priorities delivered (v0.2.3 - v0.2.5)
 
 ### ✅ Completed
 
-**Priority 1: Scoring Configuration** (v2.5.3)
+**Priority 1: Scoring Configuration** (v0.2.3)
 - Centralized ScoringConfig class with documented thresholds
 - Every magic number now has financial/technical justification
 - Can explain exactly why any stock scores what it does
 
-**Priority 2: Pattern Validation** (v2.5.4)
+**Priority 2: Pattern Validation** (v0.2.4)
 - PatternBacktester validates if patterns predict price movements
 - Pattern Accuracy (0-100%), Expected vs Actual Move
 - Data-driven answer to "Do these patterns work?"
 
-**Priority 3: Comparative Analysis** (v2.5.5)
+**Priority 3: Comparative Analysis** (v0.2.5)
 - StockComparator ranks multiple stocks across 5 dimensions
 - Clear buy recommendation with rationale
 - `compare_stocks(['NVDA', 'MSFT', 'AMZN'])` - simple CLI usage
@@ -73,13 +73,13 @@ For detailed change history, see [CHANGELOG.md](CHANGELOG.md)
 ## Success Criteria
 
 **Phase 1 Success Criteria:**
-- ✅ Can explain why any stock scores what it does (v2.5.3 - Scoring Config)
-- ✅ Know if patterns have predictive value (v2.5.4 - Pattern Backtesting)
-- ✅ Can run comparative analysis in seconds (v2.5.5 - StockComparator)
+- ✅ Can explain why any stock scores what it does (v0.2.3 - Scoring Config)
+- ✅ Know if patterns have predictive value (v0.2.4 - Pattern Backtesting)
+- ✅ Can run comparative analysis in seconds (v0.2.5 - StockComparator)
 - ✅ Confident in system's recommendations for real money decisions
 
 ---
 
-**Version:** 2.0
-**Last Updated:** October 23, 2025
+**Version:** 0.2.6
+**Last Updated:** October 24, 2025
 **Philosophy:** Optimize for insight, not infrastructure

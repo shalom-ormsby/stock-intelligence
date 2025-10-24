@@ -1,4 +1,4 @@
-# Stock Intelligence, v2.x
+# Stock Intelligence, v0.2.x
 
 A professional-grade stock analysis system with institutional-quality data sources and sophisticated multi-factor scoring.
 
@@ -183,19 +183,31 @@ Each analysis uses approximately:
 
 ## Version History
 
-**v2.5.3** (Current)
+**v0.2.6** (Current)
+- Notion comparison sync for multi-stock comparisons
+- Automatically saves comparison results to Notion
+
+**v0.2.5**
+- Comparative analysis system
+- Multi-stock rankings and buy recommendations
+
+**v0.2.4**
+- Pattern backtesting system
+- Validates if patterns predict price movements
+
+**v0.2.3**
 - Centralized scoring configuration with documented thresholds
 - All magic numbers now have clear financial/technical justifications
 - 100% backward compatible scoring
 - Improved code transparency and maintainability
 
-**v2.5.2**
+**v0.2.2**
 - Added pattern recognition
 - Added pattern score and signal
 - Added detected patterns tracking
 - Enhanced technical analysis
 
-**v2.5**
+**v0.2.0**
 - Multi-factor scoring system
 - Dual-API architecture
 - Confidence scoring
