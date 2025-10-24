@@ -20,9 +20,26 @@ import statistics
 from datetime import datetime, timedelta, timezone
 import pytz
 from typing import Dict, List, Tuple, Optional, Any
-from dotenv import load_dotenv
 
-load_dotenv()  # Load environment variables from .env file
+# Conditional environment loading: Colab vs local
+try:
+    from google.colab import userdata
+    # Running in Colab - load secrets from Colab secrets manager
+    os.environ['POLYGON_API_KEY'] = userdata.get('POLYGON_API_KEY')
+    os.environ['ALPHA_VANTAGE_API_KEY'] = userdata.get('ALPHA_VANTAGE_API_KEY')
+    os.environ['FRED_API_KEY'] = userdata.get('FRED_API_KEY')
+    os.environ['NOTION_API_KEY'] = userdata.get('NOTION_API_KEY')
+    os.environ['BRAVE_API_KEY'] = userdata.get('BRAVE_API_KEY')
+    os.environ['STOCK_ANALYSES_DB_ID'] = userdata.get('STOCK_ANALYSES_DB_ID')
+    os.environ['STOCK_HISTORY_DB_ID'] = userdata.get('STOCK_HISTORY_DB_ID')
+    os.environ['STOCK_COMPARISONS_DB_ID'] = userdata.get('STOCK_COMPARISONS_DB_ID')
+    os.environ['MARKET_CONTEXT_DB_ID'] = userdata.get('MARKET_CONTEXT_DB_ID')
+    print("✅ API keys loaded from Colab secrets")
+except ImportError:
+    # Not in Colab - load from .env file
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("✅ Environment variables loaded from .env file")
 
 PACIFIC_TZ = pytz.timezone("America/Los_Angeles")
 VERSION = "v0.2.7"
