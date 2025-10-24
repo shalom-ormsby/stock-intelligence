@@ -1,15 +1,16 @@
 # ==================================================================================================
-# Stock Analyzer — v0.2.6 (Single Cell, Hybrid Dual‑API, Copy‑Paste Ready)
+# Stock Analyzer — v0.2.7 (Single Cell, Hybrid Dual‑API, Copy‑Paste Ready)
 # - Technical: Polygon
 # - Fundamental: Alpha Vantage
 # - Macro: FRED
 # - Scores: Technical, Fundamental, Macro, Risk, Sentiment (unweighted), Composite
 # - Pattern Score, Pattern Signal, Detected Patterns (1.0–5.0, NOT included in Composite)
+# - NEW v0.2.7: Market Analysis - holistic market context before stock analysis
 # - NEW v0.2.6: Notion Comparison Sync to save multi-stock comparisons to Notion
 # - NEW v0.2.5: Comparative Analysis to compare multiple stocks and get buy recommendations
 # - NEW v0.2.4: Pattern Backtesting to validate if patterns predict price movements
 # - NEW v0.2.3: Centralized Scoring Configuration with documented thresholds
-# - Syncs to Notion: Stock Analyses (upsert) + Stock History (append) + Stock Comparisons (create)
+# - Syncs to Notion: Stock Analyses (upsert) + Stock History (append) + Stock Comparisons (create) + Market Context (create)
 # ==================================================================================================
 
 import os
@@ -24,7 +25,7 @@ from dotenv import load_dotenv
 load_dotenv()  # Load environment variables from .env file
 
 PACIFIC_TZ = pytz.timezone("America/Los_Angeles")
-VERSION = "v0.2.6"
+VERSION = "v0.2.7"
 
 # =============================================================================
 # CONFIGURATION — REQUIRED: Set via environment variables
@@ -35,9 +36,11 @@ POLYGON_API_KEY        = os.environ.get("POLYGON_API_KEY")
 ALPHA_VANTAGE_API_KEY  = os.environ.get("ALPHA_VANTAGE_API_KEY")
 FRED_API_KEY           = os.environ.get("FRED_API_KEY")
 NOTION_API_KEY         = os.environ.get("NOTION_API_KEY")
+BRAVE_API_KEY          = os.environ.get("BRAVE_API_KEY")
 STOCK_ANALYSES_DB_ID   = os.environ.get("STOCK_ANALYSES_DB_ID")
 STOCK_HISTORY_DB_ID    = os.environ.get("STOCK_HISTORY_DB_ID")
 STOCK_COMPARISONS_DB_ID = os.environ.get("STOCK_COMPARISONS_DB_ID")
+MARKET_CONTEXT_DB_ID   = os.environ.get("MARKET_CONTEXT_DB_ID")
 
 def _require(val: str, label: str):
     if not val:
@@ -56,9 +59,15 @@ for _v, _l in [
 ]:
     _require(_v, _l)
 
-# STOCK_COMPARISONS_DB_ID is optional - only required when syncing comparisons
+# Optional environment variables
 if not STOCK_COMPARISONS_DB_ID:
     print("⚠️  STOCK_COMPARISONS_DB_ID not set - comparison sync to Notion will be disabled")
+
+if not MARKET_CONTEXT_DB_ID:
+    print("⚠️  MARKET_CONTEXT_DB_ID not set - market analysis sync to Notion will be disabled")
+
+if not BRAVE_API_KEY:
+    print("⚠️  BRAVE_API_KEY not set - market news search will be disabled")
 
 # =============================================================================
 # Helpers
@@ -182,6 +191,20 @@ class FREDClient:
         except Exception as e:
             print(f"[FRED] {series_id} exception: {e}")
         return None
+
+    def _get_series(self, series_id: str, limit: int = 13) -> list:
+        """Fetch multiple observations for a series (most recent first)."""
+        params = {"series_id": series_id, "api_key": self.api_key, "file_type": "json", "sort_order": "desc", "limit": limit}
+        try:
+            r = requests.get(self.base_url, params=params, timeout=30)
+            self.call_count += 1
+            if r.status_code == 200:
+                data = r.json()
+                obs = data.get("observations") or []
+                return [safe_float(o.get("value")) for o in obs if o.get("value")]
+        except Exception as e:
+            print(f"[FRED] {series_id} exception: {e}")
+        return []
 
     def get_macro_data(self) -> dict:
         return {
@@ -1803,6 +1826,824 @@ def compare_stocks(tickers: List[str], print_results: bool = True, sync_to_notio
     return results
 
 # =============================================================================
+# Market Analysis — v0.2.7
+# =============================================================================
+
+class MarketDataCollector:
+    """
+    Collects market data from multiple sources: FRED, Polygon, and Brave Search.
+
+    Provides comprehensive market context including:
+    - US indices (SPY, QQQ, DIA, IWM)
+    - Volatility (VIX)
+    - Sector ETFs (11 sectors)
+    - Economic indicators (Fed rates, unemployment, CPI, etc.)
+    - Market news (via Brave Search)
+    """
+
+    def __init__(self, polygon_client: PolygonClient, fred_client: FREDClient, brave_api_key: Optional[str] = None):
+        self.polygon = polygon_client
+        self.fred = fred_client
+        self.brave_api_key = brave_api_key
+
+    def get_us_indices(self) -> dict:
+        """
+        Fetch US market indices data from Polygon.
+
+        Returns:
+            dict: {
+                'spy': {'price': float, 'change_1d': float, 'change_1m': float, ...},
+                'qqq': {...},
+                'dia': {...},
+                'iwm': {...},
+                'vix': {'price': float},
+                'direction': 'Up'|'Down'|'Sideways'
+            }
+        """
+        print("[Market] Fetching US indices...")
+
+        tickers = ['SPY', 'QQQ', 'DIA', 'IWM', 'VIX']
+        results = {}
+
+        to_date = datetime.now().strftime("%Y-%m-%d")
+        from_date = (datetime.now() - timedelta(days=250)).strftime("%Y-%m-%d")
+
+        for ticker in tickers:
+            try:
+                aggs = self.polygon.get_aggregates(ticker, from_date, to_date, timespan="day")
+
+                if not aggs or "results" not in aggs or len(aggs["results"]) < 21:
+                    print(f"[Market] Insufficient data for {ticker}")
+                    continue
+
+                bars = aggs["results"]
+                closes = [safe_float(bar.get("c")) for bar in bars if bar.get("c")]
+
+                if not closes or len(closes) < 21:
+                    continue
+
+                current_price = closes[-1]
+
+                results[ticker.lower()] = {
+                    'price': current_price,
+                    'change_1d': ((closes[-1] / closes[-2]) - 1) * 100 if len(closes) >= 2 else 0.0,
+                    'change_5d': ((closes[-1] / closes[-6]) - 1) * 100 if len(closes) >= 6 else 0.0,
+                    'change_1m': ((closes[-1] / closes[-21]) - 1) * 100 if len(closes) >= 21 else 0.0,
+                    'change_3m': ((closes[-1] / closes[-63]) - 1) * 100 if len(closes) >= 63 else 0.0,
+                    'ma_50': sum(closes[-50:]) / 50 if len(closes) >= 50 else None,
+                    'ma_200': sum(closes[-200:]) / 200 if len(closes) >= 200 else None,
+                }
+
+                print(f"[Market] {ticker}: ${current_price:.2f} ({results[ticker.lower()]['change_1d']:+.2f}% today)")
+
+            except Exception as e:
+                print(f"[Market] Error fetching {ticker}: {e}")
+                continue
+
+        # Determine market direction based on SPY
+        if 'spy' in results:
+            spy_change = results['spy']['change_1m']
+            if spy_change > 2:
+                direction = "Up"
+            elif spy_change < -2:
+                direction = "Down"
+            else:
+                direction = "Sideways"
+            results['direction'] = direction
+        else:
+            results['direction'] = "Unknown"
+
+        return results
+
+    def get_sector_etfs(self) -> list:
+        """
+        Fetch sector ETF performance data.
+
+        Returns:
+            list: [{'name': str, 'ticker': str, 'change_1m': float, 'price': float}, ...]
+        """
+        print("[Market] Fetching sector ETFs...")
+
+        sectors = {
+            'XLK': 'Technology',
+            'XLF': 'Financials',
+            'XLV': 'Healthcare',
+            'XLE': 'Energy',
+            'XLI': 'Industrials',
+            'XLP': 'Consumer Staples',
+            'XLY': 'Consumer Discretionary',
+            'XLU': 'Utilities',
+            'XLRE': 'Real Estate',
+            'XLC': 'Communication',
+            'XLB': 'Materials',
+        }
+
+        results = []
+        to_date = datetime.now().strftime("%Y-%m-%d")
+        from_date = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
+
+        for ticker, name in sectors.items():
+            try:
+                aggs = self.polygon.get_aggregates(ticker, from_date, to_date, timespan="day")
+
+                if not aggs or "results" not in aggs or len(aggs["results"]) < 21:
+                    continue
+
+                bars = aggs["results"]
+                closes = [safe_float(bar.get("c")) for bar in bars if bar.get("c")]
+
+                if not closes or len(closes) < 21:
+                    continue
+
+                change_1m = ((closes[-1] / closes[-21]) - 1) * 100
+
+                results.append({
+                    'name': name,
+                    'ticker': ticker,
+                    'change_1m': change_1m,
+                    'price': closes[-1]
+                })
+
+            except Exception as e:
+                print(f"[Market] Error fetching {ticker}: {e}")
+                continue
+
+        # Sort by performance
+        results.sort(key=lambda x: x['change_1m'], reverse=True)
+
+        print(f"[Market] Fetched {len(results)} sector ETFs")
+        return results
+
+    def get_fred_metrics(self) -> dict:
+        """
+        Fetch key economic indicators from FRED.
+
+        Returns:
+            dict: {
+                'fed_funds_rate': {'current': float},
+                'unemployment': {'current': float},
+                'cpi_yoy': {'current': float},
+                'yield_curve': {'current': float},
+                'consumer_sentiment': {'current': float}
+            }
+        """
+        print("[Market] Fetching FRED economic indicators...")
+
+        series_map = {
+            'fed_funds_rate': 'DFF',
+            'unemployment': 'UNRATE',
+            'yield_curve': 'T10Y2Y',
+            'consumer_sentiment': 'UMCSENT',
+        }
+
+        results = {}
+
+        for key, series_id in series_map.items():
+            try:
+                value = self.fred._latest(series_id)
+                if value is not None:
+                    results[key] = {'current': value}
+                    print(f"[Market] {key}: {value:.2f}")
+            except Exception as e:
+                print(f"[Market] Error fetching {key}: {e}")
+                results[key] = {'current': None}
+
+        # Calculate CPI Year-over-Year percentage change
+        try:
+            cpi_data = self.fred._get_series('CPIAUCSL', limit=13)  # Need 13 months for YoY
+            if cpi_data and len(cpi_data) >= 13:
+                current_cpi = cpi_data[0]  # Most recent
+                year_ago_cpi = cpi_data[12]  # 12 months ago
+                if current_cpi and year_ago_cpi and year_ago_cpi > 0:
+                    cpi_yoy = ((current_cpi / year_ago_cpi) - 1) * 100
+                    results['cpi_yoy'] = {'current': cpi_yoy}
+                    print(f"[Market] cpi_yoy: {cpi_yoy:.2f}%")
+                else:
+                    results['cpi_yoy'] = {'current': None}
+            else:
+                print("[Market] Insufficient CPI data for YoY calculation")
+                results['cpi_yoy'] = {'current': None}
+        except Exception as e:
+            print(f"[Market] Error calculating CPI YoY: {e}")
+            results['cpi_yoy'] = {'current': None}
+
+        return results
+
+    def search_market_news(self) -> list:
+        """
+        Search for latest market news using Brave Search API.
+
+        Returns:
+            list: [{'query': str, 'results': [{'title': str, 'description': str, 'url': str}]}, ...]
+        """
+        if not self.brave_api_key:
+            print("[Market] Brave API key not configured - skipping news search")
+            return []
+
+        print("[Market] Searching for market news...")
+
+        queries = [
+            "stock market outlook today",
+            "federal reserve interest rates latest",
+            "sector rotation stock market trends",
+        ]
+
+        all_results = []
+
+        for query in queries:
+            try:
+                url = "https://api.search.brave.com/res/v1/web/search"
+                headers = {
+                    "Accept": "application/json",
+                    "X-Subscription-Token": self.brave_api_key
+                }
+                params = {
+                    "q": query,
+                    "count": 3,
+                    "freshness": "pd"  # past day
+                }
+
+                r = requests.get(url, headers=headers, params=params, timeout=10)
+
+                if r.status_code == 200:
+                    data = r.json()
+                    results = []
+
+                    for item in data.get('web', {}).get('results', [])[:3]:
+                        results.append({
+                            'title': item.get('title', ''),
+                            'description': item.get('description', ''),
+                            'url': item.get('url', '')
+                        })
+
+                    all_results.append({
+                        'query': query,
+                        'results': results
+                    })
+
+                    print(f"[Market] Found {len(results)} articles for: {query}")
+                else:
+                    print(f"[Market] Brave API error {r.status_code} for: {query}")
+
+            except Exception as e:
+                print(f"[Market] Error searching '{query}': {e}")
+                continue
+
+        return all_results
+
+
+class MarketRegimeClassifier:
+    """
+    Determines current market regime and risk assessment.
+
+    Classifies market into:
+    - Risk-On: Markets up, VIX low, positive momentum
+    - Risk-Off: Markets down, VIX high, negative momentum
+    - Transition: Mixed signals
+
+    Risk levels:
+    - Aggressive: Strong bullish conditions
+    - Neutral: Mixed or sideways conditions
+    - Defensive: Bearish or high uncertainty
+    """
+
+    def classify_regime(self, us_data: dict, fred_data: dict) -> str:
+        """
+        Classify current market regime.
+
+        Args:
+            us_data: US indices data from MarketDataCollector
+            fred_data: FRED economic data
+
+        Returns:
+            str: "Risk-On", "Risk-Off", or "Transition"
+        """
+        score = 0
+
+        # Market direction (±2 points)
+        if 'spy' in us_data:
+            spy_change = us_data['spy'].get('change_1m', 0)
+            if spy_change > 2:
+                score += 2
+            elif spy_change < -2:
+                score -= 2
+
+        # VIX level (±1 point)
+        if 'vix' in us_data:
+            vix = us_data['vix'].get('price', 20)
+            if vix < 20:
+                score += 1
+            elif vix > 25:
+                score -= 1
+
+        # Yield curve (±1 point)
+        if fred_data.get('yield_curve', {}).get('current') is not None:
+            yield_curve = fred_data['yield_curve']['current']
+            if yield_curve > 0.5:
+                score += 1
+            elif yield_curve < 0:
+                score -= 1
+
+        # Classify based on score
+        if score >= 2:
+            return "Risk-On"
+        elif score <= -2:
+            return "Risk-Off"
+        else:
+            return "Transition"
+
+    def assess_risk_level(self, us_data: dict, fred_data: dict, regime: str) -> str:
+        """
+        Assess appropriate risk level for investors.
+
+        Returns:
+            str: "Aggressive", "Neutral", or "Defensive"
+        """
+        if regime == "Risk-On":
+            # Check if conditions are extremely bullish
+            spy_change = us_data.get('spy', {}).get('change_1m', 0)
+            vix = us_data.get('vix', {}).get('price', 20)
+
+            if spy_change > 5 and vix < 15:
+                return "Aggressive"
+            else:
+                return "Neutral"
+
+        elif regime == "Risk-Off":
+            return "Defensive"
+
+        else:  # Transition
+            return "Neutral"
+
+
+class SectorAnalyzer:
+    """
+    Analyzes sector rotation and strength.
+    """
+
+    def rank_sectors(self, sector_data: list) -> list:
+        """
+        Ranks sectors by performance (already sorted by MarketDataCollector).
+
+        Args:
+            sector_data: List of sector dicts from get_sector_etfs()
+
+        Returns:
+            list: Sorted list of sectors with scores
+        """
+        return sector_data
+
+    def interpret_rotation(self, sectors: list, regime: str) -> str:
+        """
+        Interpret sector rotation patterns.
+
+        Args:
+            sectors: Ranked sector list
+            regime: Current market regime
+
+        Returns:
+            str: Interpretation of sector rotation
+        """
+        if not sectors or len(sectors) < 3:
+            return "Insufficient sector data for rotation analysis."
+
+        top_sector = sectors[0]['name']
+        bottom_sector = sectors[-1]['name']
+
+        # Cyclical sectors (Energy, Financials, Industrials, Materials)
+        cyclical = {'Energy', 'Financials', 'Industrials', 'Materials'}
+        # Defensive sectors (Utilities, Consumer Staples, Healthcare)
+        defensive = {'Utilities', 'Consumer Staples', 'Healthcare'}
+
+        top_3 = [s['name'] for s in sectors[:3]]
+        top_cyclical_count = sum(1 for s in top_3 if s in cyclical)
+        top_defensive_count = sum(1 for s in top_3 if s in defensive)
+
+        if top_cyclical_count >= 2:
+            interpretation = f"Cyclical sectors leading ({', '.join(top_3[:2])}), indicating {regime.lower()} positioning with growth expectations."
+        elif top_defensive_count >= 2:
+            interpretation = f"Defensive sectors leading ({', '.join(top_3[:2])}), indicating risk-off sentiment and flight to safety."
+        else:
+            interpretation = f"{top_sector} leading rotation, suggesting sector-specific strength in {regime.lower()} environment."
+
+        return interpretation
+
+
+class NotionMarketSync:
+    """
+    Syncs market analysis results to Notion's Market Context database.
+    """
+
+    def __init__(self, api_key: str, market_context_db_id: str):
+        self.api_key = api_key
+        self.market_context_db_id = market_context_db_id
+        self.headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Notion-Version": "2022-06-28"
+        }
+
+    def sync_market_context(self, market_data: dict) -> Optional[str]:
+        """
+        Sync market analysis to Notion.
+
+        Args:
+            market_data: Complete market analysis dict
+
+        Returns:
+            Page ID if successful, None otherwise
+        """
+        print("\n" + "="*60)
+        print("Syncing market analysis to Notion...")
+        print("="*60)
+
+        timestamp = market_data['timestamp']
+        us_data = market_data['us_indices']
+        sectors = market_data['sectors']
+        fred_data = market_data['fred_metrics']
+        regime = market_data['regime']
+        risk = market_data['risk_level']
+
+        # Build properties
+        name = f"Market Analysis - {timestamp.strftime('%b %d, %Y %I:%M %p')}"
+
+        properties = {
+            "Name": {"title": [{"text": {"content": name}}]},
+            "Analysis Date": {"date": {"start": timestamp.isoformat()}},
+            "Market Regime": {"select": {"name": regime}},
+            "Risk Assessment": {"select": {"name": risk}},
+            "US Direction": {"select": {"name": us_data.get('direction', 'Unknown')}},
+        }
+
+        # Add VIX if available
+        if 'vix' in us_data and us_data['vix'].get('price') is not None:
+            properties["VIX Level"] = {"number": round(us_data['vix']['price'], 2)}
+
+        # Add sector info
+        if sectors and len(sectors) > 0:
+            properties["Top Sector"] = {"rich_text": [{"text": {"content": sectors[0]['name']}}]}
+            properties["Bottom Sector"] = {"rich_text": [{"text": {"content": sectors[-1]['name']}}]}
+
+        # Add economic indicators
+        if fred_data.get('fed_funds_rate', {}).get('current') is not None:
+            properties["Fed Funds Rate"] = {"number": round(fred_data['fed_funds_rate']['current'], 2)}
+
+        if fred_data.get('unemployment', {}).get('current') is not None:
+            properties["Unemployment"] = {"number": round(fred_data['unemployment']['current'], 2)}
+
+        if fred_data.get('cpi_yoy', {}).get('current') is not None:
+            properties["CPI (YoY)"] = {"number": round(fred_data['cpi_yoy']['current'], 2)}
+
+        # Generate executive summary
+        summary = self._generate_summary(market_data)
+        properties["Summary"] = {"rich_text": [{"text": {"content": summary}}]}
+
+        # Build page content
+        content_blocks = self._build_content_blocks(market_data)
+
+        # Create page
+        url = "https://api.notion.com/v1/pages"
+        body = {
+            "parent": {"database_id": self.market_context_db_id},
+            "properties": properties,
+            "children": content_blocks
+        }
+
+        try:
+            r = requests.post(url, headers=self.headers, json=body, timeout=40)
+            if r.status_code in (200, 201):
+                page_id = r.json().get("id")
+                print(f"✅ Market analysis synced to Notion")
+                print("="*60 + "\n")
+                return page_id
+            else:
+                print(f"[Notion] Market sync failed: {r.status_code} {r.text[:300]}")
+                print("="*60 + "\n")
+                return None
+        except Exception as e:
+            print(f"[Notion] Exception during sync: {e}")
+            print("="*60 + "\n")
+            return None
+
+    def _generate_summary(self, market_data: dict) -> str:
+        """Generate 2-3 sentence executive summary."""
+        us_data = market_data['us_indices']
+        regime = market_data['regime']
+        risk = market_data['risk_level']
+        sectors = market_data['sectors']
+
+        spy_change = us_data.get('spy', {}).get('change_1m', 0)
+        direction_text = "up" if spy_change > 0 else "down"
+
+        summary = f"Market regime: {regime} with {risk} risk posture. "
+        summary += f"S&P 500 is {direction_text} {abs(spy_change):.1f}% this month. "
+
+        if sectors:
+            summary += f"{sectors[0]['name']} sector leading (+{sectors[0]['change_1m']:.1f}%)."
+
+        return summary
+
+    def _build_content_blocks(self, market_data: dict) -> list:
+        """Build Notion blocks for page content."""
+        blocks = []
+
+        us_data = market_data['us_indices']
+        sectors = market_data['sectors']
+        fred_data = market_data['fred_metrics']
+        regime = market_data['regime']
+        risk = market_data['risk_level']
+        news = market_data.get('news', [])
+
+        # Header callout
+        regime_emoji = "🟢" if regime == "Risk-On" else "🔴" if regime == "Risk-Off" else "🟡"
+        blocks.append({
+            "object": "block",
+            "type": "callout",
+            "callout": {
+                "rich_text": [{"type": "text", "text": {"content": f"{regime_emoji} Market Regime: {regime} | Risk Level: {risk}"}}],
+                "icon": {"emoji": "🎯"},
+                "color": "blue_background" if regime == "Risk-On" else "red_background" if regime == "Risk-Off" else "yellow_background"
+            }
+        })
+
+        # US Market Overview
+        blocks.append({
+            "object": "block",
+            "type": "heading_2",
+            "heading_2": {"rich_text": [{"type": "text", "text": {"content": "📊 US Market Overview"}}]}
+        })
+
+        if 'spy' in us_data:
+            spy = us_data['spy']
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"type": "text", "text": {
+                        "content": f"S&P 500 (SPY): ${spy['price']:.2f} ({spy['change_1d']:+.2f}% today, {spy['change_1m']:+.2f}% this month)"
+                    }}]
+                }
+            })
+
+        if 'qqq' in us_data:
+            qqq = us_data['qqq']
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"type": "text", "text": {
+                        "content": f"Nasdaq (QQQ): ${qqq['price']:.2f} ({qqq['change_1d']:+.2f}% today, {qqq['change_1m']:+.2f}% this month)"
+                    }}]
+                }
+            })
+
+        if 'vix' in us_data:
+            vix_price = us_data['vix']['price']
+            vix_interpretation = "Low volatility" if vix_price < 20 else "Elevated volatility" if vix_price < 30 else "High volatility"
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"type": "text", "text": {
+                        "content": f"VIX: {vix_price:.2f} — {vix_interpretation}"
+                    }}]
+                }
+            })
+
+        # Sector Rotation
+        if sectors:
+            blocks.append({"object": "block", "type": "divider", "divider": {}})
+            blocks.append({
+                "object": "block",
+                "type": "heading_2",
+                "heading_2": {"rich_text": [{"type": "text", "text": {"content": "📈 Sector Rotation"}}]}
+            })
+
+            blocks.append({
+                "object": "block",
+                "type": "heading_3",
+                "heading_3": {"rich_text": [{"type": "text", "text": {"content": "Leaders (1-Month)"}}]}
+            })
+
+            for sector in sectors[:3]:
+                blocks.append({
+                    "object": "block",
+                    "type": "paragraph",
+                    "paragraph": {
+                        "rich_text": [{"type": "text", "text": {
+                            "content": f"• {sector['name']} ({sector['ticker']}): {sector['change_1m']:+.2f}%"
+                        }}]
+                    }
+                })
+
+            blocks.append({
+                "object": "block",
+                "type": "heading_3",
+                "heading_3": {"rich_text": [{"type": "text", "text": {"content": "Laggards"}}]}
+            })
+
+            for sector in sectors[-3:]:
+                blocks.append({
+                    "object": "block",
+                    "type": "paragraph",
+                    "paragraph": {
+                        "rich_text": [{"type": "text", "text": {
+                            "content": f"• {sector['name']} ({sector['ticker']}): {sector['change_1m']:+.2f}%"
+                        }}]
+                    }
+                })
+
+        # Economic Indicators
+        blocks.append({"object": "block", "type": "divider", "divider": {}})
+        blocks.append({
+            "object": "block",
+            "type": "heading_2",
+            "heading_2": {"rich_text": [{"type": "text", "text": {"content": "🏛️ Economic Indicators"}}]}
+        })
+
+        if fred_data.get('fed_funds_rate', {}).get('current') is not None:
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"type": "text", "text": {
+                        "content": f"Federal Funds Rate: {fred_data['fed_funds_rate']['current']:.2f}%"
+                    }}]
+                }
+            })
+
+        if fred_data.get('unemployment', {}).get('current') is not None:
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"type": "text", "text": {
+                        "content": f"Unemployment: {fred_data['unemployment']['current']:.1f}%"
+                    }}]
+                }
+            })
+
+        if fred_data.get('cpi_yoy', {}).get('current') is not None:
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"type": "text", "text": {
+                        "content": f"CPI (YoY): {fred_data['cpi_yoy']['current']:.2f}%"
+                    }}]
+                }
+            })
+
+        if fred_data.get('yield_curve', {}).get('current') is not None:
+            yc = fred_data['yield_curve']['current']
+            yc_text = "Normal (positive)" if yc > 0 else "Inverted (negative)"
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"type": "text", "text": {
+                        "content": f"Yield Curve (10Y-2Y): {yc:.2f}% — {yc_text}"
+                    }}]
+                }
+            })
+
+        if fred_data.get('consumer_sentiment', {}).get('current') is not None:
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"type": "text", "text": {
+                        "content": f"Consumer Sentiment: {fred_data['consumer_sentiment']['current']:.1f}"
+                    }}]
+                }
+            })
+
+        # Market News
+        if news:
+            blocks.append({"object": "block", "type": "divider", "divider": {}})
+            blocks.append({
+                "object": "block",
+                "type": "heading_2",
+                "heading_2": {"rich_text": [{"type": "text", "text": {"content": "📰 Recent Market News"}}]}
+            })
+
+            for news_group in news[:2]:  # Limit to first 2 queries
+                for article in news_group['results'][:2]:  # Limit to 2 articles per query
+                    blocks.append({
+                        "object": "block",
+                        "type": "paragraph",
+                        "paragraph": {
+                            "rich_text": [
+                                {"type": "text", "text": {"content": f"• {article['title']}", "link": {"url": article['url']}}}
+                            ]
+                        }
+                    })
+
+        return blocks
+
+
+def analyze_market(print_results: bool = True, sync_to_notion: bool = True) -> dict:
+    """
+    Analyze current market conditions and context.
+
+    Provides comprehensive market overview including:
+    - US indices performance
+    - Market regime (Risk-On/Risk-Off/Transition)
+    - Sector rotation and leadership
+    - Economic indicators
+    - Market news
+
+    Args:
+        print_results: If True, print formatted analysis
+        sync_to_notion: If True, sync to Notion Market Context database
+
+    Returns:
+        dict: Complete market analysis data
+
+    Example:
+        analyze_market()
+        results = analyze_market(print_results=False, sync_to_notion=False)
+    """
+    print("\n" + "="*80)
+    print(f"MARKET ANALYZER {VERSION}")
+    print("="*80)
+    print(f"Timestamp: {datetime.now(PACIFIC_TZ).strftime('%Y-%m-%d %I:%M %p %Z')}")
+    print("="*80 + "\n")
+
+    # Initialize clients
+    polygon = PolygonClient(POLYGON_API_KEY)
+    fred = FREDClient(FRED_API_KEY)
+
+    # Collect data
+    collector = MarketDataCollector(polygon, fred, BRAVE_API_KEY)
+
+    us_indices = collector.get_us_indices()
+    sectors = collector.get_sector_etfs()
+    fred_metrics = collector.get_fred_metrics()
+    news = collector.search_market_news()
+
+    # Analyze regime
+    classifier = MarketRegimeClassifier()
+    regime = classifier.classify_regime(us_indices, fred_metrics)
+    risk_level = classifier.assess_risk_level(us_indices, fred_metrics, regime)
+
+    # Analyze sectors
+    sector_analyzer = SectorAnalyzer()
+    sector_interpretation = sector_analyzer.interpret_rotation(sectors, regime)
+
+    # Build result
+    market_data = {
+        'timestamp': datetime.now(PACIFIC_TZ),
+        'us_indices': us_indices,
+        'sectors': sectors,
+        'fred_metrics': fred_metrics,
+        'news': news,
+        'regime': regime,
+        'risk_level': risk_level,
+        'sector_interpretation': sector_interpretation,
+    }
+
+    # Print results
+    if print_results:
+        print("\n" + "="*80)
+        print("MARKET ANALYSIS RESULTS")
+        print("="*80)
+
+        regime_emoji = "🟢" if regime == "Risk-On" else "🔴" if regime == "Risk-Off" else "🟡"
+        print(f"\n{regime_emoji} Market Regime: {regime}")
+        print(f"📊 Risk Level: {risk_level}")
+        print(f"📈 US Market Direction: {us_indices.get('direction', 'Unknown')}")
+
+        if 'spy' in us_indices:
+            spy = us_indices['spy']
+            print(f"\n💼 S&P 500 (SPY): ${spy['price']:.2f}")
+            print(f"   Today: {spy['change_1d']:+.2f}% | 1M: {spy['change_1m']:+.2f}%")
+
+        if 'vix' in us_indices:
+            vix = us_indices['vix']['price']
+            print(f"\n⚡ VIX: {vix:.2f}")
+
+        if sectors:
+            print(f"\n🏆 Top Sector: {sectors[0]['name']} ({sectors[0]['change_1m']:+.2f}%)")
+            print(f"📉 Bottom Sector: {sectors[-1]['name']} ({sectors[-1]['change_1m']:+.2f}%)")
+            print(f"\n💡 Sector Rotation: {sector_interpretation}")
+
+        print("\n" + "="*80 + "\n")
+
+    # Sync to Notion
+    if sync_to_notion:
+        if not MARKET_CONTEXT_DB_ID:
+            print("⚠️  Market sync skipped: MARKET_CONTEXT_DB_ID not configured")
+            print("Add MARKET_CONTEXT_DB_ID to your .env file to enable Notion sync\n")
+        else:
+            notion_sync = NotionMarketSync(NOTION_API_KEY, MARKET_CONTEXT_DB_ID)
+            notion_sync.sync_market_context(market_data)
+
+    print(f"✅ Market analysis complete! — {VERSION}\n")
+
+    return market_data
+
+# =============================================================================
 # Orchestrator
 # =============================================================================
 def analyze_and_sync_to_notion(ticker: str, backtest_patterns: bool = False):
@@ -1866,6 +2707,12 @@ def analyze_and_sync_to_notion(ticker: str, backtest_patterns: bool = False):
 # EXECUTION
 # =============================================================================
 
+# MARKET ANALYSIS (v0.2.7) — NEW!
+# Get holistic market context before analyzing individual stocks
+# Includes: US indices, VIX, sector rotation, economic indicators, market news
+# Syncs to Notion automatically (requires MARKET_CONTEXT_DB_ID in .env)
+analyze_market()
+
 # SINGLE STOCK ANALYSIS
 # Change ticker and backtest_patterns flag as needed
 # backtest_patterns=True adds pattern validation (1 additional API call)
@@ -1874,4 +2721,4 @@ def analyze_and_sync_to_notion(ticker: str, backtest_patterns: bool = False):
 # COMPARATIVE ANALYSIS (v0.2.6)
 # Compare multiple stocks side-by-side to answer: "Which should I buy?"
 # Syncs to Notion automatically (requires STOCK_COMPARISONS_DB_ID in .env)
-compare_stocks(['NVDA', 'MSFT', 'AMZN'])
+# compare_stocks(['NVDA', 'MSFT', 'AMZN'])

@@ -183,7 +183,13 @@ Each analysis uses approximately:
 
 ## Version History
 
-**v0.2.6** (Current)
+**v0.2.7** (Current)
+- Market analysis - holistic market context before stock analysis
+- US indices, VIX, sector rotation, economic indicators, market news
+- Market regime classification (Risk-On/Risk-Off/Transition)
+- Syncs to Notion Market Context database
+
+**v0.2.6**
 - Notion comparison sync for multi-stock comparisons
 - Automatically saves comparison results to Notion
 

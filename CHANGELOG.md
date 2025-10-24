@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.7] - 2025-10-24
+
+### Added
+- **Market Analysis**: Holistic market context before analyzing individual stocks
+  - `MarketDataCollector` class fetches data from Polygon (indices + sectors), FRED (economic indicators), and Brave Search (news)
+  - `MarketRegimeClassifier` determines market regime: Risk-On, Risk-Off, or Transition
+  - `SectorAnalyzer` ranks 11 sector ETFs and interprets rotation patterns
+  - `NotionMarketSync` syncs market analysis to Notion Market Context database
+  - `analyze_market()` convenience function for standalone market analysis
+  - US indices: SPY, QQQ, DIA, IWM, VIX with 1-day, 5-day, 1-month, 3-month performance
+  - Sector ETFs: XLK, XLF, XLV, XLE, XLI, XLP, XLY, XLU, XLRE, XLC, XLB
+  - Economic indicators: Fed Funds Rate, Unemployment, Yield Curve, Consumer Sentiment
+  - Market news: Real-time search via Brave Search API
+
+### New Environment Variables
+- **BRAVE_API_KEY**: Optional API key for market news search (Brave Search)
+- **MARKET_CONTEXT_DB_ID**: Optional database ID for Market Context (add to `.env` to enable sync)
+
+### Features
+- Market regime classification based on SPY performance, VIX level, and yield curve
+- Risk level assessment: Aggressive, Neutral, or Defensive
+- Sector rotation interpretation: identifies cyclical vs defensive leadership
+- Beautiful Notion pages with formatted sections: US Market Overview, Sector Rotation, Economic Indicators, Recent News
+- Executive summary generation for quick market overview
+
+### Usage
+```python
+# Full market analysis with Notion sync
+analyze_market()
+
+# Programmatic use without printing or syncing
+results = analyze_market(print_results=False, sync_to_notion=False)
+```
+
+### API Calls Per Analysis
+- Polygon: ~16 calls (5 indices + 11 sector ETFs)
+- FRED: 4 calls (economic indicators)
+- Brave Search: 3 calls (optional, if API key configured)
+- Total: ~23 calls (well within rate limits)
+
 ## [0.2.6] - 2025-10-24
 
 ### Added
