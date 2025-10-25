@@ -1,10 +1,11 @@
 # ==================================================================================================
-# Stock Analyzer — v0.2.7 (Single Cell, Hybrid Dual‑API, Copy‑Paste Ready)
+# Stock Analyzer — v0.2.8 (Single Cell, Hybrid Dual‑API, Copy‑Paste Ready)
 # - Technical: Polygon
 # - Fundamental: Alpha Vantage
 # - Macro: FRED
 # - Scores: Technical, Fundamental, Macro, Risk, Sentiment (unweighted), Composite
 # - Pattern Score, Pattern Signal, Detected Patterns (1.0–5.0, NOT included in Composite)
+# - NEW v0.2.8: Content Status & Notification System - automated Notion notifications for fresh data
 # - NEW v0.2.7: Market Analysis - holistic market context before stock analysis
 # - NEW v0.2.6: Notion Comparison Sync to save multi-stock comparisons to Notion
 # - NEW v0.2.5: Comparative Analysis to compare multiple stocks and get buy recommendations
@@ -42,7 +43,7 @@ except ImportError:
     print("✅ Environment variables loaded from .env file")
 
 PACIFIC_TZ = pytz.timezone("America/Los_Angeles")
-VERSION = "v0.2.7"
+VERSION = "v0.2.8"
 
 # =============================================================================
 # CONFIGURATION — REQUIRED: Set via environment variables
@@ -1655,12 +1656,19 @@ class NotionClient:
 
     def _upsert_analyses(self, ticker: str, props: dict) -> Optional[str]:
         page_id = self._find_by_ticker(self.analyses_db_id, ticker, prop_type="title")
+
+        # Set Content Status based on whether page exists
         if page_id:
+            props["Content Status"] = {"select": {"name": "Updated"}}
+            print(f"[Notion] Setting Content Status: Updated (existing page found)")
             url = f"https://api.notion.com/v1/pages/{page_id}"
             r = requests.patch(url, headers=self.headers, json={"properties": props}, timeout=40)
         else:
+            props["Content Status"] = {"select": {"name": "New"}}
+            print(f"[Notion] Setting Content Status: New (creating new page)")
             url = "https://api.notion.com/v1/pages"
             r = requests.post(url, headers=self.headers, json={"parent": {"database_id": self.analyses_db_id}, "properties": props}, timeout=40)
+
         if r.status_code in (200, 201):
             try: return r.json().get("id")
             except Exception: return None
@@ -1671,6 +1679,11 @@ class NotionClient:
         ts_str = ts.strftime("%Y-%m-%d %I:%M %p")
         props = dict(props)  # shallow copy
         props["Name"] = {"title": [{"text": {"content": f"{ticker} - {ts_str}"}}]}
+
+        # Set Content Status - always "New" for history records
+        props["Content Status"] = {"select": {"name": "New"}}
+        print(f"[Notion] Setting Content Status: New (history record)")
+
         url = "https://api.notion.com/v1/pages"
         r = requests.post(url, headers=self.headers, json={"parent": {"database_id": self.history_db_id}, "properties": props}, timeout=40)
         if r.status_code in (200, 201):
