@@ -46,6 +46,39 @@ PACIFIC_TZ = pytz.timezone("America/Los_Angeles")
 VERSION = "v0.2.8"
 
 # =============================================================================
+# Helpers — User ID Retrieval
+# =============================================================================
+def get_current_user_id(api_key: str) -> Optional[str]:
+    """
+    Retrieves the current bot user ID from Notion API.
+    The bot user represents the integration making the API calls.
+    For personal use, this is typically the workspace owner.
+
+    Args:
+        api_key: Notion API key
+
+    Returns:
+        User ID string if successful, None otherwise
+    """
+    url = "https://api.notion.com/v1/users/me"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Notion-Version": "2022-06-28"
+    }
+
+    try:
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            user_data = r.json()
+            return user_data.get("id")
+        else:
+            print(f"⚠️  Failed to get user ID: {r.status_code}")
+            return None
+    except Exception as e:
+        print(f"⚠️  Exception getting user ID: {e}")
+        return None
+
+# =============================================================================
 # CONFIGURATION — REQUIRED: Set via environment variables
 # =============================================================================
 # SECURITY: API keys must be set as environment variables before running.
@@ -86,6 +119,13 @@ if not MARKET_CONTEXT_DB_ID:
 
 if not BRAVE_API_KEY:
     print("⚠️  BRAVE_API_KEY not set - market news search will be disabled")
+
+# Get current user ID for Owner property (enables Notion notifications)
+CURRENT_USER_ID = get_current_user_id(NOTION_API_KEY) if NOTION_API_KEY else None
+if CURRENT_USER_ID:
+    print(f"✅ Authenticated as Notion user: {CURRENT_USER_ID[:8]}...")
+else:
+    print("⚠️  Could not retrieve Notion user ID - Owner property will not be set")
 
 # =============================================================================
 # Helpers
@@ -1456,6 +1496,10 @@ class NotionComparisonSync:
         if rec.get('best_value'):
             properties["Best Value"] = {"rich_text": [{"text": {"content": rec['best_value']}}]}
 
+        # Set Owner property for Notion notifications (v0.2.8)
+        if CURRENT_USER_ID:
+            properties["Owner"] = {"people": [{"id": CURRENT_USER_ID}]}
+
         # Build page content
         content = self._build_comparison_content(results)
 
@@ -1742,6 +1786,11 @@ class NotionClient:
         if fund.get("company_name"):
             props["Company Name"] = {"rich_text": [{"text": {"content": str(fund["company_name"])}}]}
         props["Analysis Date"] = {"date": {"start": ts.isoformat()}}
+
+        # Set Owner property for Notion notifications (v0.2.8)
+        if CURRENT_USER_ID:
+            props["Owner"] = {"people": [{"id": CURRENT_USER_ID}]}
+
         if tech.get("current_price") is not None:
             props["Current Price"] = {"number": float(tech["current_price"])}
 
@@ -2323,6 +2372,10 @@ class NotionMarketSync:
 
         if fred_data.get('cpi_yoy', {}).get('current') is not None:
             properties["CPI (YoY)"] = {"number": round(fred_data['cpi_yoy']['current'], 2)}
+
+        # Set Owner property for Notion notifications (v0.2.8)
+        if CURRENT_USER_ID:
+            properties["Owner"] = {"people": [{"id": CURRENT_USER_ID}]}
 
         # Generate executive summary
         summary = self._generate_summary(market_data)
