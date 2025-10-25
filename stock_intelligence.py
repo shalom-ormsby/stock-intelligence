@@ -1711,8 +1711,28 @@ class NotionClient:
         else:
             props["Content Status"] = {"select": {"name": "New"}}
             print(f"[Notion] Setting Content Status: New (creating new page)")
+
+            # Add synced block reference to new pages for user guidance
+            # Block ID from: https://www.notion.so/Stock-Intelligence-28ca1d1b67e080ea8424c9e64f4648a9
+            guidance_block_id = "28ca1d1b-67e0-80ea-8424-c9e64f4648a9"
+            children = [{
+                "object": "block",
+                "type": "synced_block",
+                "synced_block": {
+                    "synced_from": {
+                        "type": "block_id",
+                        "block_id": guidance_block_id
+                    }
+                }
+            }]
+
             url = "https://api.notion.com/v1/pages"
-            r = requests.post(url, headers=self.headers, json={"parent": {"database_id": self.analyses_db_id}, "properties": props}, timeout=40)
+            body = {
+                "parent": {"database_id": self.analyses_db_id},
+                "properties": props,
+                "children": children
+            }
+            r = requests.post(url, headers=self.headers, json=body, timeout=40)
 
         if r.status_code in (200, 201):
             try: return r.json().get("id")
