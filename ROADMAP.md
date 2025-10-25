@@ -2,7 +2,7 @@
 
 **Design Philosophy:** Impeccable but simple. Personal decision-support tool for daily stock analyses ahead of earnings. Not enterprise software.
 
-**Current Version:** v0.2.7
+**Current Version:** v0.2.8
 
 For detailed change history, see [CHANGELOG.md](CHANGELOG.md)
 
@@ -80,6 +80,6 @@ For detailed change history, see [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
-**Version:** 0.2.7
+**Version:** 0.2.8
 **Last Updated:** October 24, 2025
 **Philosophy:** Optimize for insight, not infrastructure

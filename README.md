@@ -183,7 +183,12 @@ Each analysis uses approximately:
 
 ## Version History
 
-**v0.2.7** (Current)
+**v0.2.8** (Current)
+- Content Status & Notification System - automated Notion notifications for fresh data
+- All Notion syncs now include status field ("New" or "Updated")
+- Enables database automations for alerts when new analyses arrive
+
+**v0.2.7**
 - Market analysis - holistic market context before stock analysis
 - US indices, VIX, sector rotation, economic indicators, market news
 - Market regime classification (Risk-On/Risk-Off/Transition)

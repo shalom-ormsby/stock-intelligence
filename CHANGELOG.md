@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.8] - 2025-10-24
+
+### Added
+- **Content Status & Notification System**: Automated Notion notifications for fresh data
+  - `Content Status` property added to all Notion syncs (Stock Analyses, Stock History, Market Context)
+  - Status values: "New" for fresh records, "Updated" for existing page updates
+  - Enables Notion database automations to trigger notifications when new analysis arrives
+  - Useful for setting up Slack/email alerts when stocks are analyzed
+
+### Changed
+- All Notion sync operations now include Content Status field for better automation support
+
 ## [0.2.7] - 2025-10-24
 
 ### Added
