@@ -30,6 +30,7 @@ try:
     os.environ['ALPHA_VANTAGE_API_KEY'] = userdata.get('ALPHA_VANTAGE_API_KEY')
     os.environ['FRED_API_KEY'] = userdata.get('FRED_API_KEY')
     os.environ['NOTION_API_KEY'] = userdata.get('NOTION_API_KEY')
+    os.environ['NOTION_USER_ID'] = userdata.get('NOTION_USER_ID')
     os.environ['BRAVE_API_KEY'] = userdata.get('BRAVE_API_KEY')
     os.environ['STOCK_ANALYSES_DB_ID'] = userdata.get('STOCK_ANALYSES_DB_ID')
     os.environ['STOCK_HISTORY_DB_ID'] = userdata.get('STOCK_HISTORY_DB_ID')
@@ -46,37 +47,35 @@ PACIFIC_TZ = pytz.timezone("America/Los_Angeles")
 VERSION = "v0.2.8"
 
 # =============================================================================
-# Helpers — User ID Retrieval
+# Helpers — User ID Retrieval (DEPRECATED)
 # =============================================================================
-def get_current_user_id(api_key: str) -> Optional[str]:
-    """
-    Retrieves the current bot user ID from Notion API.
-    The bot user represents the integration making the API calls.
-    For personal use, this is typically the workspace owner.
-
-    Args:
-        api_key: Notion API key
-
-    Returns:
-        User ID string if successful, None otherwise
-    """
-    url = "https://api.notion.com/v1/users/me"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Notion-Version": "2022-06-28"
-    }
-
-    try:
-        r = requests.get(url, headers=headers, timeout=10)
-        if r.status_code == 200:
-            user_data = r.json()
-            return user_data.get("id")
-        else:
-            print(f"⚠️  Failed to get user ID: {r.status_code}")
-            return None
-    except Exception as e:
-        print(f"⚠️  Exception getting user ID: {e}")
-        return None
+# NOTE: This function is no longer used because it returns the bot/integration ID,
+# not the actual user ID. Notion's "Person" property type does not allow bots.
+# Instead, we now use NOTION_USER_ID from environment variables.
+#
+# def get_current_user_id(api_key: str) -> Optional[str]:
+#     """
+#     Retrieves the current bot user ID from Notion API.
+#     WARNING: This returns the BOT ID, not the USER ID.
+#     Notion will reject this ID for Person properties with "Cannot mention bots".
+#     """
+#     url = "https://api.notion.com/v1/users/me"
+#     headers = {
+#         "Authorization": f"Bearer {api_key}",
+#         "Notion-Version": "2022-06-28"
+#     }
+#
+#     try:
+#         r = requests.get(url, headers=headers, timeout=10)
+#         if r.status_code == 200:
+#             user_data = r.json()
+#             return user_data.get("id")
+#         else:
+#             print(f"⚠️  Failed to get user ID: {r.status_code}")
+#             return None
+#     except Exception as e:
+#         print(f"⚠️  Exception getting user ID: {e}")
+#         return None
 
 # =============================================================================
 # CONFIGURATION — REQUIRED: Set via environment variables
@@ -87,6 +86,7 @@ POLYGON_API_KEY        = os.environ.get("POLYGON_API_KEY")
 ALPHA_VANTAGE_API_KEY  = os.environ.get("ALPHA_VANTAGE_API_KEY")
 FRED_API_KEY           = os.environ.get("FRED_API_KEY")
 NOTION_API_KEY         = os.environ.get("NOTION_API_KEY")
+NOTION_USER_ID         = os.environ.get("NOTION_USER_ID")
 BRAVE_API_KEY          = os.environ.get("BRAVE_API_KEY")
 STOCK_ANALYSES_DB_ID   = os.environ.get("STOCK_ANALYSES_DB_ID")
 STOCK_HISTORY_DB_ID    = os.environ.get("STOCK_HISTORY_DB_ID")
@@ -121,11 +121,12 @@ if not BRAVE_API_KEY:
     print("⚠️  BRAVE_API_KEY not set - market news search will be disabled")
 
 # Get current user ID for Owner property (enables Notion notifications)
-CURRENT_USER_ID = get_current_user_id(NOTION_API_KEY) if NOTION_API_KEY else None
+# NOTE: Use NOTION_USER_ID from environment, not get_current_user_id() which returns bot ID
+CURRENT_USER_ID = NOTION_USER_ID  # Use user ID from environment, not API
 if CURRENT_USER_ID:
-    print(f"✅ Authenticated as Notion user: {CURRENT_USER_ID[:8]}...")
+    print(f"✅ Notion user ID configured: {CURRENT_USER_ID[:8]}...")
 else:
-    print("⚠️  Could not retrieve Notion user ID - Owner property will not be set")
+    print("⚠️  NOTION_USER_ID not set - Owner property will not be set (notifications disabled)")
 
 # =============================================================================
 # Helpers
