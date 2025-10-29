@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.9] - 2025-10-28
+
+### Changed
+- **Pattern Signal Score Distribution**: Improved `compute_pattern_score()` to fix clustering around 3.0
+  - Replaced linear score accumulation with weighted signal accumulation system
+  - Implemented non-linear scaling using hyperbolic tangent (tanh) for better score distribution
+  - Separate bullish and bearish weight tracking for clearer signal separation
+  - Refined pattern weights to reflect true technical significance:
+    - Golden/Death Cross: 2.5 (very strong signals)
+    - Trend structure: 1.8 (strong signals)
+    - Volume surges: 1.5 (moderate-strong signals)
+    - MACD crossovers: 1.3 (moderate-strong signals)
+    - RSI extremes: 1.0 (moderate signals)
+  - S-curve distribution now spreads scores across full 1.0-5.0 range
+  - More sensitive scoring in middle range, stable at extremes
+  - Better differentiation between neutral, bullish, and bearish patterns
+
+### Technical Details
+- Net signal calculation: `bullish_weight - bearish_weight` (typically -5.0 to +5.0)
+- Tanh scaling: `tanh(net_signal * 0.5)` produces smooth -1.0 to +1.0 curve
+- Final score: `3.0 + (scaled_signal × 2.0)` for full range utilization
+- Enhanced documentation with inline comments explaining the mathematical approach
+
 ## [0.2.8] - 2025-10-24
 
 ### Added

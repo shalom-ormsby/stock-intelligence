@@ -44,7 +44,7 @@ except ImportError:
     print("✅ Environment variables loaded from .env file")
 
 PACIFIC_TZ = pytz.timezone("America/Los_Angeles")
-VERSION = "v0.2.8"
+VERSION = "v0.2.9"
 
 # =============================================================================
 # Helpers — User ID Retrieval (DEPRECATED)
@@ -437,10 +437,38 @@ def _derive_prev_mas(tech: dict) -> None:
         pass
 
 def compute_pattern_score(tech: dict) -> Tuple[float, str, List[str]]:
+    """
+    Compute pattern score using weighted signal accumulation for better distribution.
+
+    Uses separate bullish/bearish weight accumulation and non-linear scaling
+    to avoid clustering around 3.0. Weights reflect pattern significance and
+    reliability in technical analysis.
+    """
     if not isinstance(tech, dict):
         return 3.0, "✋ Neutral", ["Mixed/Range"]
 
     _derive_prev_mas(tech)
+
+    # Pattern significance weights (calibrated for realistic signal strength)
+    PATTERN_WEIGHTS = {
+        # Very strong signals - major trend reversals/confirmations
+        "Golden Cross": 2.5,           # MA50 crosses above MA200
+        "Death Cross": 2.5,            # MA50 crosses below MA200
+
+        # Strong signals - clear directional structure
+        "Strong Uptrend": 1.8,         # Price > MA50 > MA200
+        "Strong Downtrend": 1.8,       # Price < MA50 < MA200
+
+        # Moderate-strong signals - momentum confirmation
+        "Bullish Volume Surge": 1.5,   # High conviction buying
+        "Bearish Volume Dump": 1.5,    # High conviction selling
+        "MACD Bullish Crossover": 1.3, # Momentum turning positive
+        "MACD Bearish Crossover": 1.3, # Momentum turning negative
+
+        # Moderate signals - reversal indicators
+        "RSI Oversold": 1.0,           # Potential bounce
+        "RSI Overbought": 1.0,         # Potential pullback
+    }
 
     price      = safe_float(tech.get("current_price"))
     ma50       = safe_float(tech.get("ma_50"))
@@ -454,27 +482,38 @@ def compute_pattern_score(tech: dict) -> Tuple[float, str, List[str]]:
     vol        = safe_float(tech.get("volume"))
     avg_vol    = safe_float(tech.get("avg_volume_20d"))
 
-    score = 3.0
+    bullish_weight = 0.0
+    bearish_weight = 0.0
     detected: List[str] = []
 
+    # Detect MA crossovers (strongest signals)
     bull, bear = _detect_cross(prev_ma50, prev_ma200, ma50, ma200)
     if bull:
-        score += 1.5; detected.append("Golden Cross")
+        bullish_weight += PATTERN_WEIGHTS["Golden Cross"]
+        detected.append("Golden Cross")
     if bear:
-        score -= 1.5; detected.append("Death Cross")
+        bearish_weight += PATTERN_WEIGHTS["Death Cross"]
+        detected.append("Death Cross")
 
+    # Trend structure analysis
     if None not in (price, ma50, ma200):
         if price > ma50 > ma200:
-            score += 0.5; detected.append("Strong Uptrend")
+            bullish_weight += PATTERN_WEIGHTS["Strong Uptrend"]
+            detected.append("Strong Uptrend")
         elif price < ma50 < ma200:
-            score -= 0.5; detected.append("Strong Downtrend")
+            bearish_weight += PATTERN_WEIGHTS["Strong Downtrend"]
+            detected.append("Strong Downtrend")
 
+    # RSI extremes (reversal indicators)
     if rsi is not None:
         if rsi < 30:
-            score += 0.5; detected.append("RSI Oversold")
+            bullish_weight += PATTERN_WEIGHTS["RSI Oversold"]
+            detected.append("RSI Oversold")
         elif rsi > 70:
-            score -= 0.5; detected.append("RSI Overbought")
+            bearish_weight += PATTERN_WEIGHTS["RSI Overbought"]
+            detected.append("RSI Overbought")
 
+    # MACD crossover detection
     macd_bull = macd is not None and macd_sig is not None and macd > macd_sig
     macd_bear = macd is not None and macd_sig is not None and macd < macd_sig
     if None not in (macd, macd_sig, macd_prev):
@@ -485,21 +524,42 @@ def compute_pattern_score(tech: dict) -> Tuple[float, str, List[str]]:
         elif prev_above and not curr_above:
             macd_bull, macd_bear = False, True
     if macd_bull:
-        score += 0.3; detected.append("MACD Bullish Crossover")
+        bullish_weight += PATTERN_WEIGHTS["MACD Bullish Crossover"]
+        detected.append("MACD Bullish Crossover")
     elif macd_bear:
-        score -= 0.3; detected.append("MACD Bearish Crossover")
+        bearish_weight += PATTERN_WEIGHTS["MACD Bearish Crossover"]
+        detected.append("MACD Bearish Crossover")
 
+    # Volume analysis (conviction indicator)
     if None not in (vol, avg_vol) and avg_vol and avg_vol > 0:
         ratio = vol / avg_vol
         if ratio >= 1.8:
-            score += 0.4; detected.append("Bullish Volume Surge")
+            bullish_weight += PATTERN_WEIGHTS["Bullish Volume Surge"]
+            detected.append("Bullish Volume Surge")
         elif ratio <= 0.6:
-            score -= 0.4; detected.append("Bearish Volume Dump")
+            bearish_weight += PATTERN_WEIGHTS["Bearish Volume Dump"]
+            detected.append("Bearish Volume Dump")
 
+    # Calculate net weighted signal
+    # Net signal typically ranges from -5.0 to +5.0 with these weights
+    net_signal = bullish_weight - bearish_weight
+
+    # Apply non-linear scaling using tanh for better distribution
+    # tanh provides smooth S-curve that spreads scores away from center
+    # Scale factor of 0.5 maps typical signals (-5 to +5) to wider tanh input range
+    import math
+    scaled_signal = math.tanh(net_signal * 0.5)  # Output: -1.0 to +1.0
+
+    # Map to 1.0-5.0 range: center at 3.0, spread ±2.0
+    score = 3.0 + (scaled_signal * 2.0)
+
+    # Clamp to valid range and round
     score = max(1.0, min(5.0, round(score, 2)))
     signal = _map_signal(score)
+
     if not detected:
         detected = ["Mixed/Range"]
+
     return score, signal, detected
 
 # =============================================================================
