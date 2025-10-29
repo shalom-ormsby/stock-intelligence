@@ -200,7 +200,7 @@ export default async function handler(
     });
 
     if (!analysisResponse.ok) {
-      const errorData = await analysisResponse.json();
+      const errorData = await analysisResponse.json() as any;
       console.log('❌ Analysis endpoint failed:', errorData);
 
       res.status(500).json({
@@ -213,7 +213,7 @@ export default async function handler(
       return;
     }
 
-    const analysisData = await analysisResponse.json();
+    const analysisData = await analysisResponse.json() as any;
     console.log('✅ Analysis triggered successfully');
     console.log(`   Page ID: ${analysisData.analysesPageId}`);
     console.log(`   Composite Score: ${analysisData.scores?.composite}`);

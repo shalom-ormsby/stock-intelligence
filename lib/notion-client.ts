@@ -12,8 +12,6 @@
 import { Client } from '@notionhq/client';
 import {
   PageObjectResponse,
-  PartialPageObjectResponse,
-  QueryDatabaseResponse,
 } from '@notionhq/client/build/src/api-endpoints';
 import { ScoreResults } from './scoring';
 
