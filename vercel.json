@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "functions": {
+    "api/**/*.ts": {
+      "runtime": "nodejs18.x",
+      "maxDuration": 30
+    }
+  },
+  "env": {
+    "FMP_API_KEY": "@fmp-api-key",
+    "FRED_API_KEY": "@fred-api-key",
+    "NOTION_API_KEY": "@notion-api-key"
+  },
+  "buildCommand": "npm run build"
+}
