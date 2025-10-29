@@ -2078,11 +2078,30 @@ class NotionClient:
             blocks = blocks_r.json()
 
             # Extract properties for History record
+            # Exclude properties that don't exist in Stock History or can't be copied
+            EXCLUDE_PROPERTIES = {
+                "Content Status",      # Workflow-specific (set separately below)
+                "Owner",               # Workflow-specific (not needed in History)
+                "Send to History",     # Button property - cannot be copied
+                "Next Review Date",    # Stock Analyses-specific (if exists)
+                "AI summary",          # Stock Analyses-specific (if exists)
+                "Holding Type",        # Stock Analyses-specific (if exists)
+            }
+
             properties_to_copy = {}
+            excluded_count = 0
             for prop_name, prop_value in page["properties"].items():
-                # Skip properties specific to Stock Analyses workflow
-                if prop_name not in ["Content Status", "Owner"]:
-                    properties_to_copy[prop_name] = prop_value
+                # Skip properties that don't exist in Stock History schema
+                if prop_name in EXCLUDE_PROPERTIES:
+                    excluded_count += 1
+                    continue
+
+                # Clean property value - remove database-specific IDs
+                cleaned_value = self._clean_property_value(prop_value)
+                if cleaned_value is not None:
+                    properties_to_copy[prop_name] = cleaned_value
+
+            print(f"ℹ️  Copying {len(properties_to_copy)} properties, excluding {excluded_count} Stock Analyses-specific properties")
 
             # Get ticker and analysis date for History page title
             ticker = page["properties"]["Ticker"]["title"][0]["plain_text"]
@@ -2108,7 +2127,16 @@ class NotionClient:
             history_r = requests.post(history_url, headers=self.headers, json=history_body, timeout=40)
 
             if history_r.status_code not in (200, 201):
-                print(f"⚠️  Failed to create Stock History page: {history_r.status_code} {history_r.text[:300]}")
+                error_msg = history_r.text
+                print(f"⚠️  Failed to create Stock History page: {history_r.status_code}")
+                print(f"Error: {error_msg[:500]}")
+
+                # Provide helpful guidance for common errors
+                if "validation_error" in error_msg and "properties" in error_msg:
+                    print("\n💡 Tip: This error often means a property in Stock Analyses doesn't exist in Stock History.")
+                    print("   Check that both databases have matching property schemas (except excluded properties).")
+                    print(f"   Excluded properties: {EXCLUDE_PROPERTIES}")
+
                 return None
 
             history_page = history_r.json()
@@ -2166,6 +2194,123 @@ class NotionClient:
             print(f"❌ Exception during archival: {e}")
             import traceback
             traceback.print_exc()
+            return None
+
+    def _clean_property_value(self, prop_value: dict) -> Optional[dict]:
+        """
+        Clean property value by removing database-specific IDs.
+
+        Extracts only portable data (names, values) that can be copied
+        to a different database. Removes internal Notion IDs that are
+        database-specific.
+
+        Args:
+            prop_value: Property value dict from Notion API
+
+        Returns:
+            Cleaned property dict, or None if property should be skipped
+        """
+        if not isinstance(prop_value, dict):
+            return None
+
+        prop_type = prop_value.get("type")
+
+        # Skip properties without type
+        if not prop_type:
+            return None
+
+        # Handle each property type
+        if prop_type == "title":
+            # Title property - extract text content only
+            title_content = prop_value.get("title", [])
+            if not title_content:
+                return None
+            return {
+                "title": [{"text": {"content": item["plain_text"]}} for item in title_content if "plain_text" in item]
+            }
+
+        elif prop_type == "rich_text":
+            # Rich text - extract text content only
+            rich_text_content = prop_value.get("rich_text", [])
+            if not rich_text_content:
+                return {"rich_text": []}
+            return {
+                "rich_text": [{"text": {"content": item["plain_text"]}} for item in rich_text_content if "plain_text" in item]
+            }
+
+        elif prop_type == "number":
+            # Number - copy directly
+            return {"number": prop_value.get("number")}
+
+        elif prop_type == "select":
+            # Select - extract name only (remove ID and color)
+            select_value = prop_value.get("select")
+            if not select_value or not select_value.get("name"):
+                return None
+            return {
+                "select": {"name": select_value["name"]}
+            }
+
+        elif prop_type == "multi_select":
+            # Multi-select - extract names only
+            multi_select_values = prop_value.get("multi_select", [])
+            if not multi_select_values:
+                return {"multi_select": []}
+            return {
+                "multi_select": [{"name": item["name"]} for item in multi_select_values if item.get("name")]
+            }
+
+        elif prop_type == "date":
+            # Date - copy start/end/time_zone
+            date_value = prop_value.get("date")
+            if not date_value:
+                return None
+            cleaned_date = {"start": date_value.get("start")}
+            if date_value.get("end"):
+                cleaned_date["end"] = date_value["end"]
+            if date_value.get("time_zone"):
+                cleaned_date["time_zone"] = date_value["time_zone"]
+            return {"date": cleaned_date}
+
+        elif prop_type == "checkbox":
+            # Checkbox - copy directly
+            return {"checkbox": prop_value.get("checkbox", False)}
+
+        elif prop_type == "url":
+            # URL - copy directly
+            return {"url": prop_value.get("url")}
+
+        elif prop_type == "email":
+            # Email - copy directly
+            return {"email": prop_value.get("email")}
+
+        elif prop_type == "phone_number":
+            # Phone - copy directly
+            return {"phone_number": prop_value.get("phone_number")}
+
+        elif prop_type == "people":
+            # People - skip (can't copy user IDs between databases)
+            return None
+
+        elif prop_type == "files":
+            # Files - skip (file URLs are temporary)
+            return None
+
+        elif prop_type == "relation":
+            # Relations - skip (page IDs are database-specific)
+            return None
+
+        elif prop_type == "formula":
+            # Formulas - skip (computed property, can't be set)
+            return None
+
+        elif prop_type == "rollup":
+            # Rollups - skip (computed property, can't be set)
+            return None
+
+        else:
+            # Unknown type - skip
+            print(f"⚠️  Skipping unknown property type: {prop_type}")
             return None
 
     def archive_ticker_to_history(self, ticker: str) -> Optional[str]:
