@@ -1,10 +1,11 @@
 # ==================================================================================================
-# Stock Analyzer — v0.2.8 (Single Cell, Hybrid Dual‑API, Copy‑Paste Ready)
+# Stock Analyzer — v0.3.0 (Single Cell, Hybrid Dual‑API, Copy‑Paste Ready)
 # - Technical: Polygon
 # - Fundamental: Alpha Vantage
 # - Macro: FRED
 # - Scores: Technical, Fundamental, Macro, Risk, Sentiment (unweighted), Composite
 # - Pattern Score, Pattern Signal, Detected Patterns (1.0–5.0, NOT included in Composite)
+# - NEW v0.3.0: Polling Workflow - Python writes metrics, waits for Notion AI analysis, archives on completion
 # - NEW v0.2.8: Content Status & Notification System - automated Notion notifications for fresh data
 # - NEW v0.2.7: Market Analysis - holistic market context before stock analysis
 # - NEW v0.2.6: Notion Comparison Sync to save multi-stock comparisons to Notion
@@ -44,7 +45,7 @@ except ImportError:
     print("✅ Environment variables loaded from .env file")
 
 PACIFIC_TZ = pytz.timezone("America/Los_Angeles")
-VERSION = "v0.2.9"
+VERSION = "v0.3.0"
 
 # =============================================================================
 # Helpers — User ID Retrieval (DEPRECATED)
@@ -1743,55 +1744,74 @@ class NotionClient:
         self.history_db_id  = history_db_id
         self.headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "Notion-Version": "2022-06-28"}
 
-    def sync_to_notion(self, ticker: str, data: dict, scores: dict):
+    def sync_to_notion(self, ticker: str, data: dict, scores: dict, use_polling_workflow: bool = True):
         print("\n" + "="*60)
         print(f"Syncing {ticker} to Notion...")
         print("="*60)
 
         props_analyses = self._build_properties(ticker, data, scores, "analyses")
-        analyses_page_id = self._upsert_analyses(ticker, props_analyses)
+        analyses_page_id = self._upsert_analyses(ticker, props_analyses, use_polling_workflow)
         print("✅ Stock Analyses: " + ("Updated" if analyses_page_id else "Created"))
 
-        props_history  = self._build_properties(ticker, data, scores, "history")
-        history_page_id = self._create_history(ticker, data["timestamp"], props_history)
-        print("✅ Stock History: Created new entry")
+        # v0.2.9 workflow: Create history immediately
+        # v0.3.0 workflow: Skip history creation here (handled by archive_to_history)
+        history_page_id = None
+        if not use_polling_workflow:
+            props_history  = self._build_properties(ticker, data, scores, "history")
+            history_page_id = self._create_history(ticker, data["timestamp"], props_history)
+            print("✅ Stock History: Created new entry")
+        else:
+            print("⏭️  Stock History: Deferred until AI analysis complete (v0.3.0 workflow)")
 
         print("="*60 + "\n")
         return analyses_page_id, history_page_id
 
-    def _upsert_analyses(self, ticker: str, props: dict) -> Optional[str]:
+    def _upsert_analyses(self, ticker: str, props: dict, use_polling_workflow: bool = True) -> Optional[str]:
         page_id = self._find_by_ticker(self.analyses_db_id, ticker, prop_type="title")
 
-        # Set Content Status based on whether page exists
+        # Set Content Status based on workflow
+        if use_polling_workflow:
+            # v0.3.0 workflow: Set to "Pending Analysis" for both new and existing pages
+            props["Content Status"] = {"select": {"name": "Pending Analysis"}}
+            status_msg = "Pending Analysis (v0.3.0 polling workflow)"
+        else:
+            # v0.2.9 workflow: Set to "Updated" or "New" based on whether page exists
+            if page_id:
+                props["Content Status"] = {"select": {"name": "Updated"}}
+                status_msg = "Updated (v0.2.9 legacy workflow)"
+            else:
+                props["Content Status"] = {"select": {"name": "New"}}
+                status_msg = "New (v0.2.9 legacy workflow)"
+
+        print(f"[Notion] Setting Content Status: {status_msg}")
+
         if page_id:
-            props["Content Status"] = {"select": {"name": "Updated"}}
-            print(f"[Notion] Setting Content Status: Updated (existing page found)")
             url = f"https://api.notion.com/v1/pages/{page_id}"
             r = requests.patch(url, headers=self.headers, json={"properties": props}, timeout=40)
         else:
-            props["Content Status"] = {"select": {"name": "New"}}
-            print(f"[Notion] Setting Content Status: New (creating new page)")
-
-            # Add synced block reference to new pages for user guidance
+            # Add synced block reference to new pages for user guidance (v0.2.9 workflow only)
             # Block ID from: https://www.notion.so/Stock-Intelligence-28ca1d1b67e080ea8424c9e64f4648a9
-            guidance_block_id = "28ca1d1b-67e0-80ea-8424-c9e64f4648a9"
-            children = [{
-                "object": "block",
-                "type": "synced_block",
-                "synced_block": {
-                    "synced_from": {
-                        "type": "block_id",
-                        "block_id": guidance_block_id
+            children = []
+            if not use_polling_workflow:
+                guidance_block_id = "28ca1d1b-67e0-80ea-8424-c9e64f4648a9"
+                children = [{
+                    "object": "block",
+                    "type": "synced_block",
+                    "synced_block": {
+                        "synced_from": {
+                            "type": "block_id",
+                            "block_id": guidance_block_id
+                        }
                     }
-                }
-            }]
+                }]
 
             url = "https://api.notion.com/v1/pages"
             body = {
                 "parent": {"database_id": self.analyses_db_id},
                 "properties": props,
-                "children": children
             }
+            if children:
+                body["children"] = children
             r = requests.post(url, headers=self.headers, json=body, timeout=40)
 
         if r.status_code in (200, 201):
@@ -1943,6 +1963,231 @@ class NotionClient:
                     props["Prediction Correct"] = {"checkbox": pred_correct}
 
         return props
+
+    # =========================================================================
+    # v0.3.0 Polling Workflow Methods
+    # =========================================================================
+
+    def wait_for_analysis_completion(
+        self,
+        page_id: str,
+        timeout: int = 600,
+        poll_interval: int = 10,
+        skip_polling: bool = False
+    ) -> bool:
+        """
+        Poll Stock Analyses page until Content Status = "Send to History"
+
+        Args:
+            page_id: Notion page ID to monitor
+            timeout: Max seconds to wait (default 600 = 10 minutes)
+            poll_interval: Seconds between checks (default 10)
+            skip_polling: If True, return immediately without polling
+
+        Returns:
+            bool: True if ready to archive, False if timeout or skipped
+        """
+        if skip_polling:
+            print("⏭️  Polling skipped. Run archive manually when ready:")
+            print(f"    notion.archive_to_history('{page_id}')")
+            return False
+
+        import time
+
+        start_time = datetime.now()
+        end_time = start_time + timedelta(seconds=timeout)
+
+        print("✅ Metrics synced. Waiting for AI analysis to complete...")
+        print("📊 Open Notion and run your AI prompt now.")
+        print(f"⏱️  Polling every {poll_interval}s for up to {timeout//60} minutes...")
+
+        while datetime.now() < end_time:
+            # Query page for current Content Status
+            try:
+                url = f"https://api.notion.com/v1/pages/{page_id}"
+                r = requests.get(url, headers=self.headers, timeout=10)
+
+                if r.status_code == 200:
+                    page = r.json()
+                    content_status = page["properties"]["Content Status"]["select"]
+
+                    if content_status and content_status["name"] == "Send to History":
+                        print("✅ AI analysis complete! Starting archival...")
+                        return True
+
+                    # Calculate time remaining
+                    elapsed = int((datetime.now() - start_time).total_seconds())
+                    remaining = timeout - elapsed
+
+                    status_name = content_status["name"] if content_status else "None"
+                    print(f"⏳ Status: {status_name} | Checking again in {poll_interval}s ({remaining}s remaining)")
+                else:
+                    print(f"⚠️  API error {r.status_code} while polling")
+
+            except Exception as e:
+                print(f"⚠️  Exception during polling: {e}")
+
+            time.sleep(poll_interval)
+
+        # Timeout reached - set status to "Analysis Incomplete"
+        print("⏱️  Timeout reached. Analysis not completed within time limit.")
+        print("🔄 Setting Content Status to 'Analysis Incomplete'...")
+
+        try:
+            url = f"https://api.notion.com/v1/pages/{page_id}"
+            r = requests.patch(
+                url,
+                headers=self.headers,
+                json={"properties": {"Content Status": {"select": {"name": "Analysis Incomplete"}}}},
+                timeout=10
+            )
+            if r.status_code == 200:
+                print("✅ Status updated to 'Analysis Incomplete'")
+        except Exception as e:
+            print(f"⚠️  Could not update status: {e}")
+
+        print("💡 You can run the archiving function manually when ready:")
+        print(f"    notion.archive_to_history('{page_id}')")
+        return False
+
+    def archive_to_history(self, page_id: str) -> Optional[str]:
+        """
+        Archive completed analysis to Stock History database
+
+        Args:
+            page_id: Stock Analyses page ID to archive
+
+        Returns:
+            Stock History page ID if successful, None otherwise
+        """
+        print("📦 Archiving analysis to Stock History...")
+
+        try:
+            # Read full page data
+            page_url = f"https://api.notion.com/v1/pages/{page_id}"
+            blocks_url = f"https://api.notion.com/v1/blocks/{page_id}/children"
+
+            page_r = requests.get(page_url, headers=self.headers, timeout=30)
+            blocks_r = requests.get(blocks_url, headers=self.headers, timeout=30)
+
+            if page_r.status_code != 200 or blocks_r.status_code != 200:
+                print(f"⚠️  Failed to read page data: page={page_r.status_code}, blocks={blocks_r.status_code}")
+                return None
+
+            page = page_r.json()
+            blocks = blocks_r.json()
+
+            # Extract properties for History record
+            properties_to_copy = {}
+            for prop_name, prop_value in page["properties"].items():
+                # Skip properties specific to Stock Analyses workflow
+                if prop_name not in ["Content Status", "Owner"]:
+                    properties_to_copy[prop_name] = prop_value
+
+            # Get ticker and analysis date for History page title
+            ticker = page["properties"]["Ticker"]["title"][0]["plain_text"]
+            analysis_date = page["properties"]["Analysis Date"]["date"]["start"]
+
+            # Format title for Stock History
+            dt = datetime.fromisoformat(analysis_date.replace('Z', '+00:00'))
+            formatted_date = dt.strftime("%Y-%m-%d %I:%M %p")
+
+            # Set Stock History specific properties
+            # Convert Ticker from title to rich_text for History database
+            properties_to_copy["Ticker"] = {"rich_text": [{"text": {"content": ticker}}]}
+            properties_to_copy["Name"] = {"title": [{"text": {"content": f"{ticker} - {formatted_date}"}}]}
+            properties_to_copy["Content Status"] = {"select": {"name": "Historical"}}
+
+            # Create Stock History page
+            history_url = "https://api.notion.com/v1/pages"
+            history_body = {
+                "parent": {"database_id": self.history_db_id},
+                "properties": properties_to_copy
+            }
+
+            history_r = requests.post(history_url, headers=self.headers, json=history_body, timeout=40)
+
+            if history_r.status_code not in (200, 201):
+                print(f"⚠️  Failed to create Stock History page: {history_r.status_code} {history_r.text[:300]}")
+                return None
+
+            history_page = history_r.json()
+            history_page_id = history_page["id"]
+
+            print(f"✅ Created Stock History page: {ticker} - {formatted_date}")
+
+            # Copy all content blocks from Stock Analyses to Stock History
+            # Filter out synced blocks (user guidance)
+            blocks_to_copy = []
+            for block in blocks.get("results", []):
+                # Skip synced blocks (guidance content)
+                if block.get("type") == "synced_block":
+                    continue
+
+                # Create a copy of the block without metadata
+                block_copy = {k: v for k, v in block.items()
+                            if k not in ["id", "parent", "created_time", "last_edited_time",
+                                        "created_by", "last_edited_by", "archived", "has_children"]}
+                blocks_to_copy.append(block_copy)
+
+            # Append blocks to History page if any exist
+            if blocks_to_copy:
+                append_url = f"https://api.notion.com/v1/blocks/{history_page_id}/children"
+                append_body = {"children": blocks_to_copy}
+
+                append_r = requests.patch(append_url, headers=self.headers, json=append_body, timeout=40)
+
+                if append_r.status_code == 200:
+                    print(f"✅ Copied {len(blocks_to_copy)} content blocks to Stock History")
+                else:
+                    print(f"⚠️  Warning: Could not copy content blocks: {append_r.status_code}")
+            else:
+                print("ℹ️  No content blocks to copy (analysis may still be pending)")
+
+            # Update original Stock Analyses page to "Logged in History"
+            update_url = f"https://api.notion.com/v1/pages/{page_id}"
+            update_body = {
+                "properties": {
+                    "Content Status": {"select": {"name": "Logged in History"}}
+                }
+            }
+
+            update_r = requests.patch(update_url, headers=self.headers, json=update_body, timeout=40)
+
+            if update_r.status_code == 200:
+                print("✅ Stock Analyses page marked as 'Logged in History'")
+            else:
+                print(f"⚠️  Warning: Could not update Stock Analyses status: {update_r.status_code}")
+
+            print("🎉 Archival complete!")
+            return history_page_id
+
+        except Exception as e:
+            print(f"❌ Exception during archival: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    def archive_ticker_to_history(self, ticker: str) -> Optional[str]:
+        """
+        Convenience method to archive a ticker by name instead of page ID.
+
+        Args:
+            ticker: Stock ticker symbol
+
+        Returns:
+            Stock History page ID if successful, None otherwise
+        """
+        print(f"🔍 Finding Stock Analyses page for {ticker}...")
+
+        page_id = self._find_by_ticker(self.analyses_db_id, ticker, prop_type="title")
+
+        if not page_id:
+            print(f"❌ No Stock Analyses page found for {ticker}")
+            return None
+
+        print(f"✅ Found page: {page_id}")
+        return self.archive_to_history(page_id)
 
 # =============================================================================
 # Convenience Functions
@@ -2810,16 +3055,27 @@ def analyze_market(print_results: bool = True, sync_to_notion: bool = True) -> d
 # =============================================================================
 # Orchestrator
 # =============================================================================
-def analyze_and_sync_to_notion(ticker: str, backtest_patterns: bool = False):
+def analyze_and_sync_to_notion(
+    ticker: str,
+    backtest_patterns: bool = False,
+    use_polling_workflow: bool = True,
+    timeout: int = 600,
+    skip_polling: bool = False
+):
     """
     Main analysis orchestrator.
 
     Args:
         ticker: Stock ticker symbol to analyze
         backtest_patterns: If True, validate pattern predictions (adds 1 API call)
+        use_polling_workflow: If True, use v0.3.0 polling workflow; if False, use v0.2.9 legacy workflow
+        timeout: Max seconds to wait for AI analysis (default 600 = 10 minutes, only used if use_polling_workflow=True)
+        skip_polling: If True, skip polling and return immediately after writing metrics (manual archive required)
     """
+    workflow_version = "v0.3.0 (polling)" if use_polling_workflow else "v0.2.9 (legacy)"
     print("\n" + "="*60)
     print(f"STOCK ANALYZER {VERSION} — HYBRID DUAL‑API")
+    print(f"Workflow: {workflow_version}")
     print("="*60)
     print(f"Ticker: {ticker}")
     print(f"Timestamp: {datetime.now(PACIFIC_TZ).strftime('%Y-%m-%d %I:%M %p %Z')}")
@@ -2861,28 +3117,68 @@ def analyze_and_sync_to_notion(ticker: str, backtest_patterns: bool = False):
     print(f"Sentiment:  {scores['sentiment']:.2f} (not weighted)")
     print("="*60 + "\n")
 
-    notion.sync_to_notion(ticker, data, scores)
+    # Sync to Notion with selected workflow
+    analyses_page_id, history_page_id = notion.sync_to_notion(ticker, data, scores, use_polling_workflow)
+
+    # v0.3.0 workflow: Poll for AI completion and archive
+    if use_polling_workflow and analyses_page_id:
+        ready = notion.wait_for_analysis_completion(
+            analyses_page_id,
+            timeout=timeout,
+            skip_polling=skip_polling
+        )
+
+        if ready:
+            history_page_id = notion.archive_to_history(analyses_page_id)
 
     print("\n" + "="*60)
     print(f"✅ Analysis complete for {ticker}! — {VERSION}")
+    if use_polling_workflow and not skip_polling:
+        if history_page_id:
+            print("📦 Archived to Stock History")
+        else:
+            print("⏳ Awaiting manual archive (timeout or incomplete)")
     print("="*60 + "\n")
 
 # =============================================================================
 # EXECUTION
 # =============================================================================
 
-# MARKET ANALYSIS (v0.2.7) — NEW!
+# MARKET ANALYSIS (v0.2.7)
 # Get holistic market context before analyzing individual stocks
 # Includes: US indices, VIX, sector rotation, economic indicators, market news
 # Syncs to Notion automatically (requires MARKET_CONTEXT_DB_ID in .env)
 analyze_market()
 
+# =============================================================================
 # SINGLE STOCK ANALYSIS
-# Change ticker and backtest_patterns flag as needed
-# backtest_patterns=True adds pattern validation (1 additional API call)
-# analyze_and_sync_to_notion("AMZN", backtest_patterns=True)
+# =============================================================================
 
+# v0.3.0 POLLING WORKFLOW (DEFAULT — RECOMMENDED)
+# Python writes metrics → Waits for Notion AI → Archives when "Send to History" button clicked
+# analyze_and_sync_to_notion("AMZN")
+# analyze_and_sync_to_notion("NVDA", backtest_patterns=True)
+# analyze_and_sync_to_notion("TSLA", timeout=900)  # Wait up to 15 minutes
+
+# v0.3.0 SKIP POLLING (for batch processing)
+# Write metrics only, archive manually later
+# analyze_and_sync_to_notion("AAPL", skip_polling=True)
+# Later, manually archive: notion.archive_ticker_to_history("AAPL")
+
+# v0.2.9 LEGACY WORKFLOW (immediate history write, no AI wait)
+# analyze_and_sync_to_notion("GOOGL", use_polling_workflow=False)
+
+# =============================================================================
 # COMPARATIVE ANALYSIS (v0.2.6)
+# =============================================================================
 # Compare multiple stocks side-by-side to answer: "Which should I buy?"
 # Syncs to Notion automatically (requires STOCK_COMPARISONS_DB_ID in .env)
 # compare_stocks(['NVDA', 'MSFT', 'AMZN'])
+
+# =============================================================================
+# MANUAL ARCHIVE FUNCTIONS (v0.3.0)
+# =============================================================================
+# If polling times out or you skip polling, manually archive when ready:
+# notion = NotionClient(NOTION_API_KEY, STOCK_ANALYSES_DB_ID, STOCK_HISTORY_DB_ID)
+# notion.archive_ticker_to_history("TICKER")  # Archive by ticker name
+# notion.archive_to_history("page_id_here")   # Archive by page ID
