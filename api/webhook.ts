@@ -2,15 +2,14 @@
  * Notion Webhook Handler
  *
  * Receives webhook events from Notion database automations.
- * When a new ticker is added to the trigger database, this endpoint:
- * 1. Validates the webhook signature
- * 2. Extracts the ticker symbol
- * 3. Triggers the analysis endpoint
- * 4. Returns success/error status
+ *
+ * Handles two types of events:
+ * 1. New analysis trigger: Extracts ticker and triggers analysis
+ * 2. Archive trigger: Moves completed analysis to Stock History
  *
  * Setup in Notion:
- * - Create a "Triggers" database with "Ticker" (text) property
- * - Add automation: When row created → Call webhook
+ * - For new analysis: Create automation → Call webhook with ticker
+ * - For archiving: "Send to History" button → Call webhook with page ID + action=archive
  * - Webhook URL: https://your-app.vercel.app/api/webhook
  *
  * v1.0 - Vercel Serverless + TypeScript
@@ -18,9 +17,12 @@
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
+import { createNotionClient } from '../lib/notion-client';
 
 interface NotionWebhookPayload {
-  type: string;
+  type?: string;
+  action?: string; // 'archive' for Send to History button
+  pageId?: string; // Page ID for archiving
   page?: {
     id: string;
     properties?: Record<string, any>;
@@ -34,6 +36,8 @@ interface WebhookResponse {
   success: boolean;
   ticker?: string;
   analysisTriggered?: boolean;
+  archiveTriggered?: boolean;
+  historyPageId?: string;
   message?: string;
   error?: string;
   details?: string;
@@ -151,7 +155,82 @@ export default async function handler(
       typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
 
     console.log('Webhook type:', payload.type);
+    console.log('Webhook action:', payload.action);
 
+    // Handle archive request (Send to History button)
+    if (payload.action === 'archive') {
+      console.log('📦 Archive request received');
+
+      const pageId = payload.pageId || payload.page?.id;
+      if (!pageId) {
+        console.log('❌ No page ID provided for archiving');
+        res.status(400).json({
+          success: false,
+          error: 'Missing page ID',
+          details: 'Archive action requires pageId in payload',
+        });
+        return;
+      }
+
+      console.log(`Archiving page: ${pageId}`);
+
+      // Initialize Notion client
+      const notionApiKey = process.env.NOTION_API_KEY;
+      const stockAnalysesDbId = process.env.STOCK_ANALYSES_DB_ID;
+      const stockHistoryDbId = process.env.STOCK_HISTORY_DB_ID;
+
+      if (!notionApiKey || !stockAnalysesDbId || !stockHistoryDbId) {
+        console.log('❌ Missing required environment variables');
+        res.status(500).json({
+          success: false,
+          error: 'Server configuration error',
+          details: 'Missing Notion API credentials',
+        });
+        return;
+      }
+
+      const notionClient = createNotionClient({
+        apiKey: notionApiKey,
+        stockAnalysesDbId,
+        stockHistoryDbId,
+      });
+
+      try {
+        const historyPageId = await notionClient.archiveToHistory(pageId);
+
+        if (historyPageId) {
+          console.log(`✅ Successfully archived to history: ${historyPageId}`);
+          res.status(200).json({
+            success: true,
+            archiveTriggered: true,
+            historyPageId,
+            message: 'Analysis successfully archived to Stock History',
+          });
+          return;
+        } else {
+          console.log('❌ Archive operation returned null');
+          res.status(500).json({
+            success: false,
+            archiveTriggered: false,
+            error: 'Archive failed',
+            details: 'archiveToHistory() returned null',
+          });
+          return;
+        }
+      } catch (error) {
+        console.error('❌ Archive error:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({
+          success: false,
+          archiveTriggered: false,
+          error: 'Archive operation failed',
+          details: errorMessage,
+        });
+        return;
+      }
+    }
+
+    // Handle new analysis trigger (original behavior)
     // Extract ticker from page properties
     if (!payload.page?.properties) {
       console.log('❌ No page properties in webhook payload');
