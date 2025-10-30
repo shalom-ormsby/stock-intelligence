@@ -9,9 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### v1.0: Testing & Beta Launch (In Progress)
 
-**Remaining Work** (~25% of v1.0 scope):
-- Enhanced Notion integration (read/write functions for polling and batch operations)
-- Production hardening (rate limiting, retry logic enhancements)
+**Remaining Work** (~20% of v1.0 scope):
+- Notion write verification (ensure all properties write correctly)
+- Production hardening (additional retry logic enhancements)
 - End-to-end testing with diverse tickers
 - Performance optimization (cold starts, caching)
 - Beta preparation (onboarding package, user management, feedback system)
@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Completed** (v1.0-alpha):
 - ✅ Core API endpoints with FMP + FRED integration
+- ✅ Notion polling system for user-triggered analysis
 - ✅ Public API access with CORS support
 - ✅ Optional authentication system
 - ✅ Extended timeouts for long-running operations
@@ -38,6 +39,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Why FMP**: Consolidated API (FMP + FRED) replaced fragmented v0.x providers
 
 ### Added
+- **Notion Polling System (User-Triggered Analysis)**:
+  - `NotionPoller` class ([lib/notion-poller.ts](lib/notion-poller.ts), 340 LOC): Query database for pending requests
+  - `queryPendingAnalyses()`: Detects pages with "Request Analysis" checkbox = true
+  - `getPageProperties()`: Reads all properties from Stock Analyses pages
+  - `markAsProcessing()`: Prevents duplicate analysis of same page
+  - `markAsFailed()`: Tracks failed analyses with error messages
+  - Built-in rate limiter: Respects Notion's 3 requests/second limit
+  - Polling script ([scripts/poll-notion.ts](scripts/poll-notion.ts), 290 LOC): Continuous monitoring
+  - Configurable poll interval (default: 30 seconds)
+  - Graceful shutdown handling (SIGINT/SIGTERM)
+  - Comprehensive polling documentation ([POLLING.md](POLLING.md), 500+ LOC)
+  - npm script: `npm run poll` for easy execution
 - **Public API Access & Security**:
   - CORS support for cross-origin requests (all origins allowed)
   - OPTIONS method handling for preflight requests
@@ -76,18 +89,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Technical Specifications
 - **Stack**: Vercel serverless (TypeScript/Node.js) + FMP API ($22-29/mo) + FRED API (free) + Notion API
 - **Performance**: 3-5 second analysis, extended timeouts (300s analyze, 60s webhook, 10s health)
-- **Codebase**: ~4,500 lines TypeScript, ~3,400 lines documentation, 24 files total
+- **Codebase**: ~5,100 lines TypeScript, ~4,300 lines documentation, 27 files total
 - **Cost**: $22-29/month (FMP API + Vercel hosting)
 - **Security**: Optional API key authentication, CORS enabled, webhook signature verification
+- **Polling**: User-triggered analysis via Notion checkbox, 30-second intervals (configurable)
 
 ### Data Flow (v1.0 Architecture)
-**Internal Workflow (Notion-triggered):**
-1. User sets "Request Analysis" = true in Stock Analyses database
-2. Notion automation → POST to `/api/webhook` with ticker + page data
-3. Vercel function fetches technical/fundamental data (FMP) + macro indicators (FRED)
-4. Scores calculated (Composite + Pattern) and written back to Notion
-5. Notion AI generates 7-section analysis narrative
-6. User clicks "Send to History" → archive to Stock History database
+**User-Triggered Workflow (Polling-based):**
+1. User checks "Request Analysis" checkbox in Stock Analyses database
+2. Polling script (`npm run poll`) detects pending request within ~30 seconds
+3. Script marks page as "Processing" to prevent duplicates
+4. Script calls POST `/api/analyze` with ticker
+5. Vercel function fetches technical/fundamental data (FMP) + macro indicators (FRED)
+6. Scores calculated (Composite + Pattern) and written back to Notion
+7. Notion AI generates 7-section analysis narrative
+8. User clicks "Send to History" → archive to Stock History database
+
+**Webhook Workflow (Notion-triggered):**
+1. User triggers Notion automation (e.g., "Send to History" button)
+2. Notion automation → POST to `/api/webhook` with page data
+3. Webhook handler archives completed analysis to Stock History
 
 **External API Access (Public endpoints):**
 1. Client checks API status: GET `/api/health`
