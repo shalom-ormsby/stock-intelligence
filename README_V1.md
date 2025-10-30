@@ -271,38 +271,36 @@ NOTION_API_KEY=your_notion_key
 
 ---
 
-## Development Roadmap
+## Development Status
 
-### Phase 1: Foundation ✅ (50% complete)
-- [x] API research and selection
-- [x] Project structure
-- [x] FMP client
-- [x] FRED client
-- [x] Scoring engine
+**v1.0 Progress:** ~70% complete
 
-### Phase 2: Core Features (This Week)
-- [ ] Notion client
-- [ ] Analysis endpoint
-- [ ] Webhook handler
-- [ ] Error handling
+### ✅ Completed
+- [x] API research and selection (FMP + FRED)
+- [x] Project structure and TypeScript setup
+- [x] FMP client integration
+- [x] FRED client integration
+- [x] Scoring engine (ported from v0.x Python)
+- [x] Notion client (read/write operations)
+- [x] Analysis endpoint (/api/analyze)
+- [x] Webhook handler (/api/webhook)
+- [x] Vercel production deployment
+- [x] End-to-end workflow testing
+- [x] Security audit
+- [x] Production validation (MSFT test case)
+- [x] Documentation (SETUP.md, testing guides)
 
-### Phase 3: Polish (Week 4)
-- [ ] Rate limiting
-- [ ] User quotas
-- [ ] Logging
-- [ ] Monitoring
+### 🚧 In Progress (~30% remaining)
+- [ ] Enhanced Notion integration (polling/batch operations)
+- [ ] Rate limiting (10 analyses/user/day)
+- [ ] Comprehensive error handling and logging
+- [ ] Retry logic with exponential backoff
+- [ ] Performance optimization (cold starts, caching)
+- [ ] End-to-end testing with diverse tickers
+- [ ] Beta preparation (onboarding package, user management)
+- [ ] Beta rollout (3 cohorts: Nov 20, Nov 24, Nov 27 targets)
 
-### Phase 4: Testing (Week 5)
-- [ ] Single-user POC
-- [ ] Performance testing
-- [ ] Beta documentation
-- [ ] Setup wizard
-
-### Phase 5: Beta Launch (Week 6)
-- [ ] Deploy to Vercel
-- [ ] Onboard 3-5 users
-- [ ] Gather feedback
-- [ ] Scale to 10-20 users
+For the complete roadmap including v1.1 and v2.0 plans, see [ROADMAP.md](ROADMAP.md)
 
 ---
 

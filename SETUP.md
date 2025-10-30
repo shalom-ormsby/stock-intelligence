@@ -452,7 +452,7 @@ Please provide:
 3. ✅ Verify AI prompt works
 4. ✅ Test full workflow end-to-end
 5. 📋 Review rate limiting strategy
-6. 📋 Set up monitoring (Phase 4)
+6. 📋 Set up monitoring (upcoming)
 7. 📋 Create beta feedback database
 8. 📋 Onboard 3-5 beta users
 
@@ -466,7 +466,7 @@ Please provide:
 - Check Notion integration permissions
 
 **For bugs:**
-- Create issue in Beta Feedback database (Phase 4)
+- Create issue in Beta Feedback database (when available)
 - Include: Ticker, error message, expected vs actual behavior
 
 ---

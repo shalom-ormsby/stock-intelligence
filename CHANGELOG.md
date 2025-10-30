@@ -7,6 +7,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### v1.0: Testing & Beta Launch (In Progress)
+
+**Remaining Work** (~30% of v1.0 scope):
+- Enhanced Notion integration (read/write functions for polling and batch operations)
+- Production hardening (rate limiting, error handling, retry logic)
+- End-to-end testing with diverse tickers
+- Performance optimization (cold starts, caching)
+- Beta preparation (onboarding package, user management, feedback system)
+- Beta rollout (3 cohorts: Nov 20, Nov 24, Nov 27 targets)
+
+---
+
+## [1.0-alpha] - 2025-10-29
+
+### Changed
+- **Complete architectural migration from Python/Colab to TypeScript/Vercel serverless**
+  - Ported ~2,500 LOC of scoring logic from v0.3 Python codebase
+  - Rebuilt as production-ready serverless functions on Vercel
+  - **Why**: Colab was manual workflow, needed automation for multi-user beta testing
+  - **Why TypeScript**: Type safety + Vercel native integration + better maintainability
+  - **Why FMP**: Consolidated API (FMP + FRED) replaced fragmented v0.x providers
+
+### Added
+- **API Endpoints**:
+  - `/api/analyze` (390 LOC): Stock analysis endpoint with FMP + FRED integration
+  - `/api/webhook` (180 LOC): Archive endpoint for "Send to History" automation
+- **Modular Architecture**:
+  - API fetching logic extracted to separate functions
+  - Score calculation refactored to pure functions
+  - Notion read/write operations modularized
+  - AI prompt execution logic isolated
+- **Deployment & DevOps**:
+  - Production deployment on Vercel
+  - Public API endpoints with CORS enabled
+  - Environment variable configuration for secrets
+  - Local test scripts (240 LOC)
+  - Comprehensive documentation (SETUP.md, testing guides - 750 LOC)
+
+### Testing & Validation
+- End-to-end workflow tested: ticker input → analysis → archive
+- Security audit completed (API keys, CORS, input validation)
+- Production validation with MSFT test case
+- Performance verified: 3-5 seconds per analysis, 17-21 API calls
+
+### Technical Specifications
+- **Stack**: Vercel serverless (TypeScript/Node.js) + FMP API ($22-29/mo) + FRED API (free) + Notion API
+- **Performance**: 3-5 second analysis, 60-second function timeout
+- **Codebase**: ~4,000 lines TypeScript, ~2,500 lines documentation, 17 files total
+- **Cost**: $22-29/month (FMP API + Vercel hosting)
+
+### Data Flow (v1.0 Architecture)
+1. User sets "Request Analysis" = true in Stock Analyses database
+2. Notion automation → POST to `/api/webhook` with ticker + page data
+3. Vercel function fetches technical/fundamental data (FMP) + macro indicators (FRED)
+4. Scores calculated (Composite + Pattern) and written back to Notion
+5. Notion AI generates 7-section analysis narrative
+6. User clicks "Send to History" → archive to Stock History database
+
+### Migration Notes
+- **From**: Python/Colab + Polygon/Alpha Vantage/FRED APIs (manual execution)
+- **To**: TypeScript/Vercel + FMP/FRED APIs (automated, production-ready)
+- **Breaking Changes**: None for end users (Notion interface unchanged)
+- **Scoring Logic**: Preserved from v0.x with identical calculation methods
+
+---
+
+## v0.x: Colab Prototype Releases
+
+*The following versions represent the Python/Colab prototype phase (100% complete)*
+
 ## [0.2.9] - 2025-10-28
 
 ### Changed
@@ -152,8 +222,8 @@ buy_recommendation = results['recommendation']['buy_now']
 ```
 
 ### Documentation
-- **ROADMAP.md progress**: Phase 1.3 (Comparative Analysis) complete
-- **Phase 1 (Decision Clarity & Confidence) COMPLETE**: All three priorities delivered
+- **v0.x Feature**: Comparative Analysis complete
+- **Decision Clarity & Confidence Features**: All three priorities delivered (Scoring Config, Pattern Validation, Comparative Analysis)
 
 ## [0.2.4] - 2025-10-23
 
@@ -181,7 +251,7 @@ buy_recommendation = results['recommendation']['buy_now']
 ### Documentation
 - Added comprehensive docstrings to PatternBacktester class
 - Documented backtesting methodology and accuracy scoring logic
-- **ROADMAP.md progress**: Phase 1.2 (Pattern Validation) implementation complete
+- **v0.x Feature**: Pattern Validation implementation complete
 
 ## [0.2.3] - 2025-10-23
 
@@ -209,10 +279,7 @@ buy_recommendation = results['recommendation']['buy_now']
   - Protects commercial interests while remaining community-friendly
 - Updated README with clear licensing terms and usage guidelines
 - Renamed main file from `stock_intelligence_v0.2.2_secure.py` to `stock_intelligence.py` (version tracked internally)
-- **ROADMAP.md updated**: Marked Phase 1.1 (Scoring Config) as completed
-  - Removed completed implementation details
-  - Updated success metrics to reflect progress
-  - Phase 1.2 (Pattern Validation) and 1.3 (Comparative Analysis) remain pending
+- **v0.x Features**: Scoring Config completed, Pattern Validation and Comparative Analysis still pending at this point
 
 ## [Unreleased - Prior Changes]
 
@@ -221,12 +288,13 @@ buy_recommendation = results['recommendation']['buy_now']
 
 ### Changed
 - **Roadmap Reorganization**: Updated ROADMAP.md to prioritize decision-making clarity over infrastructure
-  - New Phase 1 focuses on: Scoring Config, Pattern Validation, and Comparative Analysis
+  - v0.x focus: Scoring Config, Pattern Validation, and Comparative Analysis
   - Deferred logging, caching, and rate limiting (solve non-problems for 1-3 stocks/day workflow)
   - Aligned priorities with actual use case: personal decision-support tool for daily earnings plays
 
 ### Documentation
 - Added design philosophy to roadmap: "Impeccable but simple. Personal decision-support tool for daily stock analyses ahead of earnings. Not enterprise software."
+- Reorganized ROADMAP.md to prioritize decision-making features (Scoring Config, Pattern Validation, Comparative Analysis)
 
 ## [0.2.2] - 2025-10-22
 
@@ -418,8 +486,39 @@ buy_recommendation = results['recommendation']['buy_now']
 
 ## Version Naming Convention
 
-**Pre-1.0 Status**: This software is not yet a true product. v1.0 will only be released when it supports multi-user Notion integration (anyone can use with their own Notion workspace).
+### Version Structure
+- **v0.x**: Colab Prototype - Python/Colab-based manual analysis (complete)
+- **v1.0**: Serverless Migration - TypeScript/Vercel production deployment with beta testing
+- **v1.1**: Enhanced Analysis - Insider trading analysis + market regime features
+- **v2.0**: Full Automation - Scheduled jobs + historical trends + intelligent notifications
 
-- **Major version** (e.g., v0.x): Pre-product releases for personal use only
-- **Minor version** (e.g., v0.2.x): Feature additions and improvements
-- **Patch version** (e.g., v0.2.3): Bug fixes and refinements
+### Semantic Versioning
+- **Major version** (e.g., v1.x → v2.x): Architectural changes or major feature sets
+- **Minor version** (e.g., v1.0 → v1.1): Feature additions within same architecture
+- **Patch version** (e.g., v1.0.1): Bug fixes and refinements
+
+### Architecture Evolution
+- **v0.x** (Complete): Python/Colab + Polygon/Alpha Vantage/FRED → Manual execution, single-user
+- **v1.0** (70% Complete): TypeScript/Vercel + FMP/FRED → Serverless automation, beta testing
+- **v1.1** (Planned): Enhanced analysis features (insider trading, market regime classification)
+- **v2.0** (Planned): Full autonomous monitoring with scheduled jobs and notifications
+
+### Key Architectural Decisions
+
+**Why migrate from Python/Colab to TypeScript/Vercel?**
+- Colab required manual execution for each analysis
+- Multi-user beta testing needed automated, always-on infrastructure
+- Vercel serverless provides production reliability without server management
+- TypeScript adds type safety and better maintainability for collaborative development
+
+**Why Financial Modeling Prep (FMP)?**
+- Consolidated API: Technical + fundamental data in one provider (vs 3 separate APIs in v0.x)
+- Better rate limits: Supports 10+ users without API quota issues
+- Cost-effective: $22-29/month vs $50+ for premium tiers of multiple providers
+- Reliable data quality: Comparable to Polygon/Alpha Vantage combination
+
+**Why preserve scoring logic across versions?**
+- v0.x scoring system was validated and refined over 9 iterations (v0.2.0 - v0.2.9)
+- Pattern recognition system (v0.2.2) and backtesting (v0.2.4) proved valuable
+- Maintaining scoring consistency ensures historical analyses remain comparable
+- Users trained on v0.x scoring can trust v1.0 recommendations
