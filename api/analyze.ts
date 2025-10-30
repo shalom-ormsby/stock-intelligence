@@ -17,6 +17,7 @@ import { createFMPClient } from '../lib/fmp-client';
 import { createFREDClient } from '../lib/fred-client';
 import { createStockScorer } from '../lib/scoring';
 import { createNotionClient, AnalysisData } from '../lib/notion-client';
+import { requireAuth } from '../lib/auth';
 
 interface AnalyzeRequest {
   ticker: string;
@@ -67,6 +68,12 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ): Promise<void> {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
   // Only accept POST requests
   if (req.method !== 'POST') {
     res.status(405).json({
@@ -74,6 +81,11 @@ export default async function handler(
       error: 'Method not allowed',
       details: 'Only POST requests are accepted',
     });
+    return;
+  }
+
+  // Check authentication (optional - only if API_KEY env var is set)
+  if (!requireAuth(req, res)) {
     return;
   }
 

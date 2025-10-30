@@ -18,6 +18,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
 import { createNotionClient } from '../lib/notion-client';
+import { requireAuth } from '../lib/auth';
 
 interface NotionWebhookPayload {
   type?: string;
@@ -104,6 +105,12 @@ export default async function handler(
   console.log('Notion webhook received');
   console.log('='.repeat(60));
 
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
   // Only accept POST requests
   if (req.method !== 'POST') {
     console.log('❌ Method not allowed:', req.method);
@@ -112,6 +119,12 @@ export default async function handler(
       error: 'Method not allowed',
       details: 'Only POST requests are accepted',
     });
+    return;
+  }
+
+  // Check authentication (optional - only if API_KEY env var is set)
+  if (!requireAuth(req, res)) {
+    console.log('❌ Authentication failed');
     return;
   }
 

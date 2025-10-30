@@ -9,13 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### v1.0: Testing & Beta Launch (In Progress)
 
-**Remaining Work** (~30% of v1.0 scope):
+**Remaining Work** (~25% of v1.0 scope):
 - Enhanced Notion integration (read/write functions for polling and batch operations)
-- Production hardening (rate limiting, error handling, retry logic)
+- Production hardening (rate limiting, retry logic enhancements)
 - End-to-end testing with diverse tickers
 - Performance optimization (cold starts, caching)
 - Beta preparation (onboarding package, user management, feedback system)
 - Beta rollout (3 cohorts: Nov 20, Nov 24, Nov 27 targets)
+
+**Completed** (v1.0-alpha):
+- ✅ Core API endpoints with FMP + FRED integration
+- ✅ Public API access with CORS support
+- ✅ Optional authentication system
+- ✅ Extended timeouts for long-running operations
+- ✅ Health check endpoint for monitoring
+- ✅ Comprehensive documentation and testing tools
 
 ---
 
@@ -30,9 +38,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Why FMP**: Consolidated API (FMP + FRED) replaced fragmented v0.x providers
 
 ### Added
+- **Public API Access & Security**:
+  - CORS support for cross-origin requests (all origins allowed)
+  - OPTIONS method handling for preflight requests
+  - Optional API key authentication via `X-API-Key` header or `Authorization: Bearer` token
+  - `/api/health` (115 LOC): Public health check endpoint for monitoring
+  - Flexible security model: public access in dev, authenticated access in production
+  - Extended timeouts: 300s for analysis, 60s for webhooks, 10s for health checks
+  - Comprehensive API documentation ([API.md](API.md), 350+ LOC)
+  - Deployment guide ([DEPLOYMENT.md](DEPLOYMENT.md), 300+ LOC)
+  - Testing script ([scripts/test-api.sh](scripts/test-api.sh), 150+ LOC)
 - **API Endpoints**:
-  - `/api/analyze` (390 LOC): Stock analysis endpoint with FMP + FRED integration
-  - `/api/webhook` (180 LOC): Archive endpoint for "Send to History" automation
+  - `/api/analyze` (410 LOC): Stock analysis endpoint with FMP + FRED integration
+  - `/api/webhook` (190 LOC): Archive endpoint for "Send to History" automation
+  - `/api/health` (115 LOC): Health check and API information endpoint
 - **Modular Architecture**:
   - API fetching logic extracted to separate functions
   - Score calculation refactored to pure functions
@@ -41,9 +60,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Deployment & DevOps**:
   - Production deployment on Vercel
   - Public API endpoints with CORS enabled
+  - Optional API key authentication for production security
   - Environment variable configuration for secrets
+  - Authentication middleware ([lib/auth.ts](lib/auth.ts), 70 LOC)
+  - Vercel configuration with custom timeouts ([vercel.json](vercel.json))
   - Local test scripts (240 LOC)
-  - Comprehensive documentation (SETUP.md, testing guides - 750 LOC)
+  - Comprehensive documentation (SETUP.md, API.md, DEPLOYMENT.md - 1,400+ LOC)
 
 ### Testing & Validation
 - End-to-end workflow tested: ticker input → analysis → archive
@@ -53,17 +75,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Technical Specifications
 - **Stack**: Vercel serverless (TypeScript/Node.js) + FMP API ($22-29/mo) + FRED API (free) + Notion API
-- **Performance**: 3-5 second analysis, 60-second function timeout
-- **Codebase**: ~4,000 lines TypeScript, ~2,500 lines documentation, 17 files total
+- **Performance**: 3-5 second analysis, extended timeouts (300s analyze, 60s webhook, 10s health)
+- **Codebase**: ~4,500 lines TypeScript, ~3,400 lines documentation, 24 files total
 - **Cost**: $22-29/month (FMP API + Vercel hosting)
+- **Security**: Optional API key authentication, CORS enabled, webhook signature verification
 
 ### Data Flow (v1.0 Architecture)
+**Internal Workflow (Notion-triggered):**
 1. User sets "Request Analysis" = true in Stock Analyses database
 2. Notion automation → POST to `/api/webhook` with ticker + page data
 3. Vercel function fetches technical/fundamental data (FMP) + macro indicators (FRED)
 4. Scores calculated (Composite + Pattern) and written back to Notion
 5. Notion AI generates 7-section analysis narrative
 6. User clicks "Send to History" → archive to Stock History database
+
+**External API Access (Public endpoints):**
+1. Client checks API status: GET `/api/health`
+2. Client triggers analysis: POST `/api/analyze` with ticker (optional: API key for auth)
+3. Response includes all scores, data quality, and performance metrics
+4. Results automatically synced to Notion databases
 
 ### Migration Notes
 - **From**: Python/Colab + Polygon/Alpha Vantage/FRED APIs (manual execution)

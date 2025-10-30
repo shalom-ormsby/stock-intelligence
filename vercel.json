@@ -1,6 +1,15 @@
 {
   "version": 2,
   "functions": {
+    "api/analyze.ts": {
+      "maxDuration": 300
+    },
+    "api/webhook.ts": {
+      "maxDuration": 60
+    },
+    "api/health.ts": {
+      "maxDuration": 10
+    },
     "api/**/*.ts": {
       "maxDuration": 30
     }
@@ -13,7 +22,8 @@
       "headers": [
         { "key": "Access-Control-Allow-Origin", "value": "*" },
         { "key": "Access-Control-Allow-Methods", "value": "GET,POST,OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type" }
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization, X-API-Key" },
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
       ]
     }
   ]
