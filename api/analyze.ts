@@ -21,10 +21,12 @@ import { requireAuth } from '../lib/auth';
 import { validateStockData, validateTicker } from '../lib/validators';
 import { createTimer, logAnalysisStart, logAnalysisComplete, logAnalysisFailed } from '../lib/logger';
 import { formatErrorResponse, formatErrorForNotion } from '../lib/utils';
-import { getErrorCode, getStatusCode } from '../lib/errors';
+import { getErrorCode, getStatusCode, RateLimitError } from '../lib/errors';
+import { RateLimiter, extractUserId, getSecondsUntilMidnightUTC } from '../lib/rate-limiter';
 
 interface AnalyzeRequest {
   ticker: string;
+  userId?: string; // User ID for rate limiting (required for rate limiting)
   usePollingWorkflow?: boolean; // Default: true (v0.3.0 workflow)
   timeout?: number; // Polling timeout in seconds (default: 600 = 10 minutes)
   pollInterval?: number; // Poll interval in seconds (default: 10)
@@ -61,6 +63,12 @@ interface AnalyzeResponse {
     archived: boolean;
     status: string;
   };
+  rateLimit?: {
+    remaining: number;
+    total: number;
+    resetAt: string;
+    bypassed?: boolean;
+  };
   error?: string;
   details?: string;
 }
@@ -96,6 +104,7 @@ export default async function handler(
   const timer = createTimer('Stock Analysis');
   let ticker: string | undefined;
   let analysesPageId: string | null = null;
+  let rateLimitResult: any = null;
 
   try {
     // Parse request body
@@ -104,11 +113,32 @@ export default async function handler(
 
     const {
       ticker: rawTicker,
+      userId,
       usePollingWorkflow = true,
       timeout = 600,
       pollInterval = 10,
       skipPolling = false,
     } = body;
+
+    // Extract user ID for rate limiting
+    const extractedUserId = userId || extractUserId(req);
+
+    if (!extractedUserId) {
+      res.status(400).json({
+        success: false,
+        error: 'User ID required',
+        details: 'User ID is required for rate limiting. Include userId in request body or X-User-ID header.',
+      });
+      return;
+    }
+
+    // Check rate limit BEFORE processing analysis
+    const rateLimiter = new RateLimiter();
+    rateLimitResult = await rateLimiter.checkAndIncrement(extractedUserId);
+
+    if (!rateLimitResult.allowed) {
+      throw new RateLimitError(rateLimitResult.resetAt);
+    }
 
     // Validate ticker with custom validator
     if (!rawTicker || typeof rawTicker !== 'string') {
@@ -402,7 +432,22 @@ export default async function handler(
         archived,
         status: workflowStatus,
       },
+      rateLimit: rateLimitResult
+        ? {
+            remaining: rateLimitResult.remaining,
+            total: rateLimitResult.total,
+            resetAt: rateLimitResult.resetAt.toISOString(),
+            bypassed: rateLimitResult.bypassed,
+          }
+        : undefined,
     };
+
+    // Set rate limit headers
+    if (rateLimitResult) {
+      res.setHeader('X-RateLimit-Remaining', rateLimitResult.remaining.toString());
+      res.setHeader('X-RateLimit-Total', rateLimitResult.total.toString());
+      res.setHeader('X-RateLimit-Reset', rateLimitResult.resetAt.toISOString());
+    }
 
     res.status(200).json(response);
   } catch (error) {
@@ -415,6 +460,24 @@ export default async function handler(
     const errorCode = getErrorCode(error);
     if (ticker) {
       logAnalysisFailed(ticker, errorCode, { duration }, error as Error);
+    }
+
+    // Special handling for rate limit errors
+    if (error instanceof RateLimitError) {
+      const retryAfter = getSecondsUntilMidnightUTC();
+
+      res.setHeader('Retry-After', retryAfter.toString());
+      res.setHeader('X-RateLimit-Remaining', '0');
+      res.setHeader('X-RateLimit-Reset', error.resetAt.toISOString());
+
+      res.status(429).json({
+        success: false,
+        error: error.userMessage,
+        code: error.code,
+        resetAt: error.resetAt.toISOString(),
+        retryAfter,
+      });
+      return;
     }
 
     // Write error to Notion if we have a page ID

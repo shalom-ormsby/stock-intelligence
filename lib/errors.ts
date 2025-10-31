@@ -13,6 +13,8 @@
  *   - NotionAPIError
  *   - ValidationError
  *   - InsufficientDataError
+ *   - RateLimitError (user-level rate limiting)
+ *   - APIResponseError
  */
 
 /**
@@ -174,6 +176,47 @@ export class InsufficientDataError extends StockIntelligenceError {
       `Cannot complete analysis for ${ticker}. Critical data is missing: ${fieldList}. This may be a temporary API issue.`,
       422
     );
+  }
+}
+
+/**
+ * Rate Limit Error (User-Level)
+ *
+ * Thrown when user exceeds their daily analysis quota.
+ * Different from APIRateLimitError - this is for our application's user-level limits.
+ */
+export class RateLimitError extends StockIntelligenceError {
+  public readonly resetAt: Date;
+
+  constructor(resetAt: Date, _remaining: number = 0) {
+    const resetTime = resetAt.toLocaleString('en-US', {
+      timeZone: 'America/Los_Angeles',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+
+    super(
+      `User rate limit exceeded - limit will reset at ${resetTime} PT`,
+      'USER_RATE_LIMIT_EXCEEDED',
+      `Daily analysis limit reached. Your limit will reset at ${resetTime} PT. ` +
+        `Upgrade to Pro for 50 analyses per day or enter your bypass code in Settings.`,
+      429
+    );
+
+    this.resetAt = resetAt;
+  }
+
+  toJSON() {
+    return {
+      name: this.name,
+      code: this.code,
+      message: this.userMessage,
+      statusCode: this.statusCode,
+      resetAt: this.resetAt.toISOString(),
+    };
   }
 }
 
