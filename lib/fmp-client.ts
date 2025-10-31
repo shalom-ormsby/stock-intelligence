@@ -16,6 +16,7 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import { DataNotFoundError, APITimeoutError, APIResponseError } from './errors';
 import { createTimer, warn, logAPICall } from './logger';
+import { withRetry } from './utils';
 
 interface FMPConfig {
   apiKey: string;
@@ -165,7 +166,10 @@ export class FMPClient {
     const timer = createTimer('FMP getQuote', { symbol });
 
     try {
-      const response = await this.client.get<StockQuote[]>(`/quote/${symbol}`);
+      const response = await withRetry(
+        async () => await this.client.get<StockQuote[]>(`/quote/${symbol}`),
+        `FMP getQuote(${symbol})`
+      );
 
       if (!response.data || response.data.length === 0) {
         throw new DataNotFoundError(symbol, 'quote data');
@@ -281,7 +285,10 @@ export class FMPClient {
     const timer = createTimer('FMP getCompanyProfile', { symbol });
 
     try {
-      const response = await this.client.get<CompanyProfile[]>(`/profile/${symbol}`);
+      const response = await withRetry(
+        async () => await this.client.get<CompanyProfile[]>(`/profile/${symbol}`),
+        `FMP getCompanyProfile(${symbol})`
+      );
 
       if (!response.data || response.data.length === 0) {
         throw new DataNotFoundError(symbol, 'company profile');

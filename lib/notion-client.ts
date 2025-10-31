@@ -14,6 +14,7 @@ import {
   PageObjectResponse,
 } from '@notionhq/client/build/src/api-endpoints';
 import { ScoreResults } from './scoring';
+import { withRetry } from './utils';
 
 interface NotionConfig {
   apiKey: string;
@@ -198,18 +199,28 @@ export class NotionClient {
       }
 
       if (existingPageId) {
-        // Update existing page
-        const response = await this.client.pages.update({
-          page_id: existingPageId,
-          properties,
-        });
+        // Update existing page with retry
+        const response = await withRetry(
+          async () =>
+            await this.client.pages.update({
+              page_id: existingPageId,
+              properties,
+            }),
+          `Notion updatePage(${ticker})`,
+          { maxAttempts: 2 } // Fewer retries for writes
+        );
         return response.id;
       } else {
-        // Create new page
-        const response = await this.client.pages.create({
-          parent: { database_id: this.stockAnalysesDbId },
-          properties,
-        });
+        // Create new page with retry
+        const response = await withRetry(
+          async () =>
+            await this.client.pages.create({
+              parent: { database_id: this.stockAnalysesDbId },
+              properties,
+            }),
+          `Notion createPage(${ticker})`,
+          { maxAttempts: 2 } // Fewer retries for writes
+        );
         return response.id;
       }
     } catch (error) {
@@ -245,10 +256,15 @@ export class NotionClient {
       properties['Content Status'] = { select: { name: 'New' } };
       console.log('[Notion] Setting Content Status: New (history record)');
 
-      const response = await this.client.pages.create({
-        parent: { database_id: this.stockHistoryDbId },
-        properties,
-      });
+      const response = await withRetry(
+        async () =>
+          await this.client.pages.create({
+            parent: { database_id: this.stockHistoryDbId },
+            properties,
+          }),
+        `Notion createHistory(${ticker})`,
+        { maxAttempts: 2 } // Fewer retries for writes
+      );
 
       return response.id;
     } catch (error) {
@@ -830,25 +846,30 @@ export class NotionClient {
         throw new Error('Invalid page ID or URL');
       }
 
-      await this.client.pages.update({
-        page_id: id,
-        properties: {
-          Notes: {
-            rich_text: [
-              {
-                text: {
-                  content: errorMessage.substring(0, 2000), // Notion limit
+      await withRetry(
+        async () =>
+          await this.client.pages.update({
+            page_id: id,
+            properties: {
+              Notes: {
+                rich_text: [
+                  {
+                    text: {
+                      content: errorMessage.substring(0, 2000), // Notion limit
+                    },
+                  },
+                ],
+              },
+              'Content Status': {
+                select: {
+                  name: 'Error',
                 },
               },
-            ],
-          },
-          'Content Status': {
-            select: {
-              name: 'Error',
             },
-          },
-        },
-      });
+          }),
+        `Notion writeError(${id.substring(0, 8)})`,
+        { maxAttempts: 2 } // Fewer retries for writes
+      );
 
       console.log(`✅ Error written to Notion page ${id}`);
     } catch (error) {

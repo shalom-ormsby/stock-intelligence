@@ -111,126 +111,6 @@ export async function fetchWithTimeout<T = any>(
 }
 
 /**
- * Retry a function with exponential backoff
- *
- * @param fn - Function to retry
- * @param maxRetries - Maximum number of retries
- * @param initialDelay - Initial delay in milliseconds
- * @param maxDelay - Maximum delay in milliseconds
- * @returns Function result
- *
- * @example
- * const data = await withRetry(
- *   () => fetchData(),
- *   3,
- *   1000,
- *   5000
- * );
- */
-export async function withRetry<T>(
-  fn: () => Promise<T>,
-  maxRetries: number = 3,
-  initialDelay: number = 1000,
-  maxDelay: number = 10000
-): Promise<T> {
-  let lastError: Error;
-  let delay = initialDelay;
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      lastError = error as Error;
-
-      if (attempt < maxRetries) {
-        // Wait before retrying
-        await sleep(delay);
-
-        // Exponential backoff with max delay
-        delay = Math.min(delay * 2, maxDelay);
-      }
-    }
-  }
-
-  throw lastError!;
-}
-
-/**
- * Sleep for specified milliseconds
- *
- * @param ms - Milliseconds to sleep
- */
-export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * Safe JSON parse
- *
- * Returns parsed value or fallback if parse fails
- */
-export function safeJSONParse<T = any>(
-  json: string,
-  fallback: T
-): T {
-  try {
-    return JSON.parse(json) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-/**
- * Format error for API response
- */
-export function formatErrorResponse(error: unknown, ticker?: string): {
-  success: false;
-  error: {
-    code: string;
-    message: string;
-    ticker?: string;
-    timestamp: string;
-  };
-} {
-  const { getErrorCode, getUserMessage } = require('./errors');
-
-  return {
-    success: false,
-    error: {
-      code: getErrorCode(error),
-      message: getUserMessage(error),
-      ...(ticker && { ticker }),
-      timestamp: new Date().toISOString(),
-    },
-  };
-}
-
-/**
- * Format error for Notion Notes property
- *
- * Creates a formatted markdown error message for display in Notion
- */
-export function formatErrorForNotion(error: unknown, ticker: string): string {
-  const { getErrorCode, getUserMessage } = require('./errors');
-
-  const timestamp = new Date().toLocaleString('en-US', {
-    timeZone: 'America/Los_Angeles',
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
-
-  const userMessage = getUserMessage(error);
-  const errorCode = getErrorCode(error);
-
-  return `⚠️ **Analysis Failed** (${timestamp})
-
-${userMessage}
-
-*Error Code: ${errorCode}*
-*Ticker: ${ticker}*`;
-}
-
-/**
  * Retry options for withRetry function
  */
 export interface RetryOptions {
@@ -361,9 +241,10 @@ export async function withRetry<T>(
       }
 
       // Special handling for rate limits (HTTP 429)
-      if (error instanceof NotionAPIError && error.statusCode === 429) {
+      const notionError = error as any;
+      if (notionError instanceof NotionAPIError && notionError.statusCode === 429) {
         // Use Retry-After header if available, otherwise default to 5 seconds
-        const retryAfter = (error as any).retryAfter || 5000;
+        const retryAfter = notionError.retryAfter || 5000;
 
         log(LogLevel.WARN, `Rate limited in ${operationName}, waiting`, {
           attempt,
@@ -394,6 +275,81 @@ export async function withRetry<T>(
   }
 
   throw lastError!;
+}
+
+/**
+ * Sleep for specified milliseconds
+ *
+ * @param ms - Milliseconds to sleep
+ */
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Safe JSON parse
+ *
+ * Returns parsed value or fallback if parse fails
+ */
+export function safeJSONParse<T = any>(
+  json: string,
+  fallback: T
+): T {
+  try {
+    return JSON.parse(json) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * Format error for API response
+ */
+export function formatErrorResponse(error: unknown, ticker?: string): {
+  success: false;
+  error: {
+    code: string;
+    message: string;
+    ticker?: string;
+    timestamp: string;
+  };
+} {
+  const { getErrorCode, getUserMessage } = require('./errors');
+
+  return {
+    success: false,
+    error: {
+      code: getErrorCode(error),
+      message: getUserMessage(error),
+      ...(ticker && { ticker }),
+      timestamp: new Date().toISOString(),
+    },
+  };
+}
+
+/**
+ * Format error for Notion Notes property
+ *
+ * Creates a formatted markdown error message for display in Notion
+ */
+export function formatErrorForNotion(error: unknown, ticker: string): string {
+  const { getErrorCode, getUserMessage } = require('./errors');
+
+  const timestamp = new Date().toLocaleString('en-US', {
+    timeZone: 'America/Los_Angeles',
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+
+  const userMessage = getUserMessage(error);
+  const errorCode = getErrorCode(error);
+
+  return `⚠️ **Analysis Failed** (${timestamp})
+
+${userMessage}
+
+*Error Code: ${errorCode}*
+*Ticker: ${ticker}*`;
 }
 
 /**

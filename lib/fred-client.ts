@@ -15,6 +15,7 @@
 
 import axios, { AxiosInstance } from 'axios';
 import { createTimer, warn, logAPICall } from './logger';
+import { withRetry } from './utils';
 
 interface FREDConfig {
   apiKey: string;
@@ -105,15 +106,16 @@ export class FREDClient {
     seriesId: string,
     limit: number = 1
   ): Promise<FREDObservation[]> {
-    const response = await this.client.get<FREDSeriesData>(
-      '/series/observations',
-      {
-        params: {
-          series_id: seriesId,
-          sort_order: 'desc', // Get latest first
-          limit,
-        },
-      }
+    const response = await withRetry(
+      async () =>
+        await this.client.get<FREDSeriesData>('/series/observations', {
+          params: {
+            series_id: seriesId,
+            sort_order: 'desc', // Get latest first
+            limit,
+          },
+        }),
+      `FRED getObservations(${seriesId})`
     );
 
     return response.data.observations || [];
