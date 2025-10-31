@@ -5,10 +5,14 @@
  * The bypass code is stored in the RATE_LIMIT_BYPASS_CODE environment variable.
  *
  * Session-based approach:
- * 1. User enters bypass code once (in Settings page UI)
+ * 1. User enters bypass code once (in Settings page UI or Notion webhook)
  * 2. Backend validates code and stores session in Redis
  * 3. Session lasts until midnight UTC (automatic expiry)
  * 4. All subsequent analyses automatically bypass rate limits
+ *
+ * Supports TWO input methods:
+ * - JSON body (POST): {"userId": "...", "code": "..."}
+ * - URL parameters (GET/POST): /api/bypass?userId=...&code=...
  *
  * Security:
  * - Code validated server-side only
@@ -56,21 +60,38 @@ export default async function handler(
     return;
   }
 
-  // Only accept POST requests
-  if (req.method !== 'POST') {
+  // Accept both GET and POST requests
+  if (req.method !== 'POST' && req.method !== 'GET') {
     res.status(405).json({
       success: false,
-      error: 'Method not allowed',
+      error: 'Method not allowed. Use GET or POST.',
     });
     return;
   }
 
   try {
-    // Parse request body
-    const body: BypassRequest =
-      typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    // Extract userId and code from URL query parameters OR JSON body
+    // Priority: Query params first (for Notion webhooks), then JSON body (for web UI)
+    let userId: string | undefined;
+    let code: string | undefined;
 
-    const { userId, code } = body;
+    // Method 1: Try URL query parameters (GET /api/bypass?userId=...&code=...)
+    if (req.query?.userId && req.query?.code) {
+      userId = Array.isArray(req.query.userId) ? req.query.userId[0] : req.query.userId;
+      code = Array.isArray(req.query.code) ? req.query.code[0] : req.query.code;
+
+      log(LogLevel.INFO, 'Bypass activation via URL parameters', { userId });
+    }
+    // Method 2: Fallback to JSON body (POST with {"userId": "...", "code": "..."})
+    else if (req.body) {
+      const body: BypassRequest =
+        typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+
+      userId = body.userId;
+      code = body.code;
+
+      log(LogLevel.INFO, 'Bypass activation via JSON body', { userId });
+    }
 
     // Validate required fields
     if (!userId || !code) {
