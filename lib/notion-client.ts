@@ -103,7 +103,17 @@ export class NotionClient {
 
   /**
    * Sync analysis data to Notion Stock Analyses database
-   * Uses v0.3.0 polling workflow by default
+   *
+   * @param data - Analysis data containing ticker, scores, technical/fundamental metrics
+   * @param usePollingWorkflow - If true, sets Content Status to "Pending Analysis" and waits for AI completion.
+   *                             If false, sets to "New"/"Updated" and creates history immediately.
+   * @returns Object containing page IDs for Stock Analyses and Stock History (if created)
+   *
+   * @example
+   * ```typescript
+   * const result = await notionClient.syncToNotion(analysisData, true);
+   * console.log('Created page:', result.analysesPageId);
+   * ```
    */
   async syncToNotion(
     data: AnalysisData,
@@ -497,7 +507,29 @@ export class NotionClient {
 
   /**
    * Poll Stock Analyses page until user clicks "Send to History" button
-   * v0.3.0 polling workflow
+   *
+   * Continuously checks a Stock Analyses page for Content Status changes.
+   * Returns when status becomes "Send to History" (indicating AI analysis is complete)
+   * or when timeout is reached.
+   *
+   * @param pageId - Notion page ID to poll
+   * @param timeout - Maximum time to wait in seconds (default: 600 = 10 minutes)
+   * @param pollInterval - How often to check status in seconds (default: 10)
+   * @param skipPolling - If true, skip polling and return immediately (default: false)
+   * @returns True if "Send to History" status detected, false if timeout or skipped
+   *
+   * @example
+   * ```typescript
+   * const completed = await notionClient.waitForAnalysisCompletion(pageId, 600, 10);
+   * if (completed) {
+   *   await notionClient.archiveToHistory(pageId);
+   * }
+   * ```
+   *
+   * @remarks
+   * - Part of v0.3.0 polling workflow
+   * - Sets Content Status to "Analysis Incomplete" on timeout
+   * - Designed for use after writing metrics but before AI analysis completes
    */
   async waitForAnalysisCompletion(
     pageId: string,
@@ -577,7 +609,28 @@ export class NotionClient {
 
   /**
    * Archive completed analysis to Stock History database
-   * Copies all properties and content blocks from Stock Analyses
+   *
+   * Copies all properties and content blocks from a Stock Analyses page to create
+   * a new historical record in Stock History. This is typically called after AI
+   * analysis is complete and the user has clicked "Send to History".
+   *
+   * @param pageId - Notion page ID of the Stock Analyses page to archive
+   * @returns Page ID of the newly created Stock History entry, or null if failed
+   *
+   * @example
+   * ```typescript
+   * const historyId = await notionClient.archiveToHistory(analysesPageId);
+   * if (historyId) {
+   *   console.log('Archived to history:', historyId);
+   * }
+   * ```
+   *
+   * @remarks
+   * - Creates a new page in Stock History (append-only, never updates)
+   * - Excludes Stock Analyses-specific properties (Owner, Send to History, etc.)
+   * - Sets Content Status to "Historical"
+   * - Updates original page Content Status to "Logged in History"
+   * - Copies all content blocks (except synced blocks)
    */
   async archiveToHistory(pageId: string): Promise<string | null> {
     console.log('📦 Archiving analysis to Stock History...');
@@ -711,6 +764,53 @@ export class NotionClient {
     }
 
     return this.archiveToHistory(pageId);
+  }
+
+  /**
+   * Update the Content Status property of a Notion page
+   *
+   * @param pageId - Notion page ID or URL
+   * @param status - New status value. For Stock Analyses: "Pending Analysis" | "Send to History" | "Logged in History" | "Analysis Incomplete" | "New" | "Updated"
+   *                 For Stock History: "New" | "Historical"
+   * @returns Promise that resolves when update is complete
+   *
+   * @example
+   * ```typescript
+   * // Mark analysis ready for review
+   * await notionClient.updateContentStatus(pageId, "Send to History");
+   *
+   * // Mark analysis completed
+   * await notionClient.updateContentStatus(pageId, "Logged in History");
+   * ```
+   */
+  async updateContentStatus(
+    pageId: string,
+    status: ContentStatus
+  ): Promise<void> {
+    try {
+      // Extract page ID from URL if full URL provided
+      const id = pageId.includes('notion.so')
+        ? pageId.split('/').pop()?.split('?')[0].replace(/-/g, '')
+        : pageId;
+
+      if (!id) {
+        throw new Error('Invalid page ID or URL');
+      }
+
+      await this.client.pages.update({
+        page_id: id,
+        properties: {
+          'Content Status': {
+            select: { name: status },
+          },
+        },
+      });
+
+      console.log(`✅ Updated Content Status to "${status}"`);
+    } catch (error) {
+      console.error('❌ Error updating Content Status:', error);
+      throw error;
+    }
   }
 
   /**

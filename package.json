@@ -8,6 +8,7 @@
     "build": "tsc",
     "test": "jest",
     "test:analyze": "ts-node scripts/test-analyze.ts",
+    "test:notion-write": "ts-node scripts/test-notion-write.ts",
     "poll": "ts-node scripts/poll-notion.ts",
     "lint": "eslint . --ext .ts",
     "type-check": "tsc --noEmit"
