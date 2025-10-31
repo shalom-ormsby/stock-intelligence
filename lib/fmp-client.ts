@@ -4,10 +4,19 @@
  * Handles all API calls to FMP for technical and fundamental stock data.
  * Replaces Polygon.io + Alpha Vantage from v0.x architecture.
  *
+ * Features:
+ * - 30-second timeout protection
+ * - Structured logging for all operations
+ * - Graceful handling of missing data
+ * - Custom error types for better debugging
+ *
  * Documentation: https://site.financialmodelingprep.com/developer/docs
  */
 
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, AxiosError } from 'axios';
+import { DataNotFoundError, APITimeoutError, APIResponseError } from './errors';
+import { createTimer, warn, logAPICall } from './logger';
+import { withTimeout } from './utils';
 
 interface FMPConfig {
   apiKey: string;
@@ -101,13 +110,14 @@ interface FinancialRatios {
 export class FMPClient {
   private client: AxiosInstance;
   private apiKey: string;
+  private readonly TIMEOUT_MS = 30000; // 30 seconds for FMP API
 
   constructor(config: FMPConfig) {
     this.apiKey = config.apiKey;
 
     this.client = axios.create({
       baseURL: config.baseUrl || 'https://financialmodelingprep.com/api/v3',
-      timeout: config.timeout || 10000,
+      timeout: config.timeout || this.TIMEOUT_MS,
       params: {
         apikey: this.apiKey,
       },
@@ -115,16 +125,62 @@ export class FMPClient {
   }
 
   /**
-   * Get real-time stock quote
+   * Handle axios errors and convert to custom error types
    */
-  async getQuote(symbol: string): Promise<StockQuote> {
-    const response = await this.client.get<StockQuote[]>(`/quote/${symbol}`);
+  private handleError(error: unknown, operation: string, symbol?: string): never {
+    if (axios.isAxiosError(error)) {
+      const axiosError = error as AxiosError;
 
-    if (!response.data || response.data.length === 0) {
-      throw new Error(`No quote data found for symbol: ${symbol}`);
+      // Timeout error
+      if (axiosError.code === 'ECONNABORTED' || axiosError.code === 'ETIMEDOUT') {
+        throw new APITimeoutError('Financial Modeling Prep', this.TIMEOUT_MS);
+      }
+
+      // HTTP error response
+      if (axiosError.response) {
+        throw new APIResponseError(
+          'Financial Modeling Prep',
+          axiosError.response.status,
+          axiosError.message
+        );
+      }
+
+      // Network error
+      if (axiosError.request) {
+        throw new Error(`FMP network error during ${operation}: ${axiosError.message}`);
+      }
     }
 
-    return response.data[0];
+    // Unknown error
+    throw error;
+  }
+
+  /**
+   * Get real-time stock quote
+   *
+   * @throws DataNotFoundError if quote not found
+   * @throws APITimeoutError if request times out
+   * @throws APIResponseError if API returns error
+   */
+  async getQuote(symbol: string): Promise<StockQuote> {
+    const timer = createTimer('FMP getQuote', { symbol });
+
+    try {
+      const response = await this.client.get<StockQuote[]>(`/quote/${symbol}`);
+
+      if (!response.data || response.data.length === 0) {
+        throw new DataNotFoundError(symbol, 'quote data');
+      }
+
+      const duration = timer.end(true);
+      logAPICall('FMP', 'getQuote', duration, true, { symbol });
+
+      return response.data[0];
+    } catch (error) {
+      timer.endWithError(error as Error);
+      logAPICall('FMP', 'getQuote', 0, false, { symbol });
+      this.handleError(error, 'getQuote', symbol);
+    }
   }
 
   /**
