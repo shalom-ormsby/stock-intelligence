@@ -4,10 +4,18 @@
  * Handles macroeconomic data fetching from FRED API.
  * Used for macro scoring component in stock analysis.
  *
+ * Features:
+ * - 20-second timeout protection
+ * - Structured logging for all operations
+ * - Graceful handling of missing data (returns null)
+ * - Custom error types for better debugging
+ *
  * Documentation: https://fred.stlouisfed.org/docs/api/
  */
 
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, AxiosError } from 'axios';
+import { APITimeoutError, APIResponseError } from './errors';
+import { createTimer, warn, logAPICall } from './logger';
 
 interface FREDConfig {
   apiKey: string;
@@ -61,18 +69,50 @@ export const FRED_SERIES = {
 export class FREDClient {
   private client: AxiosInstance;
   private apiKey: string;
+  private readonly TIMEOUT_MS = 20000; // 20 seconds for FRED API
 
   constructor(config: FREDConfig) {
     this.apiKey = config.apiKey;
 
     this.client = axios.create({
       baseURL: config.baseUrl || 'https://api.stlouisfed.org/fred',
-      timeout: config.timeout || 10000,
+      timeout: config.timeout || this.TIMEOUT_MS,
       params: {
         api_key: this.apiKey,
         file_type: 'json',
       },
     });
+  }
+
+  /**
+   * Handle axios errors and convert to custom error types
+   */
+  private handleError(error: unknown, operation: string, seriesId?: string): never {
+    if (axios.isAxiosError(error)) {
+      const axiosError = error as AxiosError;
+
+      // Timeout error
+      if (axiosError.code === 'ECONNABORTED' || axiosError.code === 'ETIMEDOUT') {
+        throw new APITimeoutError('FRED API', this.TIMEOUT_MS);
+      }
+
+      // HTTP error response
+      if (axiosError.response) {
+        throw new APIResponseError(
+          'FRED API',
+          axiosError.response.status,
+          axiosError.message
+        );
+      }
+
+      // Network error
+      if (axiosError.request) {
+        throw new Error(`FRED network error during ${operation}: ${axiosError.message}`);
+      }
+    }
+
+    // Unknown error
+    throw error;
   }
 
   /**
@@ -207,33 +247,66 @@ export class FREDClient {
 
   /**
    * Helper: Get all macro data needed for stock analysis
-   * Optimized to minimize API calls (6 calls total)
+   *
+   * Optimized to minimize API calls (6 calls total).
+   * Uses graceful degradation - returns null for unavailable data.
+   * All fields are optional as macro data may not always be available.
    */
   async getMacroData() {
-    const [
-      fedFundsRate,
-      unemploymentRate,
-      yieldCurveSpread,
-      vix,
-      consumerSentiment,
-      gdp,
-    ] = await Promise.all([
-      this.getFedFundsRate(),
-      this.getUnemploymentRate(),
-      this.getYieldCurveSpread(),
-      this.getVIX(),
-      this.getConsumerSentiment(),
-      this.getGDP(),
-    ]);
+    const timer = createTimer('FRED getMacroData (batch)');
 
-    return {
-      fedFundsRate,
-      unemploymentRate,
-      yieldCurveSpread,
-      vix,
-      consumerSentiment,
-      gdp,
-    };
+    try {
+      // Fetch all data with Promise.allSettled for graceful degradation
+      const results = await Promise.allSettled([
+        this.getFedFundsRate(),
+        this.getUnemploymentRate(),
+        this.getYieldCurveSpread(),
+        this.getVIX(),
+        this.getConsumerSentiment(),
+        this.getGDP(),
+      ]);
+
+      // Extract results (all gracefully return null if unavailable)
+      const fedFundsRate = results[0].status === 'fulfilled' ? results[0].value : null;
+      const unemploymentRate = results[1].status === 'fulfilled' ? results[1].value : null;
+      const yieldCurveSpread = results[2].status === 'fulfilled' ? results[2].value : null;
+      const vix = results[3].status === 'fulfilled' ? results[3].value : null;
+      const consumerSentiment = results[4].status === 'fulfilled' ? results[4].value : null;
+      const gdp = results[5].status === 'fulfilled' ? results[5].value : null;
+
+      // Log warnings for missing data
+      const missingData: string[] = [];
+      if (results[0].status === 'rejected') missingData.push('Fed Funds Rate');
+      if (results[1].status === 'rejected') missingData.push('Unemployment');
+      if (results[2].status === 'rejected') missingData.push('Yield Curve');
+      if (results[3].status === 'rejected') missingData.push('VIX');
+      if (results[4].status === 'rejected') missingData.push('Consumer Sentiment');
+      if (results[5].status === 'rejected') missingData.push('GDP');
+
+      if (missingData.length > 0) {
+        warn('Some FRED data unavailable, using graceful degradation', {
+          missingData,
+        });
+      }
+
+      const duration = timer.end(true);
+      logAPICall('FRED', 'getMacroData', duration, true, {
+        missingDataCount: missingData.length,
+      });
+
+      return {
+        fedFundsRate,
+        unemploymentRate,
+        yieldCurveSpread,
+        vix,
+        consumerSentiment,
+        gdp,
+      };
+    } catch (error) {
+      timer.endWithError(error as Error);
+      logAPICall('FRED', 'getMacroData', 0, false);
+      throw error;
+    }
   }
 
   /**

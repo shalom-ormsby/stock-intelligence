@@ -274,15 +274,29 @@ export class FMPClient {
 
   /**
    * Get company profile and fundamental info
+   *
+   * @throws DataNotFoundError if profile not found
+   * @throws APITimeoutError if request times out
    */
   async getCompanyProfile(symbol: string): Promise<CompanyProfile> {
-    const response = await this.client.get<CompanyProfile[]>(`/profile/${symbol}`);
+    const timer = createTimer('FMP getCompanyProfile', { symbol });
 
-    if (!response.data || response.data.length === 0) {
-      throw new Error(`No profile data found for symbol: ${symbol}`);
+    try {
+      const response = await this.client.get<CompanyProfile[]>(`/profile/${symbol}`);
+
+      if (!response.data || response.data.length === 0) {
+        throw new DataNotFoundError(symbol, 'company profile');
+      }
+
+      const duration = timer.end(true);
+      logAPICall('FMP', 'getCompanyProfile', duration, true, { symbol });
+
+      return response.data[0];
+    } catch (error) {
+      timer.endWithError(error as Error);
+      logAPICall('FMP', 'getCompanyProfile', 0, false, { symbol });
+      this.handleError(error, 'getCompanyProfile', symbol);
     }
-
-    return response.data[0];
   }
 
   /**
@@ -353,52 +367,111 @@ export class FMPClient {
 
   /**
    * Helper: Get all data needed for stock analysis in one batch
-   * Optimized to minimize API calls
+   *
+   * Optimized to minimize API calls. Uses graceful degradation:
+   * - Critical fields (quote, profile) will throw if missing
+   * - Optional fields (technical indicators, fundamentals) return empty arrays if unavailable
+   *
+   * @throws DataNotFoundError if critical data (quote or profile) is missing
+   * @throws APITimeoutError if request times out
    */
   async getAnalysisData(symbol: string) {
-    const [
-      quote,
-      profile,
-      historical30d,
-      rsi,
-      sma50,
-      sma200,
-      ema12,
-      ema26,
-      incomeStatements,
-      balanceSheets,
-      ratios,
-    ] = await Promise.all([
-      this.getQuote(symbol),
-      this.getCompanyProfile(symbol),
-      this.getHistoricalPrices(symbol), // Last 30 days by default
-      this.getRSI(symbol, 14),
-      this.getSMA(symbol, 50),
-      this.getSMA(symbol, 200),
-      this.getEMA(symbol, 12),
-      this.getEMA(symbol, 26),
-      this.getIncomeStatement(symbol, 'annual', 2),
-      this.getBalanceSheet(symbol, 'annual', 2),
-      this.getFinancialRatios(symbol, 'annual', 2),
-    ]);
+    const timer = createTimer('FMP getAnalysisData (batch)', { symbol });
 
-    return {
-      quote,
-      profile,
-      historical: historical30d.slice(0, 30), // Last 30 days
-      technicalIndicators: {
-        rsi: rsi.slice(0, 1), // Latest RSI
-        sma50: sma50.slice(0, 1), // Latest SMA50
-        sma200: sma200.slice(0, 1), // Latest SMA200
-        ema12: ema12.slice(0, 1), // Latest EMA12
-        ema26: ema26.slice(0, 1), // Latest EMA26
-      },
-      fundamentals: {
-        incomeStatements,
-        balanceSheets,
-        ratios,
-      },
-    };
+    try {
+      // Fetch all data in parallel with Promise.allSettled for graceful degradation
+      const results = await Promise.allSettled([
+        this.getQuote(symbol), // 0 - Critical
+        this.getCompanyProfile(symbol), // 1 - Critical
+        this.getHistoricalPrices(symbol), // 2 - Optional
+        this.getRSI(symbol, 14), // 3 - Optional
+        this.getSMA(symbol, 50), // 4 - Optional
+        this.getSMA(symbol, 200), // 5 - Optional
+        this.getEMA(symbol, 12), // 6 - Optional
+        this.getEMA(symbol, 26), // 7 - Optional
+        this.getIncomeStatement(symbol, 'annual', 2), // 8 - Optional
+        this.getBalanceSheet(symbol, 'annual', 2), // 9 - Optional
+        this.getFinancialRatios(symbol, 'annual', 2), // 10 - Optional
+      ]);
+
+      // Extract critical data (must succeed)
+      if (results[0].status === 'rejected') {
+        throw results[0].reason;
+      }
+      if (results[1].status === 'rejected') {
+        throw results[1].reason;
+      }
+
+      const quote = results[0].value;
+      const profile = results[1].value;
+
+      // Extract optional data (graceful degradation)
+      const historical30d =
+        results[2].status === 'fulfilled' ? results[2].value : [];
+      const rsi =
+        results[3].status === 'fulfilled' ? results[3].value : [];
+      const sma50 =
+        results[4].status === 'fulfilled' ? results[4].value : [];
+      const sma200 =
+        results[5].status === 'fulfilled' ? results[5].value : [];
+      const ema12 =
+        results[6].status === 'fulfilled' ? results[6].value : [];
+      const ema26 =
+        results[7].status === 'fulfilled' ? results[7].value : [];
+      const incomeStatements =
+        results[8].status === 'fulfilled' ? results[8].value : [];
+      const balanceSheets =
+        results[9].status === 'fulfilled' ? results[9].value : [];
+      const ratios =
+        results[10].status === 'fulfilled' ? results[10].value : [];
+
+      // Log warnings for missing optional data
+      const missingData: string[] = [];
+      if (results[2].status === 'rejected') missingData.push('historical prices');
+      if (results[3].status === 'rejected') missingData.push('RSI');
+      if (results[4].status === 'rejected') missingData.push('SMA50');
+      if (results[5].status === 'rejected') missingData.push('SMA200');
+      if (results[6].status === 'rejected') missingData.push('EMA12');
+      if (results[7].status === 'rejected') missingData.push('EMA26');
+      if (results[8].status === 'rejected') missingData.push('income statements');
+      if (results[9].status === 'rejected') missingData.push('balance sheets');
+      if (results[10].status === 'rejected') missingData.push('financial ratios');
+
+      if (missingData.length > 0) {
+        warn('Some FMP data unavailable, using graceful degradation', {
+          symbol,
+          missingData,
+        });
+      }
+
+      const duration = timer.end(true);
+      logAPICall('FMP', 'getAnalysisData', duration, true, {
+        symbol,
+        missingDataCount: missingData.length,
+      });
+
+      return {
+        quote,
+        profile,
+        historical: historical30d.slice(0, 30), // Last 30 days
+        technicalIndicators: {
+          rsi: rsi.slice(0, 1), // Latest RSI
+          sma50: sma50.slice(0, 1), // Latest SMA50
+          sma200: sma200.slice(0, 1), // Latest SMA200
+          ema12: ema12.slice(0, 1), // Latest EMA12
+          ema26: ema26.slice(0, 1), // Latest EMA26
+        },
+        fundamentals: {
+          incomeStatements,
+          balanceSheets,
+          ratios,
+        },
+      };
+    } catch (error) {
+      timer.endWithError(error as Error);
+      logAPICall('FMP', 'getAnalysisData', 0, false, { symbol });
+      throw error; // Re-throw after logging
+    }
   }
 }
 
