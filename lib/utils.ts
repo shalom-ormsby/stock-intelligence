@@ -231,6 +231,172 @@ ${userMessage}
 }
 
 /**
+ * Retry options for withRetry function
+ */
+export interface RetryOptions {
+  maxAttempts: number;
+  initialDelayMs: number;
+  maxDelayMs: number;
+  backoffMultiplier: number;
+}
+
+const DEFAULT_RETRY_OPTIONS: RetryOptions = {
+  maxAttempts: 3,
+  initialDelayMs: 1000,
+  maxDelayMs: 8000,
+  backoffMultiplier: 2,
+};
+
+/**
+ * Determine if an error should be retried
+ *
+ * Retryable errors:
+ * - APITimeoutError - API took too long, might work next time
+ * - NotionAPIError with 429, 500, 502, 503, 504 - transient server errors
+ * - Network errors (ECONNRESET, ETIMEDOUT, ENOTFOUND)
+ *
+ * Non-retryable errors:
+ * - InvalidTickerError - bad input won't fix by retrying
+ * - DataNotFoundError - data doesn't exist
+ * - ValidationError - data validation failed
+ * - HTTP 400, 401, 403, 404 - client errors
+ */
+function isRetryableError(error: any): boolean {
+  const {
+    APITimeoutError,
+    NotionAPIError,
+    InvalidTickerError,
+    DataNotFoundError,
+    ValidationError,
+  } = require('./errors');
+
+  // Retry timeouts
+  if (error instanceof APITimeoutError) {
+    return true;
+  }
+
+  // Retry Notion API errors with specific status codes
+  if (error instanceof NotionAPIError) {
+    const retryableStatuses = [429, 500, 502, 503, 504];
+    return retryableStatuses.includes(error.statusCode);
+  }
+
+  // Retry network errors
+  if (error.code && ['ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND'].includes(error.code)) {
+    return true;
+  }
+
+  // Don't retry validation errors, invalid input, etc.
+  if (
+    error instanceof InvalidTickerError ||
+    error instanceof DataNotFoundError ||
+    error instanceof ValidationError
+  ) {
+    return false;
+  }
+
+  // Default: don't retry unknown errors
+  return false;
+}
+
+/**
+ * Execute an operation with retry logic and exponential backoff
+ *
+ * @param operation - Async function to execute
+ * @param operationName - Name of operation for logging
+ * @param options - Retry configuration options
+ * @returns Result of successful operation
+ * @throws Last error if all retries fail
+ *
+ * @example
+ * const data = await withRetry(
+ *   async () => fetchDataFromAPI(),
+ *   'FMP getQuote(AAPL)',
+ *   { maxAttempts: 3 }
+ * );
+ */
+export async function withRetry<T>(
+  operation: () => Promise<T>,
+  operationName: string,
+  options: Partial<RetryOptions> = {}
+): Promise<T> {
+  const { log, LogLevel } = require('./logger');
+  const { NotionAPIError } = require('./errors');
+
+  const opts = { ...DEFAULT_RETRY_OPTIONS, ...options };
+  let lastError: Error;
+
+  for (let attempt = 1; attempt <= opts.maxAttempts; attempt++) {
+    try {
+      const result = await operation();
+
+      // Log success if this wasn't the first attempt
+      if (attempt > 1) {
+        log(LogLevel.INFO, `${operationName} succeeded on retry`, {
+          attempt,
+          totalAttempts: opts.maxAttempts,
+        });
+      }
+
+      return result;
+    } catch (error) {
+      lastError = error as Error;
+
+      // Don't retry if non-retryable error
+      if (!isRetryableError(error)) {
+        log(LogLevel.ERROR, `Non-retryable error in ${operationName}`, {
+          attempt,
+          error: (error as Error).message,
+        });
+        throw error;
+      }
+
+      // Don't retry if this was the last attempt
+      if (attempt === opts.maxAttempts) {
+        log(LogLevel.ERROR, `Max retry attempts reached for ${operationName}`, {
+          attempts: opts.maxAttempts,
+          error: (error as Error).message,
+        });
+        throw error;
+      }
+
+      // Special handling for rate limits (HTTP 429)
+      if (error instanceof NotionAPIError && error.statusCode === 429) {
+        // Use Retry-After header if available, otherwise default to 5 seconds
+        const retryAfter = (error as any).retryAfter || 5000;
+
+        log(LogLevel.WARN, `Rate limited in ${operationName}, waiting`, {
+          attempt,
+          maxAttempts: opts.maxAttempts,
+          retryAfterMs: retryAfter,
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, retryAfter));
+        continue;
+      }
+
+      // Calculate delay with exponential backoff
+      const delay = Math.min(
+        opts.initialDelayMs * Math.pow(opts.backoffMultiplier, attempt - 1),
+        opts.maxDelayMs
+      );
+
+      log(LogLevel.WARN, `Retrying ${operationName} after error`, {
+        attempt,
+        maxAttempts: opts.maxAttempts,
+        delayMs: delay,
+        error: (error as Error).message,
+      });
+
+      // Wait before retrying
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  throw lastError!;
+}
+
+/**
  * Clamp number between min and max
  */
 export function clamp(value: number, min: number, max: number): number {
