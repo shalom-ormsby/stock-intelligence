@@ -814,6 +814,50 @@ export class NotionClient {
   }
 
   /**
+   * Write error message to page Notes property and set status to Error
+   *
+   * @param pageId - Notion page ID
+   * @param errorMessage - Error message to write (will be truncated to 2000 chars)
+   */
+  async writeErrorToPage(pageId: string, errorMessage: string): Promise<void> {
+    try {
+      // Extract page ID from URL if full URL provided
+      const id = pageId.includes('notion.so')
+        ? pageId.split('/').pop()?.split('?')[0].replace(/-/g, '')
+        : pageId;
+
+      if (!id) {
+        throw new Error('Invalid page ID or URL');
+      }
+
+      await this.client.pages.update({
+        page_id: id,
+        properties: {
+          Notes: {
+            rich_text: [
+              {
+                text: {
+                  content: errorMessage.substring(0, 2000), // Notion limit
+                },
+              },
+            ],
+          },
+          'Content Status': {
+            select: {
+              name: 'Error',
+            },
+          },
+        },
+      });
+
+      console.log(`✅ Error written to Notion page ${id}`);
+    } catch (error) {
+      console.error('❌ Failed to write error to Notion:', error);
+      // Don't throw - we don't want to fail the request just because we couldn't write to Notion
+    }
+  }
+
+  /**
    * Clean property value for copying to different database
    * Removes database-specific IDs
    */

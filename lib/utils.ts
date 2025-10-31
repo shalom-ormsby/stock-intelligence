@@ -40,7 +40,7 @@ export async function withTimeout<T>(
   });
 
   try {
-    const result = await Promise.race([promise, timeoutPromise]);
+    const result = await Promise.race([promise, timeoutPromise]) as T;
     timer.end(true);
     return result;
   } catch (error) {
@@ -104,7 +104,7 @@ export async function fetchWithTimeout<T = any>(
 
   // Parse JSON response
   try {
-    return await response.json();
+    return await response.json() as T;
   } catch (error) {
     throw new Error(`${serviceName} returned invalid JSON: ${error}`);
   }

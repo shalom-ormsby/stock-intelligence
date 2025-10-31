@@ -16,7 +16,6 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import { DataNotFoundError, APITimeoutError, APIResponseError } from './errors';
 import { createTimer, warn, logAPICall } from './logger';
-import { withTimeout } from './utils';
 
 interface FMPConfig {
   apiKey: string;
@@ -127,7 +126,7 @@ export class FMPClient {
   /**
    * Handle axios errors and convert to custom error types
    */
-  private handleError(error: unknown, operation: string, symbol?: string): never {
+  private handleError(error: unknown, operation: string, _symbol?: string): never {
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError;
 

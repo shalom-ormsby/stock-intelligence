@@ -19,6 +19,9 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
 import { createNotionClient } from '../lib/notion-client';
 import { requireAuth } from '../lib/auth';
+import { createTimer, info, error as logError } from '../lib/logger';
+import { formatErrorResponse } from '../lib/utils';
+import { getStatusCode } from '../lib/errors';
 
 interface NotionWebhookPayload {
   type?: string;
@@ -101,6 +104,8 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ): Promise<void> {
+  const timer = createTimer('Webhook Handler');
+
   console.log('='.repeat(60));
   console.log('Notion webhook received');
   console.log('='.repeat(60));
@@ -212,6 +217,14 @@ export default async function handler(
         const historyPageId = await notionClient.archiveToHistory(pageId);
 
         if (historyPageId) {
+          const duration = timer.end(true);
+
+          info('Webhook archive successful', {
+            pageId,
+            historyPageId,
+            duration,
+          });
+
           console.log(`✅ Successfully archived to history: ${historyPageId}`);
           res.status(200).json({
             success: true,
@@ -230,14 +243,17 @@ export default async function handler(
           });
           return;
         }
-      } catch (error) {
-        console.error('❌ Archive error:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        res.status(500).json({
-          success: false,
+      } catch (archiveError) {
+        const duration = timer.endWithError(archiveError as Error);
+
+        logError('Webhook archive failed', { pageId, duration }, archiveError as Error);
+
+        const errorResponse = formatErrorResponse(archiveError);
+        const statusCode = getStatusCode(archiveError);
+
+        res.status(statusCode).json({
+          ...errorResponse,
           archiveTriggered: false,
-          error: 'Archive operation failed',
-          details: errorMessage,
         });
         return;
       }
@@ -306,6 +322,16 @@ export default async function handler(
     }
 
     const analysisData = await analysisResponse.json() as any;
+
+    const duration = timer.end(true);
+
+    info('Webhook analysis trigger successful', {
+      ticker: tickerUpper,
+      pageId: analysisData.analysesPageId,
+      compositeScore: analysisData.scores?.composite,
+      duration,
+    });
+
     console.log('✅ Analysis triggered successfully');
     console.log(`   Page ID: ${analysisData.analysesPageId}`);
     console.log(`   Composite Score: ${analysisData.scores?.composite}`);
@@ -323,18 +349,19 @@ export default async function handler(
 
     res.status(200).json(response);
   } catch (error) {
+    const duration = timer.endWithError(error as Error);
+
+    logError('Webhook handler error', { duration }, error as Error);
+
     console.error('❌ Webhook handler error:', error);
 
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const errorStack = error instanceof Error ? error.stack : undefined;
+    // Format error response with proper status code
+    const errorResponse = formatErrorResponse(error);
+    const statusCode = getStatusCode(error);
 
-    const response: WebhookResponse = {
-      success: false,
+    res.status(statusCode).json({
+      ...errorResponse,
       analysisTriggered: false,
-      error: errorMessage,
-      details: errorStack,
-    };
-
-    res.status(500).json(response);
+    });
   }
 }

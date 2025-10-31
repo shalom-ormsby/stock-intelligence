@@ -13,8 +13,7 @@
  * Documentation: https://fred.stlouisfed.org/docs/api/
  */
 
-import axios, { AxiosInstance, AxiosError } from 'axios';
-import { APITimeoutError, APIResponseError } from './errors';
+import axios, { AxiosInstance } from 'axios';
 import { createTimer, warn, logAPICall } from './logger';
 
 interface FREDConfig {
@@ -82,37 +81,6 @@ export class FREDClient {
         file_type: 'json',
       },
     });
-  }
-
-  /**
-   * Handle axios errors and convert to custom error types
-   */
-  private handleError(error: unknown, operation: string, seriesId?: string): never {
-    if (axios.isAxiosError(error)) {
-      const axiosError = error as AxiosError;
-
-      // Timeout error
-      if (axiosError.code === 'ECONNABORTED' || axiosError.code === 'ETIMEDOUT') {
-        throw new APITimeoutError('FRED API', this.TIMEOUT_MS);
-      }
-
-      // HTTP error response
-      if (axiosError.response) {
-        throw new APIResponseError(
-          'FRED API',
-          axiosError.response.status,
-          axiosError.message
-        );
-      }
-
-      // Network error
-      if (axiosError.request) {
-        throw new Error(`FRED network error during ${operation}: ${axiosError.message}`);
-      }
-    }
-
-    // Unknown error
-    throw error;
   }
 
   /**

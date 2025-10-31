@@ -18,6 +18,10 @@ import { createFREDClient } from '../lib/fred-client';
 import { createStockScorer } from '../lib/scoring';
 import { createNotionClient, AnalysisData } from '../lib/notion-client';
 import { requireAuth } from '../lib/auth';
+import { validateStockData, validateTicker } from '../lib/validators';
+import { createTimer, logAnalysisStart, logAnalysisComplete, logAnalysisFailed } from '../lib/logger';
+import { formatErrorResponse, formatErrorForNotion } from '../lib/utils';
+import { getErrorCode, getStatusCode } from '../lib/errors';
 
 interface AnalyzeRequest {
   ticker: string;
@@ -89,7 +93,9 @@ export default async function handler(
     return;
   }
 
-  const startTime = Date.now();
+  const timer = createTimer('Stock Analysis');
+  let ticker: string | undefined;
+  let analysesPageId: string | null = null;
 
   try {
     // Parse request body
@@ -97,15 +103,15 @@ export default async function handler(
       typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
 
     const {
-      ticker,
+      ticker: rawTicker,
       usePollingWorkflow = true,
       timeout = 600,
       pollInterval = 10,
       skipPolling = false,
     } = body;
 
-    // Validate ticker
-    if (!ticker || typeof ticker !== 'string') {
+    // Validate ticker with custom validator
+    if (!rawTicker || typeof rawTicker !== 'string') {
       res.status(400).json({
         success: false,
         error: 'Invalid ticker',
@@ -114,7 +120,16 @@ export default async function handler(
       return;
     }
 
+    ticker = validateTicker(rawTicker); // Throws InvalidTickerError if invalid
     const tickerUpper = ticker.toUpperCase().trim();
+
+    // Log analysis start with structured logging
+    logAnalysisStart(tickerUpper, {
+      workflow: usePollingWorkflow ? 'v0.3.0 (polling)' : 'v0.2.9 (immediate)',
+      timeout,
+      pollInterval,
+      skipPolling,
+    });
 
     console.log('='.repeat(60));
     console.log(`Starting analysis for ${tickerUpper}`);
@@ -219,6 +234,30 @@ export default async function handler(
       gdp: macroData.gdp || undefined,
     };
 
+    // Validate data quality before scoring
+    const qualityReport = validateStockData({
+      technical,
+      fundamental,
+      macro,
+    });
+
+    console.log('\n📊 Data Quality Report:');
+    console.log(`   Completeness: ${Math.round(qualityReport.dataCompleteness * 100)}%`);
+    console.log(`   Grade: ${qualityReport.grade}`);
+    console.log(`   Confidence: ${qualityReport.confidence}`);
+    console.log(`   Can Proceed: ${qualityReport.canProceed ? 'Yes' : 'No'}`);
+    if (qualityReport.missingFields.length > 0) {
+      console.log(`   Missing Fields: ${qualityReport.missingFields.join(', ')}`);
+    }
+
+    // Log data quality issues (don't fail, just warn)
+    if (!qualityReport.canProceed) {
+      console.warn(
+        `⚠️  Data quality below minimum threshold (${Math.round(qualityReport.dataCompleteness * 100)}% < 40%)`
+      );
+      console.warn('   Proceeding with analysis but scores may be unreliable');
+    }
+
     console.log('\n📊 Step 2/5: Calculating scores...');
 
     // Calculate scores
@@ -254,10 +293,13 @@ export default async function handler(
     };
 
     // Sync to Notion
-    const { analysesPageId, historyPageId } = await notionClient.syncToNotion(
+    const syncResult = await notionClient.syncToNotion(
       analysisData,
       usePollingWorkflow
     );
+
+    analysesPageId = syncResult.analysesPageId; // Store for error handling
+    const historyPageId = syncResult.historyPageId;
 
     notionCalls += 2; // syncToNotion makes at least 2 calls (find + upsert)
 
@@ -315,47 +357,19 @@ export default async function handler(
       console.log('\n✅ v0.2.9 workflow complete');
     }
 
-    const duration = Date.now() - startTime;
+    const duration = timer.end(true);
+
+    // Log successful completion with structured logging
+    logAnalysisComplete(tickerUpper, duration, scores.composite, {
+      dataCompleteness: qualityReport.dataCompleteness,
+      dataQuality: qualityReport.grade,
+      workflow: usePollingWorkflow ? 'polling' : 'immediate',
+      archived,
+    });
 
     console.log('\n' + '='.repeat(60));
     console.log(`Analysis complete for ${tickerUpper} in ${duration}ms`);
     console.log('='.repeat(60) + '\n');
-
-    // Calculate data quality
-    const fields = [
-      technical.current_price,
-      technical.ma_50,
-      technical.ma_200,
-      technical.rsi,
-      technical.volume,
-      technical.avg_volume_20d,
-      technical.week_52_high,
-      technical.week_52_low,
-      fundamental.market_cap,
-      fundamental.pe_ratio,
-      fundamental.eps,
-      fundamental.revenue_ttm,
-      fundamental.debt_to_equity,
-      fundamental.beta,
-      macro.fed_funds_rate,
-      macro.unemployment,
-      macro.consumer_sentiment,
-    ];
-
-    const available = fields.filter((f) => f !== undefined && f !== null).length;
-    const completeness = available / fields.length;
-
-    let grade: string;
-    if (completeness >= 0.9) grade = 'A - Excellent';
-    else if (completeness >= 0.75) grade = 'B - Good';
-    else if (completeness >= 0.6) grade = 'C - Fair';
-    else grade = 'D - Poor';
-
-    let confidence: string;
-    if (completeness >= 0.85) confidence = 'High';
-    else if (completeness >= 0.7) confidence = 'Medium-High';
-    else if (completeness >= 0.55) confidence = 'Medium';
-    else confidence = 'Low';
 
     // Return success response
     const response: AnalyzeResponse = {
@@ -373,9 +387,9 @@ export default async function handler(
         recommendation: scores.recommendation,
       },
       dataQuality: {
-        completeness: Math.round(completeness * 100) / 100,
-        grade,
-        confidence,
+        completeness: Math.round(qualityReport.dataCompleteness * 100) / 100,
+        grade: qualityReport.grade,
+        confidence: qualityReport.confidence,
       },
       performance: {
         duration,
@@ -392,28 +406,39 @@ export default async function handler(
 
     res.status(200).json(response);
   } catch (error) {
-    const duration = Date.now() - startTime;
+    // End timer with error
+    const duration = timer.endWithError(error as Error);
 
     console.error('❌ Analysis failed:', error);
 
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const errorStack = error instanceof Error ? error.stack : undefined;
+    // Log failure with structured logging
+    const errorCode = getErrorCode(error);
+    if (ticker) {
+      logAnalysisFailed(ticker, errorCode, { duration }, error as Error);
+    }
 
-    const response: AnalyzeResponse = {
-      success: false,
-      ticker: req.body?.ticker || 'Unknown',
-      analysesPageId: null,
-      historyPageId: null,
-      error: errorMessage,
-      details: errorStack,
-      performance: {
-        duration,
-        fmpCalls: 0,
-        fredCalls: 0,
-        notionCalls: 0,
-      },
-    };
+    // Write error to Notion if we have a page ID
+    if (analysesPageId && ticker) {
+      try {
+        const notionClient = createNotionClient({
+          apiKey: process.env.NOTION_API_KEY!,
+          stockAnalysesDbId: process.env.STOCK_ANALYSES_DB_ID!,
+          stockHistoryDbId: process.env.STOCK_HISTORY_DB_ID!,
+          userId: process.env.NOTION_USER_ID,
+        });
 
-    res.status(500).json(response);
+        const errorNote = formatErrorForNotion(error, ticker);
+        await notionClient.writeErrorToPage(analysesPageId, errorNote);
+      } catch (notionError) {
+        console.error('❌ Failed to write error to Notion:', notionError);
+        // Don't fail the request just because we couldn't write to Notion
+      }
+    }
+
+    // Format error response with proper status code
+    const errorResponse = formatErrorResponse(error, ticker);
+    const statusCode = getStatusCode(error);
+
+    res.status(statusCode).json(errorResponse);
   }
 }
