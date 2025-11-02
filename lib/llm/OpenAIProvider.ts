@@ -9,7 +9,7 @@ import OpenAI from 'openai';
 import { LLMProvider } from './LLMProvider';
 import { AnalysisContext, AnalysisResult } from './types';
 import { calculateModelCost } from './pricing';
-import { buildOpenAIPrompt } from './prompts/openai';
+import { buildAnalysisPrompt } from './prompts/shared';
 
 export class OpenAIProvider extends LLMProvider {
   private client: OpenAI;
@@ -54,7 +54,7 @@ export class OpenAIProvider extends LLMProvider {
   }
 
   protected buildPrompt(context: AnalysisContext): string {
-    return buildOpenAIPrompt(context);
+    return buildAnalysisPrompt(context);
   }
 
   protected calculateCost(inputTokens: number, outputTokens: number): number {

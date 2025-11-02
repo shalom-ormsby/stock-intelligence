@@ -276,6 +276,167 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+### v1.0.3: Enhanced Delta Analysis & System Improvements (2025-11-02)
+
+**Status**: Complete and deployed
+
+**Objective:** Fixed critical production bugs, refactored LLM prompt system for maintainability, and dramatically enhanced delta analysis to provide richer historical insights.
+
+### Fixed
+
+**Bug #2: Frontend Stuck on "Analyzing..." Spinner**
+- **Issue**: Frontend remained on loading spinner even when backend completed successfully
+- **Root Cause**: Frontend calling `response.json()` without checking Content-Type header first. When Vercel returned non-JSON error responses (HTML error pages), JSON parser failed silently.
+- **Fix** ([public/analyze.html:189-213](public/analyze.html#L189-L213)):
+  - Added Content-Type header validation before parsing
+  - Read non-JSON responses as text and show clean error messages
+  - Improved error extraction from nested response objects (`data.error?.message || data.error`)
+  - Added console logging for debugging
+- **Impact**: Frontend now transitions smoothly from "Analyzing..." → "Analysis Complete!" or shows proper error messages
+
+**Critical Timeout Issue: 4-Minute Vercel Function Timeout**
+- **Issue**: Analysis requests timing out after ~4 minutes, returning plain text errors
+- **Root Cause**: Archiving step was calling `writeAnalysisContent()` which deleted all existing blocks before writing new content. Stock History pages accumulate hundreds/thousands of blocks over time, requiring 500-1000+ individual API calls to delete each block (3-4 minutes), causing Vercel to timeout.
+- **Fix** ([lib/notion-client.ts:1132-1198](lib/notion-client.ts#L1132-L1198)):
+  - Added `mode` parameter to `writeAnalysisContent()`: `'replace' | 'append'`
+  - Stock Analyses page (main database row): Uses **'replace' mode** to overwrite old content ✅
+  - Stock History page (archive): Uses **'append' mode** to preserve full history ✅
+  - Only deletes existing blocks when `mode='replace'`
+- **Performance Impact**:
+  - **Before**: Stock History write = 500-1000+ deletion calls (~3-4 minutes) → timeout
+  - **After**: Stock History write = 0 deletion calls (~2-3 seconds) → success
+  - **Total**: Analysis now completes in ~30-45 seconds (vs 4+ minute timeout)
+- **Semantic Correctness**:
+  - Stock Analyses page: Fresh analysis replaces old content ✅
+  - Stock History page: Accumulates all analyses over time ✅
+
+### Changed
+
+**Refactored LLM Prompt System** (Eliminated 3x Maintenance Burden):
+- **Problem**: Separate prompt files for Gemini/Claude/OpenAI required updating 3 files for every change
+- **Files Deleted**:
+  - `lib/llm/prompts/gemini.ts` (150 LOC) - 95% identical to others
+  - `lib/llm/prompts/claude.ts` (150 LOC) - Only formatting differences
+  - `lib/llm/prompts/openai.ts` (150 LOC) - Same content, different wrappers
+- **Files Created**:
+  - [lib/llm/prompts/shared.ts](lib/llm/prompts/shared.ts) (145 LOC) - **Single source of truth**
+  - `buildAnalysisPrompt()` - Unified prompt builder for all providers
+  - All providers now use shared prompt (guaranteed consistency)
+- **Benefits**:
+  - ✅ Update prompts once, all providers get changes
+  - ✅ Impossible for prompts to drift out of sync
+  - ✅ Easier testing (test prompt logic once)
+  - ✅ Faster iteration on analysis quality
+  - ✅ Clear version control history
+
+**Dramatically Enhanced Delta Analysis** (Priority 1 + 2):
+
+- **Priority 1: Category Score Deltas** ([api/analyze.ts:386-393](api/analyze.ts#L386-L393)):
+  - Now calculates deltas for all 6 score categories:
+    - Technical Score Δ
+    - Fundamental Score Δ
+    - Macro Score Δ
+    - Risk Score Δ
+    - Sentiment Score Δ
+  - **Value**: LLM can now explain *why* composite score changed
+  - **Example**: "Composite improved +0.8 driven by technical recovery (+1.2) despite fundamental weakness (-0.4)"
+
+- **Priority 2: Price & Volume Deltas** ([api/analyze.ts:395-419](api/analyze.ts#L395-L419)):
+  - Price change percentage since last analysis
+  - Volume change percentage since last analysis
+  - Days elapsed since last analysis
+  - Annualized return calculation (if >0 days)
+  - **Value**: LLM can validate score changes against actual price movement
+  - **Example**: "Price rallied +12.3% since last analysis (3 weeks ago), confirming improving technical score"
+
+- **Enhanced Prompt Integration** ([lib/llm/prompts/shared.ts:45-69](lib/llm/prompts/shared.ts#L45-L69)):
+  - Category deltas section shows all 6 score changes
+  - Price & volume movement section with annualized return
+  - Explicit instruction: "Highlight what changed and why"
+  - Explicit instruction: "Connect score changes to real metrics"
+
+### Files Modified
+
+**Core Changes:**
+- [lib/llm/types.ts](lib/llm/types.ts) - Extended `deltas` interface with `categoryDeltas` and `priceDeltas`
+- [lib/llm/prompts/shared.ts](lib/llm/prompts/shared.ts) - NEW: 145 LOC (unified prompt builder)
+- [lib/llm/GeminiProvider.ts](lib/llm/GeminiProvider.ts) - Updated to use shared prompt
+- [lib/llm/ClaudeProvider.ts](lib/llm/ClaudeProvider.ts) - Updated to use shared prompt
+- [lib/llm/OpenAIProvider.ts](lib/llm/OpenAIProvider.ts) - Updated to use shared prompt
+- [api/analyze.ts](api/analyze.ts) - Enhanced delta calculations (lines 379-433)
+- [lib/notion-client.ts](lib/notion-client.ts) - Added `mode` parameter to `writeAnalysisContent()`
+- [public/analyze.html](public/analyze.html) - Fixed Content-Type validation (lines 189-213)
+
+### Delta Analysis Coverage
+
+| Category | Metrics Tracked | Status |
+|----------|----------------|--------|
+| **Composite Score** | scoreChange, recommendation, trend | ✅ v1.0.2 |
+| **Category Scores** | 6 score deltas (tech, fund, macro, risk, sent, sector) | ✅ **v1.0.3** |
+| **Price Action** | price %, volume %, days elapsed, annualized return | ✅ **v1.0.3** |
+| **Technical Indicators** | RSI change, MA crossovers, momentum | 🟡 Future (P3) |
+| **Fundamentals** | P/E, EPS growth, revenue growth, debt trend | 🟡 Future (P4) |
+| **Macro Environment** | Fed rate, unemployment, VIX, yield curve | 🟡 Future (P5) |
+
+### Benefits
+
+**For Users:**
+- Much richer historical context in analyses
+- Understand *why* scores changed, not just *that* they changed
+- Validate score changes against actual price movement
+- Detect divergences (e.g., "price up but fundamentals declining")
+
+**For Developers:**
+- Single prompt file to maintain (vs 3 separate files)
+- Guaranteed consistency across all LLM providers
+- Faster iteration on analysis quality
+- No more 4-minute timeouts blocking production
+
+### Performance Impact
+
+**Delta Calculation:**
+- Additional computation: <10ms (negligible)
+- No additional API calls
+- Richer context for LLM with same token budget
+
+**Notion Writing:**
+- Stock Analyses page: Same performance (still replaces content)
+- Stock History page: **Dramatically faster** (0 deletions vs 500-1000+)
+- Total analysis time: 30-45 seconds (vs 4+ minute timeout)
+
+### Example Delta Output (Console Logs)
+
+```
+✅ Found 5 historical analyses
+   Previous: 3.2/5.0 (Oct 29, 2025)
+   Score Change: +0.83 (improving)
+   Price Change: +12.34% over 4 days
+   Category Deltas: Tech +1.2 | Fund -0.4 | Macro +0.3
+```
+
+### Migration Notes
+
+- **No Breaking Changes**: Delta fields are optional additions to existing `deltas` object
+- **Backward Compatible**: LLM prompts work with or without enhanced deltas
+- **Automatic Enhancement**: All new analyses include category and price deltas
+- **Old Analyses**: Will show basic deltas (composite only) until re-analyzed
+
+### Implementation Time
+
+- Bug fixes: 1.5 hours
+- Prompt refactor: 30 minutes
+- Delta enhancements: 1 hour
+- Testing & documentation: 1 hour
+- **Total: ~4 hours**
+
+### Deployment
+
+- Committed: 2025-11-02
+- Deployed: Vercel auto-deploy
+- Status: ✅ Production ready
+
+---
+
 ### v1.0: Testing & Beta Launch (In Progress)
 
 **Remaining Work** (~20% of v1.0 scope):

@@ -22,6 +22,19 @@ export interface AnalysisContext {
     scoreChange: number;
     recommendationChange: string;
     trendDirection: 'improving' | 'declining' | 'stable';
+    categoryDeltas?: {
+      technical: number;
+      fundamental: number;
+      macro: number;
+      risk: number;
+      sentiment: number;
+    };
+    priceDeltas?: {
+      priceChangePercent: number;
+      volumeChangePercent: number;
+      daysElapsed: number;
+      annualizedReturn?: number;
+    };
   };
 }
 

@@ -9,7 +9,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { LLMProvider } from './LLMProvider';
 import { AnalysisContext, AnalysisResult } from './types';
 import { calculateModelCost } from './pricing';
-import { buildClaudePrompt } from './prompts/claude';
+import { buildAnalysisPrompt } from './prompts/shared';
 
 export class ClaudeProvider extends LLMProvider {
   private client: Anthropic;
@@ -52,7 +52,7 @@ export class ClaudeProvider extends LLMProvider {
   }
 
   protected buildPrompt(context: AnalysisContext): string {
-    return buildClaudePrompt(context);
+    return buildAnalysisPrompt(context);
   }
 
   protected calculateCost(inputTokens: number, outputTokens: number): number {

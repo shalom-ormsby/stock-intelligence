@@ -376,22 +376,61 @@ export default async function handler(
       if (historicalAnalyses.length > 0) {
         previousAnalysis = historicalAnalyses[0];
 
-        // Compute deltas
+        // Compute composite score deltas
         const scoreChange = scores.composite - previousAnalysis.compositeScore;
         let trendDirection: 'improving' | 'declining' | 'stable' = 'stable';
 
         if (scoreChange > 0.2) trendDirection = 'improving';
         else if (scoreChange < -0.2) trendDirection = 'declining';
 
+        // Compute category score deltas (Priority 1)
+        const categoryDeltas = {
+          technical: scores.technical - (previousAnalysis.technicalScore || 0),
+          fundamental: scores.fundamental - (previousAnalysis.fundamentalScore || 0),
+          macro: scores.macro - (previousAnalysis.macroScore || 0),
+          risk: scores.risk - (previousAnalysis.riskScore || 0),
+          sentiment: scores.sentiment - (previousAnalysis.sentimentScore || 0),
+        };
+
+        // Compute price & volume deltas (Priority 2)
+        const previousPrice = previousAnalysis.price || fmpData.quote.previousClose;
+        const previousVolume = previousAnalysis.volume || fmpData.quote.avgVolume;
+
+        const priceChangePercent = ((fmpData.quote.price - previousPrice) / previousPrice) * 100;
+        const volumeChangePercent = ((fmpData.quote.volume - previousVolume) / previousVolume) * 100;
+
+        // Calculate days elapsed
+        const previousDate = new Date(previousAnalysis.date);
+        const currentDate = new Date();
+        const daysElapsed = Math.ceil((currentDate.getTime() - previousDate.getTime()) / (1000 * 60 * 60 * 24));
+
+        // Calculate annualized return (if significant time has passed)
+        let annualizedReturn: number | undefined;
+        if (daysElapsed > 0) {
+          const dailyReturn = priceChangePercent / daysElapsed;
+          annualizedReturn = dailyReturn * 365;
+        }
+
+        const priceDeltas = {
+          priceChangePercent,
+          volumeChangePercent,
+          daysElapsed,
+          annualizedReturn,
+        };
+
         deltas = {
           scoreChange,
           recommendationChange: `${previousAnalysis.recommendation} → ${scores.recommendation}`,
           trendDirection,
+          categoryDeltas,
+          priceDeltas,
         };
 
         console.log(`✅ Found ${historicalAnalyses.length} historical analyses`);
         console.log(`   Previous: ${previousAnalysis.compositeScore}/5.0 (${previousAnalysis.date})`);
-        console.log(`   Change: ${scoreChange > 0 ? '+' : ''}${scoreChange.toFixed(2)} (${trendDirection})`);
+        console.log(`   Score Change: ${scoreChange > 0 ? '+' : ''}${scoreChange.toFixed(2)} (${trendDirection})`);
+        console.log(`   Price Change: ${priceChangePercent > 0 ? '+' : ''}${priceChangePercent.toFixed(2)}% over ${daysElapsed} days`);
+        console.log(`   Category Deltas: Tech ${categoryDeltas.technical > 0 ? '+' : ''}${categoryDeltas.technical.toFixed(2)} | Fund ${categoryDeltas.fundamental > 0 ? '+' : ''}${categoryDeltas.fundamental.toFixed(2)} | Macro ${categoryDeltas.macro > 0 ? '+' : ''}${categoryDeltas.macro.toFixed(2)}`);
       } else {
         console.log('ℹ️  No historical analyses found (first analysis for this ticker)');
       }

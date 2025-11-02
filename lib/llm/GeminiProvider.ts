@@ -9,7 +9,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { LLMProvider } from './LLMProvider';
 import { AnalysisContext, AnalysisResult } from './types';
 import { calculateModelCost } from './pricing';
-import { buildGeminiPrompt } from './prompts/gemini';
+import { buildAnalysisPrompt } from './prompts/shared';
 
 export class GeminiProvider extends LLMProvider {
   private client: GoogleGenerativeAI;
@@ -53,7 +53,7 @@ export class GeminiProvider extends LLMProvider {
   }
 
   protected buildPrompt(context: AnalysisContext): string {
-    return buildGeminiPrompt(context);
+    return buildAnalysisPrompt(context);
   }
 
   protected calculateCost(inputTokens: number, outputTokens: number): number {
