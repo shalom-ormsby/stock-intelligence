@@ -6,9 +6,14 @@
  * 2. Fetch data from FRED (macroeconomic)
  * 3. Calculate scores (composite, technical, fundamental, macro, risk, sentiment)
  * 4. Sync results to Notion Stock Analyses database
- * 5. Poll for user to complete AI analysis
- * 6. Archive to Stock History when ready
+ * 5. Query historical analyses and compute deltas
+ * 6. Generate AI analysis using LLM (Gemini/Claude/OpenAI)
+ * 7. Write analysis to 3 Notion locations:
+ *    - Stock Analyses database row
+ *    - Child analysis page (dated)
+ *    - Stock History database (archived)
  *
+ * v1.0.2 - LLM Integration (Gemini Flash 2.5)
  * v1.0 - Vercel Serverless + TypeScript
  */
 
@@ -23,6 +28,8 @@ import { createTimer, logAnalysisStart, logAnalysisComplete, logAnalysisFailed }
 import { formatErrorResponse, formatErrorForNotion } from '../lib/utils';
 import { getErrorCode, getStatusCode, RateLimitError } from '../lib/errors';
 import { RateLimiter, extractUserId, getSecondsUntilMidnightUTC } from '../lib/rate-limiter';
+import { LLMFactory } from '../lib/llm/LLMFactory';
+import { AnalysisContext } from '../lib/llm/types';
 
 interface AnalyzeRequest {
   ticker: string;
@@ -38,6 +45,7 @@ interface AnalyzeResponse {
   ticker: string;
   analysesPageId: string | null;
   historyPageId: string | null;
+  childAnalysisPageId?: string | null;
   scores?: {
     composite: number;
     technical: number;
@@ -57,6 +65,17 @@ interface AnalyzeResponse {
     fmpCalls: number;
     fredCalls: number;
     notionCalls: number;
+  };
+  llmMetadata?: {
+    provider: string;
+    model: string;
+    tokensUsed: {
+      input: number;
+      output: number;
+      total: number;
+    };
+    cost: number;
+    latencyMs: number;
   };
   workflow?: {
     pollingCompleted: boolean;
@@ -343,49 +362,154 @@ export default async function handler(
       console.log(`   Stock History page ID: ${historyPageId}`);
     }
 
-    // Polling workflow (v0.3.0)
-    let pollingCompleted = false;
-    let archived = false;
-    let workflowStatus = 'Pending Analysis';
+    // LLM Analysis Workflow (v1.0.2)
+    console.log('\n📊 Step 4/7: Querying historical analyses...');
 
-    if (usePollingWorkflow && !skipPolling) {
-      console.log('\n📊 Step 4/5: Waiting for AI analysis...');
+    let historicalAnalyses: any[] = [];
+    let previousAnalysis: any = null;
+    let deltas: any = null;
 
-      pollingCompleted = await notionClient.waitForAnalysisCompletion(
-        analysesPageId,
-        timeout,
-        pollInterval,
-        skipPolling
-      );
+    try {
+      historicalAnalyses = await notionClient.queryHistoricalAnalyses(tickerUpper, 5);
+      notionCalls += 1;
 
-      notionCalls += Math.ceil(timeout / pollInterval); // Polling makes ~60 calls for 10 min timeout
+      if (historicalAnalyses.length > 0) {
+        previousAnalysis = historicalAnalyses[0];
 
-      if (pollingCompleted) {
-        console.log('\n📊 Step 5/5: Archiving to Stock History...');
+        // Compute deltas
+        const scoreChange = scores.composite - previousAnalysis.compositeScore;
+        let trendDirection: 'improving' | 'declining' | 'stable' = 'stable';
 
-        const archivedPageId = await notionClient.archiveToHistory(analysesPageId);
-        archived = !!archivedPageId;
-        workflowStatus = archived ? 'Logged in History' : 'Archive Failed';
+        if (scoreChange > 0.2) trendDirection = 'improving';
+        else if (scoreChange < -0.2) trendDirection = 'declining';
 
-        notionCalls += 3; // archiveToHistory makes 3 calls (read + create + update)
+        deltas = {
+          scoreChange,
+          recommendationChange: `${previousAnalysis.recommendation} → ${scores.recommendation}`,
+          trendDirection,
+        };
 
-        if (archived) {
-          console.log(`✅ Archived to Stock History: ${archivedPageId}`);
-        } else {
-          console.log('⚠️  Archive to Stock History failed');
-        }
+        console.log(`✅ Found ${historicalAnalyses.length} historical analyses`);
+        console.log(`   Previous: ${previousAnalysis.compositeScore}/5.0 (${previousAnalysis.date})`);
+        console.log(`   Change: ${scoreChange > 0 ? '+' : ''}${scoreChange.toFixed(2)} (${trendDirection})`);
       } else {
-        workflowStatus = 'Analysis Incomplete';
-        console.log('⏱️  Polling timeout - analysis not completed');
+        console.log('ℹ️  No historical analyses found (first analysis for this ticker)');
       }
-    } else if (skipPolling) {
-      workflowStatus = 'Polling Skipped';
-      console.log('\n⏭️  Polling skipped - archive manually when ready');
-    } else {
-      // v0.2.9 workflow - immediate history creation
-      workflowStatus = historyPageId ? 'Completed' : 'History Creation Failed';
-      console.log('\n✅ v0.2.9 workflow complete');
+    } catch (error) {
+      console.warn('⚠️  Failed to query historical analyses:', error);
+      // Continue without historical context
     }
+
+    console.log('\n📊 Step 5/7: Generating LLM analysis...');
+
+    // Build AnalysisContext for LLM
+    const analysisContext: AnalysisContext = {
+      ticker: tickerUpper,
+      currentMetrics: {
+        compositeScore: scores.composite,
+        technicalScore: scores.technical,
+        fundamentalScore: scores.fundamental,
+        macroScore: scores.macro,
+        riskScore: scores.risk,
+        sentimentScore: scores.sentiment,
+        sectorScore: 0, // TODO: Add sector scoring in future
+        recommendation: scores.recommendation,
+        pattern: 'Unknown', // TODO: Add pattern detection in future
+        confidence: qualityReport.dataCompleteness * 5, // Convert 0-1 to 0-5 scale
+        dataQualityGrade: qualityReport.grade,
+      },
+      previousAnalysis: previousAnalysis ? {
+        date: previousAnalysis.date,
+        compositeScore: previousAnalysis.compositeScore,
+        recommendation: previousAnalysis.recommendation,
+        metrics: {
+          technicalScore: previousAnalysis.technicalScore,
+          fundamentalScore: previousAnalysis.fundamentalScore,
+          macroScore: previousAnalysis.macroScore,
+        },
+      } : undefined,
+      historicalAnalyses: historicalAnalyses.map(h => ({
+        date: h.date,
+        compositeScore: h.compositeScore,
+        recommendation: h.recommendation,
+      })),
+      deltas,
+    };
+
+    // Generate analysis using LLM
+    let llmResult: any;
+    let childAnalysisPageId: string | null = null;
+
+    try {
+      const llmProvider = LLMFactory.getProviderFromEnv();
+      llmResult = await llmProvider.generateAnalysis(analysisContext);
+
+      console.log('✅ LLM analysis generated');
+      console.log(`   Provider: ${llmResult.modelUsed}`);
+      console.log(`   Tokens: ${llmResult.tokensUsed.input} input + ${llmResult.tokensUsed.output} output = ${llmResult.tokensUsed.input + llmResult.tokensUsed.output} total`);
+      console.log(`   Cost: $${llmResult.cost.toFixed(4)}`);
+      console.log(`   Latency: ${llmResult.latencyMs}ms`);
+    } catch (error) {
+      console.error('❌ LLM analysis generation failed:', error);
+      throw new Error(`LLM analysis generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+
+    console.log('\n📊 Step 6/7: Writing analysis to Notion...');
+
+    try {
+      // 1. Write to Stock Analyses page (main database row)
+      await notionClient.writeAnalysisContent(analysesPageId, llmResult.content);
+      notionCalls += 1;
+      console.log(`✅ Written to Stock Analyses page: ${analysesPageId}`);
+
+      // 2. Create child analysis page with dated title
+      const analysisDate = new Date().toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+
+      childAnalysisPageId = await notionClient.createChildAnalysisPage(
+        analysesPageId,
+        tickerUpper,
+        analysisDate,
+        llmResult.content,
+        {
+          // Additional properties for child page (if needed)
+        }
+      );
+      notionCalls += 2; // create page + write content
+      console.log(`✅ Created child analysis page: ${childAnalysisPageId}`);
+    } catch (error) {
+      console.error('❌ Failed to write analysis to Notion:', error);
+      throw new Error(`Failed to write analysis to Notion: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+
+    console.log('\n📊 Step 7/7: Archiving to Stock History...');
+
+    let archived = false;
+    let archivedPageId: string | null = null;
+
+    try {
+      // Archive to Stock History database with LLM content
+      archivedPageId = await notionClient.archiveToHistory(analysesPageId);
+      archived = !!archivedPageId;
+      notionCalls += 3; // read + create + update
+
+      if (archived && archivedPageId) {
+        // Write LLM content to history page
+        await notionClient.writeAnalysisContent(archivedPageId, llmResult.content);
+        notionCalls += 1;
+        console.log(`✅ Archived to Stock History: ${archivedPageId}`);
+      } else {
+        console.log('⚠️  Archive to Stock History failed');
+      }
+    } catch (error) {
+      console.warn('⚠️  Failed to archive to Stock History:', error);
+      // Don't fail the entire request just because archiving failed
+    }
+
+    const workflowStatus = archived ? 'Completed' : 'Analysis Generated (Archive Failed)';
 
     const duration = timer.end(true);
 
@@ -406,7 +530,8 @@ export default async function handler(
       success: true,
       ticker: tickerUpper,
       analysesPageId,
-      historyPageId,
+      historyPageId: archivedPageId,
+      childAnalysisPageId,
       scores: {
         composite: scores.composite,
         technical: scores.technical,
@@ -427,8 +552,21 @@ export default async function handler(
         fredCalls,
         notionCalls,
       },
+      llmMetadata: llmResult ? {
+        provider: llmResult.modelUsed.includes('gemini') ? 'Google Gemini' :
+                  llmResult.modelUsed.includes('claude') ? 'Anthropic Claude' :
+                  llmResult.modelUsed.includes('gpt') ? 'OpenAI' : 'Unknown',
+        model: llmResult.modelUsed,
+        tokensUsed: {
+          input: llmResult.tokensUsed.input,
+          output: llmResult.tokensUsed.output,
+          total: llmResult.tokensUsed.input + llmResult.tokensUsed.output,
+        },
+        cost: llmResult.cost,
+        latencyMs: llmResult.latencyMs,
+      } : undefined,
       workflow: {
-        pollingCompleted,
+        pollingCompleted: false, // Deprecated in v1.0.2
         archived,
         status: workflowStatus,
       },

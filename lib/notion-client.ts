@@ -943,6 +943,253 @@ export class NotionClient {
         return null;
     }
   }
+
+  /**
+   * Query historical analyses from Stock History database
+   * @param ticker - Stock ticker symbol
+   * @param limit - Number of historical analyses to retrieve (default: 5)
+   * @returns Array of historical analyses sorted by date (newest first)
+   */
+  async queryHistoricalAnalyses(
+    ticker: string,
+    limit: number = 5
+  ): Promise<Array<{
+    date: string;
+    compositeScore: number;
+    recommendation: string;
+    technicalScore?: number;
+    fundamentalScore?: number;
+    macroScore?: number;
+    riskScore?: number;
+    sentimentScore?: number;
+    sectorScore?: number;
+    metrics?: Record<string, any>;
+  }>> {
+    try {
+      const response = await this.client.databases.query({
+        database_id: this.stockHistoryDbId,
+        filter: {
+          property: 'Ticker',
+          title: {
+            equals: ticker,
+          },
+        },
+        sorts: [
+          {
+            property: 'Analysis Date',
+            direction: 'descending',
+          },
+        ],
+        page_size: limit,
+      });
+
+      return response.results.map((page: any) => {
+        const props = page.properties;
+        return {
+          date: props['Analysis Date']?.date?.start || '',
+          compositeScore: props['Composite Score']?.number || 0,
+          recommendation: props['Recommendation']?.select?.name || '',
+          technicalScore: props['Technical Score']?.number,
+          fundamentalScore: props['Fundamental Score']?.number,
+          macroScore: props['Macro Score']?.number,
+          riskScore: props['Risk Score']?.number,
+          sentimentScore: props['Sentiment Score']?.number,
+          sectorScore: props['Sector Score']?.number,
+          metrics: {
+            pattern: props['Pattern']?.select?.name,
+            confidence: props['Confidence']?.number,
+            dataQuality: props['Data Quality']?.select?.name,
+          },
+        };
+      });
+    } catch (error: any) {
+      console.error(`[Notion] Failed to query historical analyses for ${ticker}:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Convert markdown text to Notion blocks
+   * @param markdown - Markdown-formatted text
+   * @returns Array of Notion block objects
+   */
+  private markdownToBlocks(markdown: string): Array<any> {
+    const blocks: Array<any> = [];
+    const lines = markdown.split('\n');
+    let i = 0;
+
+    while (i < lines.length) {
+      const line = lines[i].trim();
+
+      // Skip empty lines
+      if (!line) {
+        i++;
+        continue;
+      }
+
+      // H3 heading (###)
+      if (line.startsWith('### ')) {
+        blocks.push({
+          object: 'block',
+          type: 'heading_3',
+          heading_3: {
+            rich_text: [{ type: 'text', text: { content: line.substring(4) } }],
+          },
+        });
+        i++;
+        continue;
+      }
+
+      // H2 heading (##)
+      if (line.startsWith('## ')) {
+        blocks.push({
+          object: 'block',
+          type: 'heading_2',
+          heading_2: {
+            rich_text: [{ type: 'text', text: { content: line.substring(3) } }],
+          },
+        });
+        i++;
+        continue;
+      }
+
+      // Bullet point (- or *)
+      if (line.startsWith('- ') || line.startsWith('* ')) {
+        blocks.push({
+          object: 'block',
+          type: 'bulleted_list_item',
+          bulleted_list_item: {
+            rich_text: this.parseRichText(line.substring(2)),
+          },
+        });
+        i++;
+        continue;
+      }
+
+      // Regular paragraph
+      blocks.push({
+        object: 'block',
+        type: 'paragraph',
+        paragraph: {
+          rich_text: this.parseRichText(line),
+        },
+      });
+      i++;
+    }
+
+    return blocks;
+  }
+
+  /**
+   * Parse markdown text into Notion rich text format
+   * Supports **bold** formatting
+   */
+  private parseRichText(text: string): Array<any> {
+    const richText: Array<any> = [];
+    const boldRegex = /\*\*(.+?)\*\*/g;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = boldRegex.exec(text)) !== null) {
+      // Add text before bold
+      if (match.index > lastIndex) {
+        richText.push({
+          type: 'text',
+          text: { content: text.substring(lastIndex, match.index) },
+        });
+      }
+
+      // Add bold text
+      richText.push({
+        type: 'text',
+        text: { content: match[1] },
+        annotations: { bold: true },
+      });
+
+      lastIndex = match.index + match[0].length;
+    }
+
+    // Add remaining text
+    if (lastIndex < text.length) {
+      richText.push({
+        type: 'text',
+        text: { content: text.substring(lastIndex) },
+      });
+    }
+
+    return richText.length > 0 ? richText : [{ type: 'text', text: { content: text } }];
+  }
+
+  /**
+   * Write LLM-generated analysis content to a Notion page
+   * @param pageId - ID of the Notion page to update
+   * @param content - Markdown-formatted analysis content
+   */
+  async writeAnalysisContent(pageId: string, content: string): Promise<void> {
+    try {
+      // Convert markdown to Notion blocks
+      const blocks = this.markdownToBlocks(content);
+
+      // Notion API limits: 100 blocks per request
+      const chunkSize = 100;
+      for (let i = 0; i < blocks.length; i += chunkSize) {
+        const chunk = blocks.slice(i, i + chunkSize);
+        await this.client.blocks.children.append({
+          block_id: pageId,
+          children: chunk,
+        });
+      }
+
+      console.log(`[Notion] Written ${blocks.length} blocks to page ${pageId}`);
+    } catch (error: any) {
+      console.error(`[Notion] Failed to write content to page ${pageId}:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a child analysis page under a parent ticker page
+   * @param parentPageId - ID of the parent ticker page
+   * @param ticker - Stock ticker symbol
+   * @param date - Analysis date (e.g., "Nov 1, 2025")
+   * @param content - Markdown-formatted analysis content
+   * @param properties - Additional page properties (scores, recommendation, etc.)
+   * @returns ID of the created child page
+   */
+  async createChildAnalysisPage(
+    parentPageId: string,
+    ticker: string,
+    date: string,
+    content: string,
+    properties: Record<string, any> = {}
+  ): Promise<string> {
+    try {
+      // Create child page with title
+      const page = await this.client.pages.create({
+        parent: { page_id: parentPageId },
+        properties: {
+          title: {
+            title: [
+              {
+                type: 'text',
+                text: { content: `${ticker} Analysis - ${date}` },
+              },
+            ],
+          },
+          ...properties,
+        },
+      });
+
+      // Write analysis content to the page
+      await this.writeAnalysisContent(page.id, content);
+
+      console.log(`[Notion] Created child analysis page: ${page.id}`);
+      return page.id;
+    } catch (error: any) {
+      console.error(`[Notion] Failed to create child analysis page:`, error.message);
+      throw error;
+    }
+  }
 }
 
 /**
