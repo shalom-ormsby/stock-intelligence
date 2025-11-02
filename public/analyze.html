@@ -186,16 +186,30 @@
                     }),
                 });
 
+                // Check if response is JSON before parsing
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    // Response is not JSON - read as text for error message
+                    const text = await response.text();
+                    const preview = text.substring(0, 200);
+                    console.error('Non-JSON response from server:', preview);
+                    showError(`Server error (${response.status}): ${preview.replace(/<[^>]*>/g, '').trim()}`);
+                    return;
+                }
+
                 const data = await response.json();
 
                 if (data.success) {
                     showResults(data.analysesPageId);
                     updateUsageCounter(data.rateLimit);
                 } else {
-                    showError(data.error || 'Analysis failed');
+                    // Show actual error message from backend
+                    const errorMsg = data.error?.message || data.error || 'Analysis failed';
+                    showError(errorMsg);
                 }
             } catch (error) {
-                showError('Network error: ' + error.message);
+                console.error('Analysis request failed:', error);
+                showError('Request failed: ' + error.message);
             }
         });
 
