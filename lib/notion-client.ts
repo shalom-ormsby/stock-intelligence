@@ -1124,12 +1124,52 @@ export class NotionClient {
    * Write LLM-generated analysis content to a Notion page
    * @param pageId - ID of the Notion page to update
    * @param content - Markdown-formatted analysis content
+   *
+   * NOTE: This method REPLACES all existing content on the page.
+   * It first deletes all child blocks, then writes the new content.
    */
   async writeAnalysisContent(pageId: string, content: string): Promise<void> {
     try {
-      // Convert markdown to Notion blocks
+      // Step 1: Delete all existing child blocks (to replace, not append)
+      console.log(`[Notion] Deleting existing content from page ${pageId}...`);
+
+      let hasMore = true;
+      let cursor: string | undefined = undefined;
+      let deletedCount = 0;
+
+      while (hasMore) {
+        // List child blocks (paginated, 100 per request)
+        const response = await this.client.blocks.children.list({
+          block_id: pageId,
+          start_cursor: cursor,
+          page_size: 100,
+        });
+
+        // Delete each block
+        for (const block of response.results) {
+          if ('id' in block) {
+            try {
+              await this.client.blocks.delete({
+                block_id: block.id,
+              });
+              deletedCount++;
+            } catch (deleteError: any) {
+              // Ignore errors for blocks that can't be deleted (e.g., dividers)
+              console.warn(`[Notion] Could not delete block ${block.id}:`, deleteError.message);
+            }
+          }
+        }
+
+        hasMore = response.has_more;
+        cursor = response.next_cursor || undefined;
+      }
+
+      console.log(`[Notion] Deleted ${deletedCount} existing blocks from page ${pageId}`);
+
+      // Step 2: Convert markdown to Notion blocks
       const blocks = this.markdownToBlocks(content);
 
+      // Step 3: Append new blocks
       // Notion API limits: 100 blocks per request
       const chunkSize = 100;
       for (let i = 0; i < blocks.length; i += chunkSize) {
@@ -1140,7 +1180,7 @@ export class NotionClient {
         });
       }
 
-      console.log(`[Notion] Written ${blocks.length} blocks to page ${pageId}`);
+      console.log(`[Notion] Written ${blocks.length} new blocks to page ${pageId}`);
     } catch (error: any) {
       console.error(`[Notion] Failed to write content to page ${pageId}:`, error.message);
       throw error;
