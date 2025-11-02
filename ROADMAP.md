@@ -1,20 +1,20 @@
 # Stock Intelligence Roadmap
 
-**Last Updated:** October 29, 2025
+**Last Updated:** November 1, 2025
 
 ---
 
 ## 🎯 Current Status
 
-**Overall v1.0 Progress:** ~70% complete
+**Overall v1.0 Progress:** ~85% complete
 
-**Current Sprint:** v1.0 production deployment
+**Current Sprint:** v1.0.2 - HTML Analyzer Page (Hybrid Approach Phase 1)
 
-**Completed:** 42 tasks
+**Completed:** 44 tasks (v1.0.0 Rate Limiting shipped)
 
-**Remaining:** 39 tasks
+**Remaining:** 15 tasks (v1.0.2 → v1.0.3 → v2.0 migration)
 
-**Estimated Hours Remaining:** ~10-15 hours to complete v1.0
+**Estimated Hours Remaining:** ~3-5 hours to complete v1.0.2, then 25-35 hours for v2.0 migration
 
 ---
 
@@ -71,60 +71,261 @@
 - ✅ Security audit completed
 - ✅ Production validation with MSFT test case
 
+**Rate Limiting System (v1.0.0):**
+
+- ✅ Upstash Redis integration (REST API, distributed state)
+- ✅ User-level quotas (10 analyses per user per day)
+- ✅ Session-based bypass code system
+- ✅ `/api/bypass` endpoint (GET/POST, URL params + JSON body)
+- ✅ `/api/usage` endpoint (non-consuming quota check)
+- ✅ Automatic midnight UTC reset
+- ✅ Graceful degradation on Redis failure
+- ✅ Production deployment tested and validated
+
 **Cumulative Stats:**
 
-- ~4,000 lines TypeScript code
-- ~2,500 lines documentation
-- 17 total files
-- Performance: 3-5 seconds per analysis
-- Cost: $22-29/month (FMP + Vercel)
+- ~4,700 lines TypeScript code
+- ~3,200 lines documentation
+- 22 total files (includes rate limiting + LLM abstraction)
+- Performance: 3-5 seconds per analysis (current), 18-25 seconds target (with LLM)
+- Cost: $22-29/month (FMP + Vercel) + LLM costs (~$0.013 per analysis with Gemini Flash 2.5)
 
 ---
 
 ## 🚧 Current Sprint
 
-### v1.0: Testing & Beta Launch (30% Remaining)
+### v1.0.2: HTML Analyzer Page - Hybrid Approach Phase 1 (In Progress)
 
-*Polish, error handling, and initial user rollout*
+*WordPress-hosted HTML page with LLM-generated analysis*
 
-**Remaining Work:**
+**Context:** Notion webhook limitations discovered in v1.0.1 led to architectural pivot. Building dedicated HTML analyzer page as transition to full custom frontend.
 
-**Enhanced Notion Integration:**
+**Core Changes:**
 
-- ⏳ Build read functions for polling/monitoring (1-1.5 hrs)
-- ⏳ Build write functions for batch operations (1.5-2 hrs)
+- ⏳ Build LLM abstraction layer (provider-agnostic interface) (1 hr)
+  - Interface: `LLMProvider` with OpenAI, Anthropic, Gemini implementations
+  - Default: Google Gemini Flash 2.5 ($0.013 per analysis, 50% token reduction)
+  - Configurable via `LLM_PROVIDER` environment variable
+- ⏳ Modify `/api/analyze` endpoint for new workflow (1.5 hrs)
+  - Query Notion for historical analyses (5 most recent)
+  - Compute deltas and trends
+  - Build enriched prompt with historical context
+  - Call LLM API for 7-section analysis generation
+  - Create dated child analysis page in Notion
+  - Update Stock Analyses database row with latest metrics
+  - Archive to Stock History database
+  - Return `pageUrl` for new analysis page
+- ⏳ Build `public/analyze.html` analyzer interface (1 hr)
+  - Ticker input with validation (1-10 alphanumeric + hyphen)
+  - State management (Initial → Processing → Complete/Error)
+  - Real-time status feedback
+  - "View Results" link to Notion page
+  - Usage counter display (X/10 analyses today)
+  - Tailwind CSS styling (CDN, no build step)
+  - Vanilla JavaScript (WordPress-compatible)
+- ⏳ Add admin bypass via environment variable (15 min)
+  - `RATE_LIMIT_ADMIN_USER_ID=90089dd2-2474-4219-8213-c574934d35df`
+  - Permanent bypass (no session needed)
+- ⏳ Test end-to-end workflow locally (30 min)
+- ⏳ Deploy to Vercel + copy HTML to WordPress (15 min)
 
-**Production Hardening:**
+**Prerequisites:**
 
-- ⏳ Implement rate limiting (10 analyses/user/day) (1 hr)
-- ⏳ Add comprehensive error handling and logging (1-1.5 hrs)
-- ⏳ Implement retry logic with exponential backoff (30 min)
+- ✅ Vercel Pro upgrade ($20/month) - **Required for 300-second timeout**
+- ⏳ Google Gemini API setup and key
+- ⏳ WordPress page setup at `shalomormsby.com/stock-intelligence`
 
-**Validation:**
+**Success Criteria:**
 
-- ⏳ End-to-end testing with 5-10 diverse tickers (1-1.5 hrs)
-- ⏳ Performance optimization (cold starts, caching) (30-45 min)
-- ⏳ Security audit (API keys, CORS, input validation) (30 min)
+- User visits WordPress page → enters ticker → clicks Analyze
+- Analysis completes in <30 seconds (18-25 seconds target)
+- New dated analysis page created in Notion
+- Database row updated with latest metrics
+- Clear "View Results" link displayed
+- Zero manual steps after clicking Analyze
 
-**Beta Preparation:**
+**Performance Target:**
 
-- ⏳ Create onboarding package with video walkthrough (2-2.5 hrs)
-- ⏳ Build user management system (token tracking, usage limits) (1 hr)
-- ⏳ Create feedback collection system (forms + databases) (30 min)
+- Total latency: 18-25 seconds
+  - Rate limit check: <500ms
+  - Fetch market data: 3-5 sec
+  - Calculate scores: 1 sec
+  - Query historical data: 2-5 sec (Notion bottleneck)
+  - Compute deltas: <1 sec
+  - LLM analysis: 10-20 sec
+  - Notion writes (3 operations): 6-10 sec
+  - Rate limit update: <500ms
 
-**Beta Rollout:**
+**Estimated Time:** 3-5 hours
 
-- ⏳ Cohort 1: 3 users with 1:1 onboarding (Nov 20 target) (2-3 hrs)
-- ⏳ Cohort 2: 7 users with improved docs (Nov 24 target) (3-4 hrs)
-- ⏳ Cohort 3: 10 users, self-serve onboarding (Nov 27 target) (2-3 hrs)
+**Completion Target:** November 3-5, 2025
 
-**Total Estimated Time:** ~10-15 hours
+---
+
+### v1.0.3: Infrastructure Upgrade (Deferred)
+
+*Vercel Pro upgrade for timeout resolution*
+
+**Issue:** Vercel free tier has 10-second timeout limit
+**Impact:** Current `/api/analyze` endpoint times out on production
+**Status:** Deployment blocker discovered in v1.0.0 testing
+
+**Upgrade Required:**
+
+- Vercel Pro Plan: $20/month
+  - 300-second serverless function timeout (vs 10 seconds)
+  - Enables full analysis workflow (18-25 seconds target)
+
+**Timeline:** Before v1.0.2 deployment (prerequisite)
+
+**Estimated Time:** 10 minutes (account upgrade only)
 
 ---
 
 ## 🔮 Future Sprints
 
-### v1.1: Enhanced Analysis Features
+### v2.0: Custom Frontend Migration - Hybrid Approach Phase 2 (Planned)
+
+*Next.js application with PostgreSQL database for production scale*
+
+**Strategic Rationale:**
+
+Notion is becoming a performance bottleneck:
+- Historical queries: 2-5 seconds (slow, no indexing)
+- 3 database writes: 6-10 seconds (3 sequential API calls, 3 req/sec rate limit)
+- No time-series optimization
+- No trend visualization support
+- 3 req/sec rate limit blocks concurrent users
+
+PostgreSQL (Supabase) solves these issues:
+- Historical queries: <500ms (SQL indexes + JOINs)
+- Database writes: <100ms (single transaction, 3 inserts)
+- Time-series queries with window functions
+- Native chart/graph support
+- Unlimited concurrent users
+
+**Performance Comparison:**
+
+| Operation | Notion | PostgreSQL | Improvement |
+|-----------|--------|------------|-------------|
+| Historical query (5 analyses) | 2-5 sec | <500ms | **5-10x faster** |
+| Database writes (3 operations) | 6-10 sec | <100ms | **60-100x faster** |
+| Compute deltas | Manual (app code) | Automatic (SQL) | Native support |
+| **Total database time** | **8-15 sec** | **<1 sec** | **10-15x faster** |
+| **Total analysis time** | **35-50 sec** | **18-25 sec** | **40-50% faster** |
+
+**Technology Stack:**
+
+- **Frontend:** Next.js 14 (App Router, Server Components)
+- **Styling:** Tailwind CSS + shadcn/ui components
+- **Database:** Supabase PostgreSQL (free tier → $25/month Pro)
+- **Auth:** Supabase Auth (built-in, email/password)
+- **Charts:** Recharts (trend visualizations)
+- **Backend:** Existing Vercel API (minimal changes)
+- **Rate Limiting:** Upstash Redis (existing)
+- **Hosting:** Vercel ($20/month Pro plan)
+
+**Core Features:**
+
+**Phase 2A: Frontend Application (20-25 hours)**
+
+- Authentication pages (login, signup, password reset)
+- Analyzer page (ticker input, real-time status, results display)
+- Historical analysis view (list of past analyses with trends)
+- Trend charts (score over time, Recharts integration)
+- Dashboard (portfolio overview, watchlist)
+- Responsive design (mobile-first)
+
+**Phase 2B: Database Migration (5-10 hours)**
+
+- Set up Supabase project
+- Design PostgreSQL schema (users, analyses, watchlists, etc.)
+- Modify `/api/analyze` to use PostgreSQL instead of Notion
+  - Replace Notion historical queries with SQL
+  - Replace 3 Notion writes with single transaction
+  - Keep scoring logic unchanged
+- Data migration from Notion to PostgreSQL (existing analyses)
+- Row-level security (RLS) policies
+
+**Phase 2C: Advanced Features (Future)**
+
+- Price alerts (notify when score changes)
+- Portfolio tracking (position sizing, P&L)
+- Backtesting (how accurate were past recommendations?)
+- Comparison tools (AAPL vs MSFT side-by-side)
+- Social features (share analyses, follow users)
+- Mobile app (React Native)
+
+**Database Schema (PostgreSQL):**
+
+```sql
+-- Users (managed by Supabase Auth)
+CREATE TABLE users (
+  id UUID PRIMARY KEY REFERENCES auth.users(id),
+  email TEXT UNIQUE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Analyses (replaces Notion Stock Analyses + Stock History)
+CREATE TABLE analyses (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id),
+  ticker TEXT NOT NULL,
+  analysis_date TIMESTAMP DEFAULT NOW(),
+
+  -- Scores (1.0-5.0 scale, updated from 0-100)
+  composite_score DECIMAL(3,2),
+  technical_score DECIMAL(3,2),
+  fundamental_score DECIMAL(3,2),
+  macro_score DECIMAL(3,2),
+  risk_score DECIMAL(3,2),
+  sentiment_score DECIMAL(3,2),
+  sector_score DECIMAL(3,2),
+
+  -- Recommendation
+  recommendation TEXT, -- 'Strong Buy', 'Buy', 'Hold', 'Sell', 'Strong Sell'
+  confidence DECIMAL(3,2),
+
+  -- Analysis content (LLM-generated)
+  analysis_text TEXT, -- Full 7-section analysis
+
+  -- Metadata
+  pattern TEXT,
+  data_quality_grade TEXT,
+
+  -- Historical context (computed via SQL window functions)
+  -- No need to store - computed on-the-fly with LAG/LEAD
+
+  -- Indexes for fast queries
+  INDEX idx_ticker (ticker),
+  INDEX idx_user_ticker (user_id, ticker),
+  INDEX idx_date (analysis_date DESC)
+);
+```
+
+**Cost Comparison:**
+
+| Service | Notion Approach | PostgreSQL Approach |
+|---------|-----------------|---------------------|
+| Vercel Pro | $20/month | $20/month |
+| FMP API | $29/month | $29/month |
+| LLM API (Gemini) | $40/month (3,000 analyses) | $40/month |
+| Notion | $0 (free tier) | - |
+| Supabase | - | $0-25/month |
+| Domain | - | $1/month |
+| **Total** | **$89/month** | **$90-115/month** |
+
+**Similar cost, much better performance and scalability.**
+
+**Timeline:** Month 2-3 after v1.0.2 deployment
+
+**Estimated Time:** 25-35 hours total
+
+**Completion Target:** December 2025 - January 2026
+
+---
+
+### v2.1: Enhanced Analysis Features
 
 *Add high-value features from v0.3 + insider trading*
 
@@ -142,11 +343,11 @@
   - Brave Search API for market intelligence
   - Market Context database
 
-**Timing:** Post-v1.0 beta validation, prioritized based on user feedback
+**Timing:** Post-v2.0 migration, prioritized based on user feedback
 
 **Estimated Time:** ~6-10 hours total
 
-### v2.0: Full Automation
+### v2.2: Full Automation
 
 *Autonomous portfolio monitoring with intelligent notifications*
 
@@ -205,25 +406,34 @@
 - **Platform:** Vercel serverless functions (TypeScript/Node.js)
 - **Financial Data:** Financial Modeling Prep API ($22-29/mo)
 - **Macro Data:** FRED API (free)
-- **Integration:** Notion API
+- **LLM:** Google Gemini Flash 2.5 ($0.013/analysis, 50% token reduction)
+- **Rate Limiting:** Upstash Redis (REST API)
+- **Integration:** Notion API (transitioning to PostgreSQL in v2.0)
 
-**Data Flow:**
+**Data Flow (v1.0.2):**
 
-1. User sets "Request Analysis" = true in Stock Analyses database
-2. Notion automation → POST to `/api/webhook` with ticker + page data
-3. Vercel function:
-   - Fetches technical + fundamental data from FMP
-   - Fetches macro indicators from FRED
-   - Calculates scores (Composite + Pattern)
-   - Writes metrics back to Notion page
-4. Notion AI generates 7-section analysis narrative
-5. User clicks "Send to History" → archive to Stock History database
+1. User visits `shalomormsby.com/stock-intelligence` (WordPress page)
+2. Enters ticker → clicks "Analyze Stock"
+3. HTML page → POST to `/api/analyze` with ticker + userId
+4. Vercel function:
+   - Checks rate limiting (Redis)
+   - Fetches technical + fundamental data (FMP + FRED)
+   - Queries Notion for historical analyses (5 most recent)
+   - Calculates scores + computes deltas/trends
+   - Calls Gemini Flash 2.5 for 7-section analysis
+   - Creates dated child analysis page in Notion
+   - Updates Stock Analyses database row
+   - Archives to Stock History database
+   - Returns `pageUrl` to new analysis page
+5. HTML page displays "View Results" link
+6. User clicks → opens Notion analysis page
 
-**Performance:**
+**Performance (v1.0.2):**
 
-- 3-5 seconds per analysis
-- 17-21 total API calls
-- 60-second function timeout
+- 18-25 seconds per analysis (target)
+- Database operations: 8-15 seconds (Notion bottleneck)
+- LLM generation: 10-20 seconds
+- 300-second function timeout (Vercel Pro required)
 
 ---
 

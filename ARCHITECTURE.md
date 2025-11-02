@@ -1,8 +1,8 @@
 # Stock Intelligence Architecture
 
-**Version:** 1.0.0-beta.1
-**Last Updated:** October 31, 2025
-**Status:** Production (Vercel deployment)
+**Version:** 1.0.2-alpha (Hybrid Approach Phase 1)
+**Last Updated:** November 1, 2025
+**Status:** In Development (v1.0.2 HTML Analyzer Page)
 
 ---
 
@@ -25,17 +25,19 @@
 
 ## System Overview
 
-Stock Intelligence is a **serverless backend system** that provides automated stock analysis using technical and fundamental data. It's designed as a personal decision-support tool integrated with Notion.
+Stock Intelligence is a **serverless backend system** that provides automated stock analysis using technical and fundamental data, with LLM-generated analysis narratives. It's designed as a personal decision-support tool currently using Notion for storage (transitioning to PostgreSQL in v2.0).
 
 **Core Capabilities:**
 - Real-time stock analysis (technical + fundamental indicators)
-- Composite scoring algorithm (0-100 scale)
+- Composite scoring algorithm (1.0-5.0 scale, 6 categories)
 - Pattern matching and trend detection
+- LLM-generated 7-section analysis (Google Gemini Flash 2.5)
+- Historical context and delta tracking
 - Rate-limited API access (10 analyses per user per day)
 - Session-based bypass code system
-- Notion database integration
+- Notion database integration (v1.0.2) → PostgreSQL migration (v2.0)
 
-**Design Philosophy:** *Impeccable but simple.* Built for daily stock analyses ahead of earnings, not enterprise-scale deployment.
+**Design Philosophy:** *Impeccable but simple.* Built for daily stock analyses ahead of earnings, not enterprise-scale deployment. Hybrid approach: start with Notion (weeks 1-2), migrate to custom frontend + PostgreSQL (months 2-3).
 
 ---
 
@@ -52,8 +54,18 @@ Stock Intelligence is a **serverless backend system** that provides automated st
 - **FRED API** - Macroeconomic indicators (yield curve, VIX, etc.)
 - **Upstash Redis** - Distributed state for rate limiting
 
+### LLM Integration
+- **Google Gemini Flash 2.5** (Primary) - Analysis generation, $0.013 per analysis, 50% token reduction
+- **LLM Abstraction Layer** - Provider-agnostic interface supporting:
+  - Google Gemini (Flash 2.5, Flash 1.5)
+  - OpenAI (GPT-4 Turbo, GPT-3.5 Turbo)
+  - Anthropic (Claude 3.5 Sonnet, Claude 3 Haiku)
+  - Configurable via `LLM_PROVIDER` environment variable
+  - Easy provider switching for cost/performance optimization
+
 ### Integration Layer
-- **Notion API** - Database read/write operations
+- **Notion API** - Database read/write operations (v1.0.2)
+- **PostgreSQL (Supabase)** - Future database (v2.0 migration)
 - **REST APIs** - All external communication via HTTP
 
 ### Development Tools
@@ -64,62 +76,653 @@ Stock Intelligence is a **serverless backend system** that provides automated st
 
 ---
 
-## Architecture Diagram
+## Architecture Diagram (v1.0.2)
+
+**Current architecture with HTML Analyzer Page and LLM integration**
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Notion Workspace                         │
-│  ┌──────────────────┐         ┌─────────────────────────────┐  │
-│  │ Stock Analyses   │────────▶│ Notion Automation           │  │
-│  │ Database         │         │ (Webhook Trigger)           │  │
-│  │                  │         └──────────────┬──────────────┘  │
-│  │ - Ticker         │                        │                  │
-│  │ - Request Flag   │                        │ POST             │
-│  │ - Metrics        │                        │ /api/webhook     │
-│  └──────────────────┘                        │                  │
-└──────────────────────────────────────────────┼──────────────────┘
-                                               │
-                                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      Vercel Serverless                           │
+┌──────────────────────────────────────────────────────────────────┐
+│                      WordPress (shalomormsby.com)                 │
+│                                                                   │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │             /stock-intelligence (HTML Page)                 │ │
+│  │  ┌──────────────────────────────────────────────────────┐  │ │
+│  │  │ Password-Protected Analyzer UI                        │  │ │
+│  │  │ • Ticker Input Field                                  │  │ │
+│  │  │ • "Analyze Stock" Button                             │  │ │
+│  │  │ • Real-time Status Display                           │  │ │
+│  │  │ • Usage Counter (X/10 today)                         │  │ │
+│  │  │ • "View Results" Link (on completion)                │  │ │
+│  │  │                                                       │  │ │
+│  │  │ Tailwind CSS + Vanilla JS (no build step)            │  │ │
+│  │  └───────────────────────┬───────────────────────────────┘  │ │
+│  └────────────────────────────┼─────────────────────────────────┘ │
+└─────────────────────────────┼─────────────────────────────────────┘
+                              │
+                              │ POST /api/analyze
+                              │ { ticker, userId }
+                              ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                       Vercel Serverless (v1.0.2)                  │
 │                                                                   │
 │  ┌────────────────────────────────────────────────────────────┐ │
 │  │                      API Endpoints                          │ │
 │  │  ┌──────────┐  ┌─────────┐  ┌────────┐  ┌────────────┐   │ │
 │  │  │ /analyze │  │ /webhook│  │ /usage │  │  /bypass   │   │ │
-│  │  └────┬─────┘  └────┬────┘  └───┬────┘  └─────┬──────┘   │ │
-│  │       │             │            │             │           │ │
-│  └───────┼─────────────┼────────────┼─────────────┼───────────┘ │
-│          │             │            │             │              │
-│  ┌───────▼─────────────▼────────────▼─────────────▼───────────┐ │
+│  │  │  (NEW)   │  │ /health │  │        │  │            │   │ │
+│  │  └────┬─────┘  └─────────┘  └───┬────┘  └─────┬──────┘   │ │
+│  │       │                          │             │           │ │
+│  └───────┼──────────────────────────┼─────────────┼───────────┘ │
+│          │                          │             │              │
+│  ┌───────▼──────────────────────────▼─────────────▼───────────┐ │
 │  │                    Core Libraries                           │ │
 │  │                                                              │ │
 │  │  ┌──────────────┐  ┌──────────────┐  ┌─────────────────┐  │ │
 │  │  │ Rate Limiter │  │ Scoring      │  │ Notion Client   │  │ │
-│  │  │ - Check      │  │ - Technical  │  │ - Read Pages    │  │ │
-│  │  │ - Increment  │  │ - Fundamental│  │ - Write Metrics │  │ │
-│  │  │ - Bypass     │  │ - Composite  │  │ - AI Prompts    │  │ │
+│  │  │ - Admin      │  │ - 6 Scores   │  │ - Read History  │  │ │
+│  │  │   Bypass     │  │ - Technical  │  │ - Write Pages   │  │ │
+│  │  │ - Session    │  │ - Fundamental│  │ - Child Pages   │  │ │
+│  │  │   Check      │  │ - Macro/Risk │  │ - Archive       │  │ │
 │  │  └──────┬───────┘  └──────┬───────┘  └────────┬────────┘  │ │
 │  │         │                 │                    │           │ │
 │  │  ┌──────▼───────┐  ┌──────▼───────┐  ┌────────▼────────┐  │ │
-│  │  │ FMP Client   │  │ FRED Client  │  │ Error Handler  │  │ │
-│  │  │ - Quotes     │  │ - Macro Data │  │ - Logging      │  │ │
-│  │  │ - Financials │  │ - Indicators │  │ - Validation   │  │ │
-│  │  └──────────────┘  └──────────────┘  └─────────────────┘  │ │
-│  └──────────────────────────────────────────────────────────┘  │
-└───────────────────────────────┬─────────────────────────────────┘
-                                │
-        ┌───────────────────────┼───────────────────────┐
-        │                       │                       │
-        ▼                       ▼                       ▼
-┌──────────────┐        ┌──────────────┐      ┌──────────────┐
-│   Upstash    │        │     FMP      │      │     FRED     │
-│    Redis     │        │  (Financial  │      │  (Macro      │
-│              │        │     Data)    │      │  Economics)  │
-│ - Rate Limit │        │              │      │              │
-│ - Sessions   │        │ $22-29/mo    │      │    Free      │
-│   Free Tier  │        └──────────────┘      └──────────────┘
-└──────────────┘
+│  │  │ LLM Provider │  │ FMP Client   │  │ FRED Client    │  │ │
+│  │  │ (NEW)        │  │ - Quotes     │  │ - Macro Data   │  │ │
+│  │  │ - Gemini     │  │ - Financials │  │ - Indicators   │  │ │
+│  │  │ - OpenAI     │  │ - Technicals │  │                │  │ │
+│  │  │ - Anthropic  │  └──────────────┘  └─────────────────┘  │ │
+│  │  │ - Abstraction│                                         │ │
+│  │  └──────┬───────┘                                         │ │
+│  │         │                                                  │ │
+│  └─────────┼──────────────────────────────────────────────────┘ │
+└────────────┼──────────────────────────────────────────────────────┘
+             │
+    ┌────────┼────────┬──────────────┬──────────────┬────────────┐
+    │        │        │              │              │            │
+    ▼        ▼        ▼              ▼              ▼            ▼
+┌─────────┐ ┌────────┐ ┌──────────┐ ┌────────┐ ┌──────────┐ ┌──────────┐
+│ Upstash │ │ Google │ │   FMP    │ │  FRED  │ │  Notion  │ │  Notion  │
+│  Redis  │ │ Gemini │ │(Financial│ │ (Macro │ │ Analyses │ │ History  │
+│         │ │        │ │   Data)  │ │ Econ)  │ │    DB    │ │    DB    │
+│ Rate    │ │ Flash  │ │          │ │        │ │          │ │          │
+│ Limit + │ │  2.5   │ │ $22-29/  │ │  Free  │ │ Current  │ │ Archive  │
+│ Bypass  │ │        │ │  month   │ │        │ │ Analysis │ │Time-     │
+│Sessions │ │ $0.013/│ │          │ │        │ │          │ │Series    │
+│         │ │analysis│ │          │ │        │ │          │ │          │
+│  Free   │ │(50% ↓) │ │          │ │        │ │          │ │          │
+└─────────┘ └────────┘ └──────────┘ └────────┘ └──────────┘ └──────────┘
+```
+
+**v1.0.2 Workflow (HTML Page → Vercel → Notion):**
+1. User visits WordPress page → enters ticker → clicks "Analyze"
+2. HTML page → POST /api/analyze (ticker, userId)
+3. Vercel checks rate limit (admin bypass or 10/day)
+4. Fetches market data (FMP + FRED in parallel)
+5. Calculates 6 category scores + composite
+6. Queries Notion for historical analyses (5 most recent)
+7. Computes deltas and trends
+8. Calls Gemini Flash 2.5 for 7-section analysis (~10-20 sec)
+9. Writes to 3 Notion locations:
+   - Stock Analyses DB (main page update)
+   - Child analysis page (dated, e.g., "AAPL Analysis - Nov 1, 2025")
+   - Stock History DB (archive entry)
+10. Returns pageUrl → HTML displays "View Results" link
+11. User clicks → opens Notion analysis page
+
+**Performance:** 23-42 seconds (Notion bottleneck: historical queries + 3 writes)
+**Future:** v2.0 migration to PostgreSQL → 18-25 seconds (10x faster DB ops)
+
+---
+
+## Future Architecture (v2.0)
+
+**Next.js Frontend + PostgreSQL Database for production scale**
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                  Next.js 14 App (Vercel Hosted)                   │
+│                                                                   │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │  Authentication (Supabase Auth)                            │ │
+│  │  • Login / Signup / Password Reset                         │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │  Analyzer Page                                             │ │
+│  │  • Ticker Input → Real-time Status → Results Display       │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │  Historical Analysis View                                  │ │
+│  │  • List of Past Analyses (sortable, filterable)            │ │
+│  │  • Trend Charts (Recharts - score over time)              │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │  Dashboard                                                 │ │
+│  │  • Portfolio Overview                                      │ │
+│  │  • Watchlist (track multiple tickers)                      │ │
+│  │  • Usage Stats                                             │ │
+│  └──────────────────────┬─────────────────────────────────────┘ │
+└─────────────────────────┼─────────────────────────────────────────┘
+                          │
+                          │ Vercel API (same backend, minimal changes)
+                          ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                  Vercel API (v2.0 - PostgreSQL)                   │
+│                                                                   │
+│  Replace Notion queries with SQL:                                │
+│  • Historical query: <500ms (vs 2-5 sec with Notion)              │
+│  • Database writes: <100ms (vs 6-10 sec with Notion)              │
+│  • Delta computation: Automatic with SQL window functions         │
+│                                                                   │
+│  Same: Rate limiting, Scoring, LLM generation, FMP/FRED clients   │
+└────────────────────────────┬──────────────────────────────────────┘
+                             │
+                   ┌─────────┼─────────┬───────────┐
+                   ▼         ▼         ▼           ▼
+            ┌───────────┐ ┌────────┐ ┌──────┐ ┌────────┐
+            │ Supabase  │ │ Redis  │ │ LLM  │ │FMP/FRED│
+            │PostgreSQL │ │(Rate   │ │      │ │        │
+            │           │ │Limit)  │ │      │ │        │
+            │ • analyses│ │        │ │      │ │        │
+            │ • users   │ │        │ │      │ │        │
+            │ • watch-  │ │        │ │      │ │        │
+            │   lists   │ │        │ │      │ │        │
+            │           │ │        │ │      │ │        │
+            │ $0-25/mo  │ │  Free  │ │$39/mo│ │$29/mo  │
+            └───────────┘ └────────┘ └──────┘ └────────┘
+```
+
+**v2.0 Performance:** 18-25 seconds (60-100x faster DB ops)
+**v2.0 Features:** Trend charts, watchlists, portfolio tracking, mobile app
+**v2.0 Timeline:** December 2025 - January 2026 (25-35 hours)
+
+---
+
+## Detailed System Flow (v1.0.2)
+
+**Complete end-to-end flow for HTML Analyzer Page with LLM-generated analysis**
+
+### Phase 1: User Authentication & Input
+
+```
+┌─────────────────────────────────────────┐
+│ User visits shalomormsby.com/           │
+│      stock-intelligence                 │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────┐
+│ WordPress Password Gate                 │
+│ (Enter password once per session)       │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────┐
+│ HTML Analyzer Page Loads                │
+│ • Ticker input field                    │
+│ • "Analyze Stock" button                │
+│ • userId hardcoded: 90089dd2...         │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────┐
+│ User enters ticker (e.g., "AAPL")       │
+│ and clicks "Analyze Stock"              │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────┐
+│ UI State → "Analyzing..."               │
+│ (spinner + status message)              │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+```
+
+### Phase 2: Vercel Backend Processing
+
+```
+┌─────────────────────────────────────────┐
+│ POST /api/analyze                       │
+│ {                                       │
+│   ticker: "AAPL",                       │
+│   userId: "user://90089dd2..."          │
+│ }                                       │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────┐
+│ 1. Check Rate Limiting                  │
+│ • Query Redis for user's daily count    │
+│ • Admin bypass: userId == env.ADMIN_ID? │
+│ • If limit exceeded → return 429 error  │
+│ Time: <500ms                            │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────┐
+│ 2. Fetch Current Market Data            │
+│ (Parallel API calls)                    │
+│                                         │
+│ FMP API:                                │
+│ • Daily price data (OHLC)               │
+│ • Technical indicators (SMA, RSI, MACD) │
+│ • Fundamental data (P/E, EPS, etc.)     │
+│                                         │
+│ FRED API:                               │
+│ • Macro indicators (rates, GDP, etc.)   │
+│                                         │
+│ Time: ~3-5 seconds                      │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────┐
+│ 3. Calculate Scores                     │
+│ • Technical Score (1.0-5.0)             │
+│ • Fundamental Score (1.0-5.0)           │
+│ • Macro Score (1.0-5.0)                 │
+│ • Risk Score (1.0-5.0)                  │
+│ • Sentiment Score (1.0-5.0)             │
+│ • Sector Score (1.0-5.0)                │
+│ • Composite Score (weighted average)    │
+│ • Pattern Analysis                      │
+│ • Recommendation (Buy/Hold/Sell)        │
+│                                         │
+│ Time: ~1 second                         │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+```
+
+### Phase 3: Historical Context Retrieval
+
+```
+┌─────────────────────────────────────────┐
+│ 4. Query Notion for Historical Data     │
+│ (Parallel queries)                      │
+└──────────────────┬──────────────────────┘
+                   │
+          ┌────────┴────────┐
+          │                 │
+          ▼                 ▼
+┌──────────────────┐  ┌──────────────────┐
+│ Query Stock      │  │ Query Stock      │
+│ Analyses DB      │  │ History DB       │
+│                  │  │                  │
+│ Filter:          │  │ Filter:          │
+│ Ticker = "AAPL"  │  │ Ticker = "AAPL"  │
+│                  │  │ Sort: Date DESC  │
+│ Returns:         │  │ Limit: 5         │
+│ • Existing page? │  │                  │
+│ • Previous scores│  │ Returns:         │
+│ • Previous rec   │  │ • Last 5 entries │
+│ • Last analysis  │  │ • With dates     │
+│   date           │  │ • With scores    │
+└────────┬─────────┘  └────────┬─────────┘
+         │                     │
+         └──────────┬──────────┘
+                    │
+                    ▼
+┌─────────────────────────────────────────┐
+│ 5. Compute Deltas & Trends              │
+│                                         │
+│ IF previous analysis exists:            │
+│ • Score changes: 3.8 → 4.2 (+0.4)       │
+│ • Recommendation change: Hold → Buy     │
+│ • Days since last analysis: 2 days      │
+│                                         │
+│ IF historical data exists:              │
+│ • Trend direction: Improving ↗          │
+│ • Score range: 3.5-4.2 (past 30 days)   │
+│ • Average: 3.8                          │
+│ • Volatility: Low/Medium/High           │
+│                                         │
+│ Time: ~2-5 seconds (Notion bottleneck)  │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+```
+
+### Phase 4: AI Analysis Generation
+
+```
+┌─────────────────────────────────────────┐
+│ 6. Build Enriched Prompt for LLM        │
+│                                         │
+│ Context includes:                       │
+│ • Current metrics (all scores)          │
+│ • Previous analysis (if exists):        │
+│   - Date, scores, recommendation        │
+│   - Key metrics that changed            │
+│ • Historical trend (past 5 analyses):   │
+│   - Dates, scores, recommendations      │
+│   - Trend direction                     │
+│ • Computed deltas and insights          │
+│                                         │
+│ Prompt structure:                       │
+│ "You are analyzing AAPL on Nov 1, 2025. │
+│                                         │
+│ Current metrics: [detailed data]        │
+│                                         │
+│ Previous analysis (Oct 30, 2025):       │
+│ - Composite: 3.8 → 4.2 (+0.4)           │
+│ - Recommendation: Hold → Buy            │
+│ - Key changes: RSI 45→62, MACD crossover│
+│                                         │
+│ Historical trend (5 analyses):          │
+│ - Steady improvement over 30 days       │
+│ - Consistent Hold → now upgraded to Buy │
+│                                         │
+│ Generate 7-section analysis:            │
+│ 1. Data Foundation & Quality            │
+│ 2. Dual-Lens (Value × Momentum)         │
+│ 3. Market Intelligence & Catalysts      │
+│ 4. Strategic Trade Plan                 │
+│ 5. Directional Outlook                  │
+│ 6. Portfolio Integration                │
+│ 7. Investment Recommendation            │
+│                                         │
+│ Highlight changes, trends, and          │
+│ what triggered the upgrade."            │
+│                                         │
+│ NOTE: Prompt optimized for 50% token    │
+│ reduction (information-dense format)    │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────┐
+│ 7. Call Google Gemini Flash 2.5 API     │
+│                                         │
+│ Input: ~1,500-2,500 tokens (50% less)   │
+│ Output: ~1,250 tokens (50% less)        │
+│                                         │
+│ Receives:                               │
+│ • Complete 7-section analysis           │
+│ • Formatted in Notion markdown          │
+│ • Includes H3 headings, bullets         │
+│ • Highlights deltas and trends          │
+│                                         │
+│ Time: ~10-20 seconds                    │
+│ Cost: ~$0.013 per analysis              │
+│ (vs $0.026 with OpenAI GPT-4)           │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+```
+
+### Phase 5: Notion Database Writes
+
+```
+┌─────────────────────────────────────────┐
+│ 8. Write to Stock Analyses Database     │
+│                                         │
+│ IF page exists (ticker found):          │
+│ • Update existing page properties       │
+│ • Update page content with new analysis │
+│                                         │
+│ IF page doesn't exist:                  │
+│ • Create new database row/page          │
+│ • Set all properties                    │
+│ • Set page content                      │
+│                                         │
+│ Properties written:                     │
+│ • All scores (Composite, Technical, etc)│
+│ • Recommendation (Buy/Hold/Sell)        │
+│ • Confidence level                      │
+│ • Data quality grade                    │
+│ • Analysis Date (with timestamp)        │
+│ • Pattern scores & signals              │
+│ • All technical metrics                 │
+│ • All fundamental metrics               │
+│                                         │
+│ Content written:                        │
+│ • Full 7-section analysis text          │
+│                                         │
+│ Returns: pageUrl of Stock Analyses page │
+│                                         │
+│ Time: ~2-3 seconds                      │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────┐
+│ 9. Create Dated Child Analysis Page     │
+│                                         │
+│ Structure:                              │
+│ Stock Analyses (Database)               │
+│ └─ AAPL (row/page from step 8)          │
+│    ├─ AAPL Analysis - Nov 1, 2025 ← NEW │
+│    ├─ AAPL Analysis - Oct 30, 2025      │
+│    └─ ...                               │
+│                                         │
+│ Page properties:                        │
+│ • Title: "{Ticker} Analysis - {Date}"   │
+│ • Parent: Stock Analyses AAPL page      │
+│                                         │
+│ Page content:                           │
+│ • Copy of full 7-section analysis       │
+│ • All metrics as properties             │
+│ • Timestamp                             │
+│                                         │
+│ Returns: childPageUrl                   │
+│                                         │
+│ Time: ~2 seconds                        │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────┐
+│ 10. Archive to Stock History Database   │
+│                                         │
+│ Create new entry:                       │
+│ • Name: "AAPL - Nov 1, 2025 4:30 PM"    │
+│ • Copy all metrics from analysis        │
+│ • Copy full analysis content            │
+│ • Set Content Status: "New"             │
+│ • Link to Stock Analyses page           │
+│                                         │
+│ Purpose:                                │
+│ • Time-series tracking                  │
+│ • Trend analysis data source            │
+│ • Historical reference                  │
+│                                         │
+│ Time: ~2 seconds                        │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────┐
+│ 11. Increment Rate Limit Counter        │
+│ • Update Redis: user's daily count + 1  │
+│ Time: <500ms                            │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+```
+
+### Phase 6: Response & User Notification
+
+```
+┌─────────────────────────────────────────┐
+│ 12. Return Success Response             │
+│                                         │
+│ {                                       │
+│   success: true,                        │
+│   ticker: "AAPL",                       │
+│   pageUrl: "[child page URL]",          │
+│   stockAnalysesUrl: "[main page URL]",  │
+│   analysisDate: "2025-11-01T16:30:00Z", │
+│   compositeScore: 4.2,                  │
+│   recommendation: "Buy",                │
+│   previousScore: 3.8,                   │
+│   scoreChange: +0.4,                    │
+│   rateLimit: {                          │
+│     used: 5,                            │
+│     limit: 10,                          │
+│     remaining: 5                        │
+│   }                                     │
+│ }                                       │
+│                                         │
+│ Total time: ~18-25 seconds (target)     │
+│ Actual (with Notion): ~35-50 seconds    │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────┐
+│ 13. Web Page Updates to Success State   │
+│                                         │
+│ UI displays:                            │
+│ • Button: "✓ Analysis Complete" (green) │
+│ • Status: "Analysis created in Notion"  │
+│ • Score badge: "4.2/5.0 - Buy (+0.4)"   │
+│ • Link: "View Results →"                │
+│ • Secondary link: "Copy Link" button    │
+│ • Usage counter: "5/10 analyses today"  │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────┐
+│ 14. User Clicks "View Results →"        │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+```
+
+### Phase 7: User Reviews Analysis in Notion
+
+```
+┌─────────────────────────────────────────┐
+│ Notion Page Opens: AAPL Analysis        │
+│                  Nov 1, 2025            │
+│                                         │
+│ User sees:                              │
+│ • All metric properties in clean layout │
+│ • Composite Score: 4.2/5.0              │
+│ • Recommendation: Buy                   │
+│ • Full 7-section analysis content:      │
+│   1. Data Foundation & Quality          │
+│      - Shows data completeness          │
+│      - Previous: 3.8, Current: 4.2      │
+│   2. Dual-Lens Analysis                 │
+│      - Value vs Momentum perspective    │
+│   3. Market Intelligence                │
+│      - Recent news, catalysts           │
+│   4. Strategic Trade Plan               │
+│      - Entry/exit levels                │
+│   5. Directional Outlook                │
+│      - Trend improved over 30 days      │
+│   6. Portfolio Integration              │
+│      - Position sizing guidance         │
+│   7. Investment Recommendation          │
+│      - Upgraded from Hold to Buy        │
+│      - Rationale with delta context     │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────┐
+│ User can also navigate to:              │
+│                                         │
+│ • Parent AAPL page (database row)       │
+│   - See all historical child analyses   │
+│   - Quick metrics reference             │
+│                                         │
+│ • Stock History database                │
+│   - Time-series view of all analyses    │
+│   - Trend charts (future feature)       │
+│                                         │
+│ • Stock Analyses database               │
+│   - Compare across all tickers          │
+│   - Portfolio overview                  │
+└─────────────────────────────────────────┘
+```
+
+### Error Scenarios
+
+```
+┌─────────────────────────────────────────┐
+│ Error: Rate Limit Exceeded              │
+│                                         │
+│ Response:                               │
+│ {                                       │
+│   success: false,                       │
+│   error: {                              │
+│     code: "RATE_LIMIT_EXCEEDED",        │
+│     message: "Rate limit exceeded"      │
+│   },                                    │
+│   rateLimit: {                          │
+│     used: 10,                           │
+│     limit: 10,                          │
+│     remaining: 0,                       │
+│     resetTime: "2025-11-02T07:00:00Z"   │
+│   }                                     │
+│ }                                       │
+│                                         │
+│ Web page displays:                      │
+│ "Daily quota of 10 stock analyses       │
+│  reached. Resets at midnight Pacific    │
+│  Time. Upgrade to paid plan for         │
+│  unlimited analyses."                   │
+└─────────────────────────────────────────┘
+
+┌─────────────────────────────────────────┐
+│ Error: API Timeout / Other Error        │
+│                                         │
+│ Response:                               │
+│ {                                       │
+│   success: false,                       │
+│   error: {                              │
+│     code: "ANALYSIS_FAILED",            │
+│     message: "[specific error message]" │
+│   }                                     │
+│ }                                       │
+│                                         │
+│ Web page displays:                      │
+│ "Error: [message]. Please try again."   │
+│ Button re-enabled for retry             │
+└─────────────────────────────────────────┘
+```
+
+### System Performance Summary
+
+```
+═══════════════════════════════════════════════════════════
+Total Time Breakdown (v1.0.2 with Notion):
+═══════════════════════════════════════════════════════════
+• Rate limit check: <500ms
+• Fetch market data: 3-5 sec
+• Calculate scores: 1 sec
+• Query historical data (Notion): 2-5 sec ← BOTTLENECK
+• Compute deltas: <1 sec
+• LLM analysis generation: 10-20 sec
+• Notion writes (3 operations): 6-10 sec ← BOTTLENECK
+• Rate limit update: <500ms
+─────────────────────────────
+TOTAL: 23-42 seconds (realistic with Notion)
+TARGET: 18-25 seconds (achievable with PostgreSQL in v2.0)
+
+═══════════════════════════════════════════════════════════
+Cost Per Analysis:
+═══════════════════════════════════════════════════════════
+• FMP API calls: $0.001
+• Google Gemini Flash 2.5: $0.013 (50% token reduction)
+• Vercel compute: ~$0.001
+─────────────────────────────
+TOTAL: ~$0.015 (~1.5¢) per analysis
+(vs $0.028 with OpenAI GPT-4 - 47% savings)
+
+═══════════════════════════════════════════════════════════
+Monthly Costs (10 beta users, 100 analyses/day):
+═══════════════════════════════════════════════════════════
+• Vercel Pro: $20
+• FMP API: $29
+• Gemini API: $39 (3,000 analyses/month)
+• Upstash Redis: $0 (free tier)
+─────────────────────────────
+TOTAL: $88/month (v1.0.2 with Notion)
+
+Future (v2.0 with PostgreSQL):
+• Vercel Pro: $20
+• FMP API: $29
+• Gemini API: $39
+• Supabase: $0-25
+─────────────────────────────
+TOTAL: $88-113/month
 ```
 
 ---
