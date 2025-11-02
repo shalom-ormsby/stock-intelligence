@@ -162,6 +162,109 @@
 
 ---
 
+### v1.0.2c: API Management Dashboard (In Progress)
+
+*Centralized API monitoring and management for operational visibility*
+
+**Objective:** Build a simple admin panel to monitor 6 API integrations during development and beta testing.
+
+**Context:**
+
+- Working with 6 different APIs (FMP, FRED, Gemini, Claude, OpenAI, Notion)
+- LLM abstraction layer adds provider-switching complexity
+- Need operational visibility to debug issues and track costs
+- Prevents expensive surprises and speeds up troubleshooting
+
+**Scope: MVP (2-3 hours)**
+
+Build a simple admin panel embedded in the existing HTML analyzer page at `/analyze?admin=true`
+
+**Core Features:**
+
+1. **API Status Indicators**
+   - 🟢 Green (Active): API key valid, recent successful call
+   - 🔴 Red (Error): API key invalid, rate limited, or failing
+   - ⚪ Gray (Inactive): API key not configured
+
+2. **Quick Info Per API**
+   - Status: Active/Error/Inactive
+   - Calls Today: e.g., "247/300" (or tokens for LLMs)
+   - Last Success: e.g., "2 min ago"
+   - Cost Today: e.g., "$0.74"
+   - Model (for LLMs): e.g., "gemini-2.5-flash"
+
+3. **Test Buttons**
+   - [Test] button for each API
+   - Validates API key without consuming quota (when possible)
+   - Shows latency for each test
+
+4. **Quick Links**
+   - [Docs] button linking to provider dashboard:
+     - FMP: https://financialmodelingprep.com/developer/docs
+     - Google AI Studio: https://aistudio.google.com
+     - Vercel Env Vars: https://vercel.com/settings/environment-variables
+
+5. **Daily Cost Summary**
+   ```
+   Daily Cost Summary:
+   • FMP: $0.74 (247 calls)
+   • Gemini: $0.58 (22 analyses)
+   • FRED: $0.00 (free)
+   • Notion: $0.00 (free)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Total Today: $1.32
+   Monthly Projection: $39.60
+   ```
+
+6. **Recent Errors (Last 24h)**
+   - Timestamp
+   - API name
+   - Error message
+
+**APIs to Monitor:**
+
+1. FMP API (11 calls/analysis)
+2. FRED API (6 calls/analysis)
+3. Google Gemini API (1 call/analysis)
+4. Anthropic Claude API (optional fallback)
+5. OpenAI API (optional fallback)
+6. Notion API (8-10 calls/analysis)
+
+**Implementation:**
+
+- ⏳ Create `/api/api-status.ts` endpoint (1 hr)
+  - Check each API key exists in env vars
+  - Attempt lightweight health check per API
+  - Calculate daily costs based on known pricing
+  - Return JSON with status for each API
+- ⏳ Modify `public/analyze.html` (1 hr)
+  - Add admin section (show/hide with `?admin=true`)
+  - Use Tailwind CDN for styling
+  - Auto-refresh every 30 seconds
+- ⏳ Testing + polish (30 min)
+
+**Success Criteria:**
+
+- Admin can see status of all 6 APIs at a glance
+- Test buttons validate API keys work
+- Daily cost tracking helps avoid budget surprises
+- Recent errors surface issues quickly
+- Takes <5 seconds to diagnose API problems
+
+**Future Enhancements (v2.0):**
+
+- Full Next.js admin dashboard with charts
+- Historical usage trends (sparkline graphs)
+- Email/Slack alerts for failures
+- Cost threshold warnings
+- Export usage reports (CSV)
+
+**Estimated Time:** 2-3 hours
+
+**Completion Target:** November 2, 2025
+
+---
+
 ### v1.0.3: Infrastructure Upgrade (Deferred)
 
 *Vercel Pro upgrade for timeout resolution*
