@@ -9,10 +9,22 @@
     },
     "api/health.ts": {
       "maxDuration": 10
+    },
+    "api/page/analyze.ts": {
+      "maxDuration": 10
     }
   },
   "buildCommand": "npm run type-check",
-  "outputDirectory": ".",
+  "rewrites": [
+    {
+      "source": "/analyze.html",
+      "destination": "/api/page/analyze"
+    },
+    {
+      "source": "/analyze",
+      "destination": "/api/page/analyze"
+    }
+  ],
   "headers": [
     {
       "source": "/api/(.*)",
