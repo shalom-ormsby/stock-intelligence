@@ -1124,47 +1124,56 @@ export class NotionClient {
    * Write LLM-generated analysis content to a Notion page
    * @param pageId - ID of the Notion page to update
    * @param content - Markdown-formatted analysis content
+   * @param mode - 'replace' (default) deletes existing content, 'append' keeps existing content
    *
-   * NOTE: This method REPLACES all existing content on the page.
-   * It first deletes all child blocks, then writes the new content.
+   * NOTE: Use 'replace' mode for Stock Analyses pages (main database row)
+   *       Use 'append' mode for Stock History pages (preserve full history)
    */
-  async writeAnalysisContent(pageId: string, content: string): Promise<void> {
+  async writeAnalysisContent(
+    pageId: string,
+    content: string,
+    mode: 'replace' | 'append' = 'replace'
+  ): Promise<void> {
     try {
-      // Step 1: Delete all existing child blocks (to replace, not append)
-      console.log(`[Notion] Deleting existing content from page ${pageId}...`);
+      // Step 1: Delete all existing child blocks (only if mode is 'replace')
+      if (mode === 'replace') {
+        console.log(`[Notion] Deleting existing content from page ${pageId}...`);
 
-      let hasMore = true;
-      let cursor: string | undefined = undefined;
-      let deletedCount = 0;
+        let hasMore = true;
+        let cursor: string | undefined = undefined;
+        let deletedCount = 0;
 
-      while (hasMore) {
-        // List child blocks (paginated, 100 per request)
-        const response = await this.client.blocks.children.list({
-          block_id: pageId,
-          start_cursor: cursor,
-          page_size: 100,
-        });
+        while (hasMore) {
+          // List child blocks (paginated, 100 per request)
+          const response = await this.client.blocks.children.list({
+            block_id: pageId,
+            start_cursor: cursor,
+            page_size: 100,
+          });
 
-        // Delete each block
-        for (const block of response.results) {
-          if ('id' in block) {
-            try {
-              await this.client.blocks.delete({
-                block_id: block.id,
-              });
-              deletedCount++;
-            } catch (deleteError: any) {
-              // Ignore errors for blocks that can't be deleted (e.g., dividers)
-              console.warn(`[Notion] Could not delete block ${block.id}:`, deleteError.message);
+          // Delete each block
+          for (const block of response.results) {
+            if ('id' in block) {
+              try {
+                await this.client.blocks.delete({
+                  block_id: block.id,
+                });
+                deletedCount++;
+              } catch (deleteError: any) {
+                // Ignore errors for blocks that can't be deleted (e.g., dividers)
+                console.warn(`[Notion] Could not delete block ${block.id}:`, deleteError.message);
+              }
             }
           }
+
+          hasMore = response.has_more;
+          cursor = response.next_cursor || undefined;
         }
 
-        hasMore = response.has_more;
-        cursor = response.next_cursor || undefined;
+        console.log(`[Notion] Deleted ${deletedCount} existing blocks from page ${pageId}`);
+      } else {
+        console.log(`[Notion] Appending content to page ${pageId} (mode: ${mode})...`);
       }
-
-      console.log(`[Notion] Deleted ${deletedCount} existing blocks from page ${pageId}`);
 
       // Step 2: Convert markdown to Notion blocks
       const blocks = this.markdownToBlocks(content);
@@ -1180,7 +1189,8 @@ export class NotionClient {
         });
       }
 
-      console.log(`[Notion] Written ${blocks.length} new blocks to page ${pageId}`);
+      const action = mode === 'replace' ? 'Written' : 'Appended';
+      console.log(`[Notion] ${action} ${blocks.length} ${mode === 'append' ? 'new ' : ''}blocks to page ${pageId}`);
     } catch (error: any) {
       console.error(`[Notion] Failed to write content to page ${pageId}:`, error.message);
       throw error;

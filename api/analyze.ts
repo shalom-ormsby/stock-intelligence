@@ -497,8 +497,8 @@ export default async function handler(
       notionCalls += 3; // read + create + update
 
       if (archived && archivedPageId) {
-        // Write LLM content to history page
-        await notionClient.writeAnalysisContent(archivedPageId, llmResult.content);
+        // Write LLM content to history page (APPEND mode to preserve full history)
+        await notionClient.writeAnalysisContent(archivedPageId, llmResult.content, 'append');
         notionCalls += 1;
         console.log(`✅ Archived to Stock History: ${archivedPageId}`);
       } else {
