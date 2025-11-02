@@ -495,11 +495,16 @@ export default async function handler(
 
     console.log('\n📊 Step 6/7: Writing analysis to Notion...');
 
+    const notionWriteStartTime = Date.now();
+    let notionWriteDuration = 0;
+
     try {
       // 1. Write to Stock Analyses page (main database row)
+      const writeStartTime = Date.now();
       await notionClient.writeAnalysisContent(analysesPageId, llmResult.content);
+      const writeDuration = Date.now() - writeStartTime;
       notionCalls += 1;
-      console.log(`✅ Written to Stock Analyses page: ${analysesPageId}`);
+      console.log(`✅ Written to Stock Analyses page: ${analysesPageId} (${writeDuration}ms)`);
 
       // 2. Create child analysis page with dated title
       const analysisDate = new Date().toLocaleDateString('en-US', {
@@ -508,6 +513,7 @@ export default async function handler(
         year: 'numeric'
       });
 
+      const childStartTime = Date.now();
       childAnalysisPageId = await notionClient.createChildAnalysisPage(
         analysesPageId,
         tickerUpper,
@@ -517,10 +523,15 @@ export default async function handler(
           // Additional properties for child page (if needed)
         }
       );
+      const childDuration = Date.now() - childStartTime;
       notionCalls += 2; // create page + write content
-      console.log(`✅ Created child analysis page: ${childAnalysisPageId}`);
+      console.log(`✅ Created child analysis page: ${childAnalysisPageId} (${childDuration}ms)`);
+
+      notionWriteDuration = Date.now() - notionWriteStartTime;
+      console.log(`⏱️  Total Notion write time: ${notionWriteDuration}ms`);
     } catch (error) {
-      console.error('❌ Failed to write analysis to Notion:', error);
+      notionWriteDuration = Date.now() - notionWriteStartTime;
+      console.error(`❌ Failed to write analysis to Notion after ${notionWriteDuration}ms:`, error);
       throw new Error(`Failed to write analysis to Notion: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
@@ -528,6 +539,7 @@ export default async function handler(
 
     let archived = false;
     let archivedPageId: string | null = null;
+    const archiveStartTime = Date.now();
 
     try {
       // Archive to Stock History database with LLM content
@@ -539,12 +551,14 @@ export default async function handler(
         // Write LLM content to history page (APPEND mode to preserve full history)
         await notionClient.writeAnalysisContent(archivedPageId, llmResult.content, 'append');
         notionCalls += 1;
-        console.log(`✅ Archived to Stock History: ${archivedPageId}`);
+        const archiveDuration = Date.now() - archiveStartTime;
+        console.log(`✅ Archived to Stock History: ${archivedPageId} (${archiveDuration}ms)`);
       } else {
         console.log('⚠️  Archive to Stock History failed');
       }
     } catch (error) {
-      console.warn('⚠️  Failed to archive to Stock History:', error);
+      const archiveDuration = Date.now() - archiveStartTime;
+      console.warn(`⚠️  Failed to archive to Stock History after ${archiveDuration}ms:`, error);
       // Don't fail the entire request just because archiving failed
     }
 

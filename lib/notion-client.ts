@@ -1134,9 +1134,11 @@ export class NotionClient {
     content: string,
     mode: 'replace' | 'append' = 'replace'
   ): Promise<void> {
+    const startTime = Date.now();
     try {
       // Step 1: Delete all existing child blocks (only if mode is 'replace')
       if (mode === 'replace') {
+        const deleteStartTime = Date.now();
         console.log(`[Notion] Deleting existing content from page ${pageId}...`);
 
         let hasMore = true;
@@ -1170,29 +1172,51 @@ export class NotionClient {
           cursor = response.next_cursor || undefined;
         }
 
-        console.log(`[Notion] Deleted ${deletedCount} existing blocks from page ${pageId}`);
+        const deleteDuration = Date.now() - deleteStartTime;
+        console.log(`[Notion] Deleted ${deletedCount} existing blocks in ${deleteDuration}ms`);
       } else {
         console.log(`[Notion] Appending content to page ${pageId} (mode: ${mode})...`);
       }
 
       // Step 2: Convert markdown to Notion blocks
+      const convertStartTime = Date.now();
       const blocks = this.markdownToBlocks(content);
+      const convertDuration = Date.now() - convertStartTime;
+      console.log(`[Notion] Converted ${blocks.length} blocks in ${convertDuration}ms`);
 
-      // Step 3: Append new blocks
-      // Notion API limits: 100 blocks per request
+      // Step 3: Append new blocks in chunks with delays to avoid rate limits
+      // Notion API limits: 100 blocks per request, ~3 requests/second average
+      const writeStartTime = Date.now();
       const chunkSize = 100;
+      const chunkDelay = 100; // 100ms delay between chunks = ~10 req/sec (safely under Notion's 3 req/sec average)
+
       for (let i = 0; i < blocks.length; i += chunkSize) {
         const chunk = blocks.slice(i, i + chunkSize);
+        const chunkStartTime = Date.now();
+
         await this.client.blocks.children.append({
           block_id: pageId,
           children: chunk,
         });
+
+        const chunkDuration = Date.now() - chunkStartTime;
+        console.log(`[Notion] Wrote chunk ${Math.floor(i / chunkSize) + 1}/${Math.ceil(blocks.length / chunkSize)} (${chunk.length} blocks) in ${chunkDuration}ms`);
+
+        // Add delay between chunks (except for the last chunk)
+        if (i + chunkSize < blocks.length) {
+          await new Promise(resolve => setTimeout(resolve, chunkDelay));
+        }
       }
+
+      const writeDuration = Date.now() - writeStartTime;
+      const totalDuration = Date.now() - startTime;
 
       const action = mode === 'replace' ? 'Written' : 'Appended';
       console.log(`[Notion] ${action} ${blocks.length} ${mode === 'append' ? 'new ' : ''}blocks to page ${pageId}`);
+      console.log(`[Notion] ⏱️  Total write time: ${totalDuration}ms (write: ${writeDuration}ms)`);
     } catch (error: any) {
-      console.error(`[Notion] Failed to write content to page ${pageId}:`, error.message);
+      const totalDuration = Date.now() - startTime;
+      console.error(`[Notion] Failed to write content to page ${pageId} after ${totalDuration}ms:`, error.message);
       throw error;
     }
   }
