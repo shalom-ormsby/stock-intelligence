@@ -23,11 +23,14 @@
   "author": "Shalom Ormsby",
   "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
+    "@google/generative-ai": "^0.24.1",
     "@notionhq/client": "^2.2.14",
     "@vercel/edge-config": "^1.0.1",
     "@vercel/kv": "^1.0.1",
     "axios": "^1.6.5",
     "dotenv": "^16.3.1",
+    "openai": "^6.7.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {
