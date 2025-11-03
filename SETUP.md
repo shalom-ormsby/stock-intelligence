@@ -1,5 +1,7 @@
 # Stock Intelligence v1.0 - Setup Guide
 
+*Last updated: November 3, 2025 at 9:09 AM*
+
 Complete setup guide for beta testers and contributors.
 
 ---
@@ -469,7 +471,3 @@ Please provide:
 - Create issue in Beta Feedback database (when available)
 - Include: Ticker, error message, expected vs actual behavior
 
----
-
-**Last Updated:** October 29, 2025
-**Version:** v1.0.0-beta.1

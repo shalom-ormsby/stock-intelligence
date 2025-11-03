@@ -224,19 +224,27 @@ Superseded version documentation that's no longer applicable.
 
 ### Timestamps
 
-**All documentation files must include a "Last updated" timestamp** to help readers assess content freshness.
+**All documentation files must include a "Last updated" timestamp** to help readers immediately assess content freshness.
 
 **Required format:**
 ```markdown
----
+# Document Title
 
-*Last updated: November 3, 2025*
+*Last updated: November 3, 2025 at 9:09 AM*
+
+Document content starts here...
 ```
 
 **Placement:**
-- At the very bottom of the file
-- Below a horizontal rule (`---`)
+- **At the top** of the file, immediately after the title
+- On its own line, before the main content
 - Italicized for visual distinction
+- **Not at the bottom** (readers need to know freshness before reading)
+
+**Format details:**
+- Include both date and time: `Month DD, YYYY at HH:MM AM/PM`
+- Use 12-hour format with AM/PM
+- Italicized with single asterisks: `*Last updated: ...*`
 
 **When to update:**
 - Whenever content changes significantly
@@ -252,16 +260,23 @@ Superseded version documentation that's no longer applicable.
 - ❌ `/docs/archive/` files (historical, frozen)
 - ❌ `/docs/legacy/` files (superseded, frozen)
 
-**Why this matters:**
-- Git commit dates aren't visible when reading the file
-- Readers need to know if information is current
-- Helps during documentation audits/reviews
-- Makes it clear which docs are actively maintained
+**Why top placement matters:**
+- ✅ Immediately visible when opening file (no scrolling required)
+- ✅ Readers can assess freshness before investing time reading
+- ✅ Better UX than bottom placement
+- ✅ Prevents wasting time on potentially outdated content
+- ✅ Git commit dates aren't visible in file viewers
 
 **Example:**
 
 ```markdown
 # Setup Guide
+
+*Last updated: November 3, 2025 at 9:09 AM*
+
+Complete setup guide for beta testers and contributors.
+
+---
 
 ## Installation
 
@@ -270,10 +285,6 @@ Superseded version documentation that's no longer applicable.
 ## Configuration
 
 ...content here...
-
----
-
-*Last updated: November 3, 2025*
 ```
 
 ---

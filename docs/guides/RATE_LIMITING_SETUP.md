@@ -1,5 +1,7 @@
 # Rate Limiting Setup Guide - Stock Intelligence v1.0
 
+*Last updated: November 3, 2025 at 9:09 AM*
+
 Complete guide to setting up and testing user-level rate limiting with Upstash Redis.
 
 ## Table of Contents
@@ -500,4 +502,3 @@ For Upstash-specific issues:
 - Email: support@upstash.com
 ---
 
-*Last updated: November 3, 2025*

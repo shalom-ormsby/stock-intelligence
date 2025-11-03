@@ -1,5 +1,7 @@
 # Stock Intelligence API v1.0
 
+*Last updated: November 3, 2025 at 9:09 AM*
+
 Public API documentation for Stock Intelligence serverless endpoints.
 
 ## Base URL
@@ -401,7 +403,3 @@ For issues or questions:
 - Check the [Vercel documentation](https://vercel.com/docs)
 - Review the [Notion API documentation](https://developers.notion.com)
 - Open an issue in the project repository
-
----
-
-*Last updated: November 3, 2025*

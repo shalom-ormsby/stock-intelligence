@@ -1,5 +1,7 @@
 # Deployment Checklist - Making API Endpoints Public
 
+*Last updated: November 3, 2025 at 9:09 AM*
+
 ## Quick Start
 
 ### 1. Pre-Deployment Checklist
@@ -317,7 +319,3 @@ Deployments → [Previous Deployment] → Promote to Production
 - [Vercel Serverless Functions](https://vercel.com/docs/functions)
 - [Notion API Documentation](https://developers.notion.com)
 - [API Documentation](./API.md)
-
----
-
-*Last updated: November 3, 2025*

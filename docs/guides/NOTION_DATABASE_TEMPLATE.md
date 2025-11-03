@@ -1,5 +1,7 @@
 # Notion User Settings Database - Visual Template
 
+*Last updated: November 3, 2025 at 9:09 AM*
+
 This document shows what your User Settings database should look like when properly configured.
 
 ---
@@ -364,4 +366,3 @@ Now that you have the visual reference, go set up your database:
 Good luck! 🚀
 ---
 
-*Last updated: November 3, 2025*

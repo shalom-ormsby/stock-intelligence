@@ -1,5 +1,7 @@
 # Phase 1 Quick Start: 30-Minute Setup
 
+*Last updated: November 3, 2025 at 9:09 AM*
+
 This is the TL;DR version of [USER_SETTINGS_PHASE1.md](USER_SETTINGS_PHASE1.md). Follow these steps to get User Settings working in Notion.
 
 ---
@@ -151,4 +153,3 @@ This is the TL;DR version of [USER_SETTINGS_PHASE1.md](USER_SETTINGS_PHASE1.md).
 Good luck! 🎉
 ---
 
-*Last updated: November 3, 2025*
