@@ -246,6 +246,39 @@ export default async function handler(
       `   FMP: ${fmpCalls} calls | FRED: ${fredCalls} calls | Total: ${fmpCalls + fredCalls} calls`
     );
 
+    // Calculate historical price changes from fetched data
+    let price_change_1m: number | undefined = undefined;
+    let price_change_5d: number | undefined = undefined;
+
+    if (fmpData.historical && fmpData.historical.length > 0) {
+      const currentPrice = fmpData.quote.price;
+
+      // Calculate 1-month (30-day) price change
+      // Look for data point closest to 30 days ago (index 29, or last available)
+      const targetIndex1m = Math.min(29, fmpData.historical.length - 1);
+      const price30dAgo = fmpData.historical[targetIndex1m]?.close;
+
+      if (price30dAgo && price30dAgo > 0) {
+        price_change_1m = (currentPrice - price30dAgo) / price30dAgo;
+        console.log(
+          `   📊 1M Price Change: ${price_change_1m > 0 ? '+' : ''}${(price_change_1m * 100).toFixed(2)}% (${price30dAgo.toFixed(2)} → ${currentPrice.toFixed(2)})`
+        );
+      }
+
+      // Calculate 5-day price change
+      const targetIndex5d = Math.min(4, fmpData.historical.length - 1);
+      const price5dAgo = fmpData.historical[targetIndex5d]?.close;
+
+      if (price5dAgo && price5dAgo > 0) {
+        price_change_5d = (currentPrice - price5dAgo) / price5dAgo;
+        console.log(
+          `   📊 5D Price Change: ${price_change_5d > 0 ? '+' : ''}${(price_change_5d * 100).toFixed(2)}% (${price5dAgo.toFixed(2)} → ${currentPrice.toFixed(2)})`
+        );
+      }
+    } else {
+      console.warn('⚠️  No historical data available for price change calculations');
+    }
+
     // Extract data for scoring
     const technical = {
       current_price: fmpData.quote.price,
@@ -258,8 +291,8 @@ export default async function handler(
       avg_volume_20d: fmpData.quote.avgVolume,
       volatility_30d: undefined, // TODO: Calculate from historical data
       price_change_1d: fmpData.quote.change / fmpData.quote.previousClose,
-      price_change_5d: undefined, // TODO: Calculate from historical data
-      price_change_1m: undefined, // TODO: Calculate from historical data
+      price_change_5d, // Calculated from historical data
+      price_change_1m, // Calculated from historical data
       week_52_high: fmpData.quote.yearHigh,
       week_52_low: fmpData.quote.yearLow,
     };
