@@ -1,4 +1,9 @@
 """
+⚠️  DEPRECATED - This file is no longer maintained or used.
+================================================================
+This test script is for legacy v0.3.0 testing only.
+Kept for historical reference. Do not use in production.
+
 v0.3.0 Testing Script
 =====================
 

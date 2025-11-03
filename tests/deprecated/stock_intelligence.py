@@ -1,4 +1,12 @@
 # ==================================================================================================
+# ⚠️  DEPRECATED - This file is no longer maintained or used.
+# ==================================================================================================
+# This is a legacy v0.3.0 Python implementation kept for historical reference only.
+# The project has migrated to TypeScript/Vercel serverless architecture (v1.0+).
+# Do not use this file in production.
+# ==================================================================================================
+#
+# ==================================================================================================
 # Stock Analyzer — v0.3.0 (Single Cell, Hybrid Dual‑API, Copy‑Paste Ready)
 # - Technical: Polygon
 # - Fundamental: Alpha Vantage
