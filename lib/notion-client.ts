@@ -1233,41 +1233,36 @@ export class NotionClient {
 
         console.log(`[Notion] Found ${blockIdsToDelete.length} blocks to delete`);
 
-        // Step 1b: Delete blocks in parallel batches to avoid rate limits
-        // Notion rate limit: ~3 req/sec average, but allows bursts
-        // Delete 10 blocks in parallel per batch, then wait 100ms
-        const batchSize = 10;
-        const batchDelay = 100; // 100ms between batches
+        // Step 1b: Delete blocks SEQUENTIALLY (nuclear option)
+        // Parallel batches were causing conflicts - delete one at a time with delays
+        // to give Notion's backend breathing room
         let deletedCount = 0;
         const failedDeletes: Array<{ blockId: string; error: string }> = [];
+        const deleteDelay = 200; // 200ms between each delete
 
-        for (let i = 0; i < blockIdsToDelete.length; i += batchSize) {
-          const batch = blockIdsToDelete.slice(i, i + batchSize);
-          const batchNum = Math.floor(i / batchSize) + 1;
-          const totalBatches = Math.ceil(blockIdsToDelete.length / batchSize);
+        console.log(`[Notion] Deleting ${blockIdsToDelete.length} blocks sequentially (200ms per block)...`);
 
-          // Delete all blocks in this batch in parallel
-          const deletePromises = batch.map(blockId =>
-            this.client.blocks.delete({ block_id: blockId })
-              .then(() => {
-                deletedCount++;
-                return { blockId, success: true, error: null };
-              })
-              .catch((error: any) => {
-                // Track failed deletes
-                const errorMsg = error.message || String(error);
-                failedDeletes.push({ blockId: blockId.substring(0, 8), error: errorMsg });
-                console.warn(`[Notion] Failed to delete block ${blockId.substring(0, 8)}:`, errorMsg);
-                return { blockId, success: false, error: errorMsg };
-              })
-          );
+        for (let i = 0; i < blockIdsToDelete.length; i++) {
+          const blockId = blockIdsToDelete[i];
 
-          await Promise.all(deletePromises);
-          console.log(`[Notion] Deleted batch ${batchNum}/${totalBatches} (${batch.length} blocks)`);
+          try {
+            await this.client.blocks.delete({ block_id: blockId });
+            deletedCount++;
 
-          // Add delay between batches (except for the last batch)
-          if (i + batchSize < blockIdsToDelete.length) {
-            await new Promise(resolve => setTimeout(resolve, batchDelay));
+            // Progress logging every 10 blocks
+            if ((i + 1) % 10 === 0 || i === blockIdsToDelete.length - 1) {
+              console.log(`[Notion] Deleted ${i + 1}/${blockIdsToDelete.length} blocks...`);
+            }
+
+            // Delay between each delete (except the last one)
+            if (i < blockIdsToDelete.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, deleteDelay));
+            }
+
+          } catch (error: any) {
+            const errorMsg = error.message || String(error);
+            failedDeletes.push({ blockId: blockId.substring(0, 8), error: errorMsg });
+            console.warn(`[Notion] Failed to delete block ${blockId.substring(0, 8)}:`, errorMsg);
           }
         }
 
