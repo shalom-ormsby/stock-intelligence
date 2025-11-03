@@ -1,156 +1,110 @@
-# Stock Intelligence, v0.2.x
+# Stock Intelligence
 
 *Last updated: November 3, 2025 at 9:09 AM*
 
-**⚠️ NOTE:** This README reflects v0.2.x (legacy Python implementation). The project has migrated to v1.0+ (TypeScript/Vercel serverless). For current documentation, see [ARCHITECTURE.md](ARCHITECTURE.md), [SETUP.md](SETUP.md), and [API.md](API.md).
+**A serverless stock analysis platform with LLM-powered insights, multi-factor scoring, and intelligent rate limiting.**
+
+**Version:** 1.0.0-beta.1 (v1.0.2 in development)
+**Status:** Production-ready backend, HTML analyzer interface in beta
+**Author:** Shalom Ormsby
 
 ---
 
-A professional-grade stock analysis system with institutional-quality data sources and sophisticated multi-factor scoring.
+## Overview
 
-## Features
+Stock Intelligence is a **personal decision-support tool** for equity analysis, built on a serverless TypeScript architecture. It combines real-time market data, sophisticated scoring algorithms, and AI-generated analysis to help you make informed trading decisions ahead of earnings and major market events.
 
-- **Multi-factor Analysis**: Technical (30%), Fundamental (35%), Macro (20%), Risk (15%)
-- **Professional Data Sources**: Polygon.io, Alpha Vantage, FRED
-- **Pattern Recognition**: Identifies bullish/bearish patterns
-- **Automatic Notion Sync**: Updates two databases (current + historical)
-- **Confidence Scoring**: Data quality assessment with A-D grading
-- **28 Metrics**: Comprehensive analysis across 6 categories
+**Design Philosophy:** *Impeccable but simple.* Built for daily stock analyses, not enterprise scale. Clean architecture, production-grade code, minimal complexity.
 
-## Quick Setup
+### What It Does
 
-### 1. Get API Keys
+1. **Analyzes stocks in 18-25 seconds** using 11 FMP API calls + 6 FRED API calls
+2. **Generates composite scores** (1.0-5.0 scale) across 6 categories: Technical, Fundamental, Macro, Risk, Sentiment, Sector
+3. **Creates AI-generated narratives** with Google Gemini Flash 2.5 ($0.013/analysis, 2,000 tokens)
+4. **Tracks historical context** with delta calculations and trend detection
+5. **Enforces rate limits** (10 analyses/user/day) with session-based bypass codes
+6. **Syncs to Notion databases** for analysis storage and review (v1.0.2) → PostgreSQL migration planned (v2.0)
 
-**Polygon.io** (Technical Data)
-- Go to https://polygon.io/
-- Sign up for free Stocks Starter plan
-- Copy your API key
+---
 
-**Alpha Vantage** (Fundamental Data)
-- Go to https://www.alphavantage.co/support/#api-key
-- Request free API key
-- Copy your API key
+## Architecture
 
-**FRED** (Macroeconomic Data)
-- Go to https://fred.stlouisfed.org/docs/api/api_key.html
-- Request API key
-- Copy your API key
+### Technology Stack
 
-**Notion** (Integration)
-1. Go to https://www.notion.so/my-integrations
-2. Create new integration
-3. Copy integration token
-4. Create your Stock Analyses and Stock History databases in Notion
-5. Share both databases with your integration
-6. Copy the database IDs from the URLs
+**Backend:**
+- **Platform:** Vercel Serverless Functions (300s timeout, Node.js 18+)
+- **Language:** TypeScript 5.3+
+- **Runtime:** Node.js serverless environment
 
-### 2. Configure Environment Variables
+**Data Sources:**
+- **Financial Modeling Prep (FMP)** - Stock data, fundamentals, technical indicators ($22-29/month)
+- **FRED API** - Macroeconomic data (yield curve, VIX, unemployment) (free)
+- **Upstash Redis** - Distributed rate limiting state (REST API, serverless-native)
 
-**Option A: Using .env file (Recommended for local development)**
+**LLM Integration:**
+- **Provider-agnostic abstraction layer** supporting:
+  - Google Gemini (Flash 2.5, Flash 1.5) - Primary, $0.013/analysis
+  - OpenAI (GPT-4 Turbo, GPT-3.5 Turbo)
+  - Anthropic (Claude 3.5 Sonnet, Claude 3 Haiku)
+- **Configurable via environment variable** (`LLM_PROVIDER`)
+- **50% token reduction** vs. original prompts (6,000 → 2,000 tokens)
 
-```bash
-# Copy the example file
-cp .env.example .env
+**Integration:**
+- **Notion API** - Database operations (v1.0.2, transitioning to PostgreSQL in v2.0)
+- **REST APIs** - All external communication via HTTP
 
-# Edit .env and add your actual API keys
-# NEVER commit this file to Git!
+### API Endpoints
+
+| Endpoint | Method | Description | Timeout |
+|----------|--------|-------------|---------|
+| `/api/health` | GET | Health check (uptime, version) | 10s |
+| `/api/analyze` | POST | Stock analysis (full workflow) | 300s |
+| `/api/webhook` | POST | Notion webhook handler | 60s |
+| `/api/bypass` | GET/POST | Activate bypass code session | 10s |
+| `/api/usage` | GET | Check rate limit usage | 10s |
+| `/api/api-status` | GET | API monitoring dashboard | 30s |
+
+### Data Flow (v1.0.2)
+
+```
+User (WordPress Page)
+    ↓ POST /api/analyze {ticker, userId}
+Vercel Serverless Function
+    ↓ Check rate limit (Redis)
+    ↓ Fetch market data (FMP + FRED, 3-5s)
+    ↓ Calculate scores (1s)
+    ↓ Query historical analyses (Notion, 2-5s)
+    ↓ Compute deltas/trends (<1s)
+    ↓ Generate LLM analysis (Gemini, 10-20s)
+    ↓ Write to Notion (3 operations, 10-15s)
+        • Update Stock Analyses page (metrics)
+        • Create child analysis page (AI content)
+        • Archive to Stock History
+    ↓ Return {pageUrl, scores, metadata}
+User
+    → Opens Notion analysis page
 ```
 
-**Option B: Using Google Colab Secrets (Recommended for Colab)**
+**Total Latency:** 30-45 seconds (under 60s Vercel Pro timeout)
 
-In Google Colab, use the key icon (🔑) in the left sidebar to add secrets:
-- POLYGON_API_KEY
-- ALPHA_VANTAGE_API_KEY
-- FRED_API_KEY
-- NOTION_API_KEY
-- STOCK_ANALYSES_DB_ID
-- STOCK_HISTORY_DB_ID
+---
 
-Then in your notebook:
-```python
-from google.colab import userdata
-import os
+## Key Features
 
-os.environ['POLYGON_API_KEY'] = userdata.get('POLYGON_API_KEY')
-os.environ['ALPHA_VANTAGE_API_KEY'] = userdata.get('ALPHA_VANTAGE_API_KEY')
-os.environ['FRED_API_KEY'] = userdata.get('FRED_API_KEY')
-os.environ['NOTION_API_KEY'] = userdata.get('NOTION_API_KEY')
-os.environ['STOCK_ANALYSES_DB_ID'] = userdata.get('STOCK_ANALYSES_DB_ID')
-os.environ['STOCK_HISTORY_DB_ID'] = userdata.get('STOCK_HISTORY_DB_ID')
-```
+### Multi-Factor Scoring System
 
-**Option C: System environment variables**
+Composite score (1.0-5.0) calculated from weighted categories:
 
-```bash
-export POLYGON_API_KEY="your_key_here"
-export ALPHA_VANTAGE_API_KEY="your_key_here"
-export FRED_API_KEY="your_key_here"
-export NOTION_API_KEY="your_key_here"
-export STOCK_ANALYSES_DB_ID="your_db_id_here"
-export STOCK_HISTORY_DB_ID="your_db_id_here"
-```
+| Category | Weight | Metrics Included |
+|----------|--------|------------------|
+| **Technical** | 30% | RSI, MACD, Bollinger Bands, SMA crossovers, volume trends |
+| **Fundamental** | 35% | P/E ratio, EPS growth, revenue growth, profit margins, ROE |
+| **Macro** | 20% | Market regime, sector rotation, yield curve, VIX, unemployment |
+| **Risk** | 15% | Beta, volatility, drawdown, correlation to market |
+| **Sentiment** | - | News sentiment, analyst ratings (unweighted, for context) |
+| **Sector** | - | Relative sector performance vs. S&P 500 |
 
-### 3. Install Dependencies
-
-```bash
-pip install requests pytz
-```
-
-### 4. Run Analysis
-
-```python
-# Edit the ticker at the bottom of the script
-analyze_and_sync_to_notion("AAPL")
-```
-
-## Security Notes
-
-⚠️ **IMPORTANT**: 
-- NEVER commit your `.env` file to Git
-- NEVER hardcode API keys in the script
-- The `.gitignore` file is configured to prevent accidental commits
-- Each user must use their own API keys
-
-## Notion Database Properties
-
-### Stock Analyses Database (Current State)
-- Ticker (title)
-- Company Name (text)
-- Analysis Date (date)
-- Current Price (number)
-- Composite Score (number)
-- Technical Score (number)
-- Fundamental Score (number)
-- Macro Score (number)
-- Risk Score (number)
-- Sentiment Score (number)
-- Pattern Score (number)
-- Pattern Signal (select)
-- Detected Patterns (text)
-- Recommendation (select)
-- Confidence (select)
-- Data Quality Grade (select)
-- Data Completeness (number)
-- [+ all technical and fundamental metrics]
-
-### Stock History Database (Historical Record)
-Same properties as Stock Analyses, plus:
-- Name (title) - formatted as "TICKER - Date Time"
-
-## Scoring Methodology
-
-**Composite Score** (1.0-5.0 scale):
-- Technical: 30% weight
-- Fundamental: 35% weight
-- Macro: 20% weight
-- Risk: 15% weight
-
-**Pattern Score** (1.0-5.0 scale):
-- Separate score, NOT included in composite
-- Identifies chart patterns (Head & Shoulders, Double Top, etc.)
-- Provides signal: 🚀 Extremely Bullish to 🚨 Extremely Bearish
-
-**Recommendations**:
+**Recommendations:**
 - Strong Buy (4.0+)
 - Buy (3.5-3.99)
 - Moderate Buy (3.0-3.49)
@@ -159,105 +113,249 @@ Same properties as Stock Analyses, plus:
 - Sell (1.5-1.99)
 - Strong Sell (<1.5)
 
-## API Rate Limits
+### LLM-Generated Analysis
 
-- **Polygon Starter**: 5 calls/minute
-- **Alpha Vantage Free**: 25 calls/day
-- **FRED**: 120 calls/day
+7-section narrative generated by Google Gemini Flash 2.5:
 
-Each analysis uses approximately:
-- 5-7 Polygon calls
-- 3 Alpha Vantage calls
-- 5 FRED calls
+1. **Executive Summary** - Buy/Hold/Sell recommendation with confidence level
+2. **Technical Analysis** - Chart patterns, momentum indicators, support/resistance
+3. **Fundamental Analysis** - Valuation metrics, earnings quality, growth prospects
+4. **Risk Assessment** - Downside risks, volatility analysis, worst-case scenarios
+5. **Macro Context** - Economic headwinds/tailwinds, sector trends, market regime
+6. **Historical Trends** - Score deltas vs. previous analyses, trend direction
+7. **Action Items** - Specific recommendations (e.g., "Wait for RSI < 30 before entry")
 
-## Troubleshooting
+**Token Optimization:**
+- Original prompts: 6,000 tokens → 30s generation time
+- Optimized prompts: 2,000 tokens → 10-15s generation time
+- **67% reduction** in tokens, **50% reduction** in latency
 
-**"Missing required environment variable"**
-- Ensure all environment variables are set
-- Check for typos in variable names
-- Verify .env file exists and is properly formatted
+### Rate Limiting & Access Control
 
-**"API request failed"**
-- Check API keys are valid
-- Verify rate limits haven't been exceeded
-- Check internet connection
+**User-level quotas:**
+- 10 analyses per user per day (resets at midnight UTC)
+- Tracked in Upstash Redis (distributed state)
+- Graceful degradation (fails open if Redis unavailable)
 
-**"Notion sync failed"**
-- Verify Notion integration has access to databases
-- Check database IDs are correct
-- Ensure database properties match expected schema
+**Bypass code system:**
+- Session-based bypass (one-time code entry)
+- Unlimited analyses until midnight UTC
+- Stored in Redis with TTL expiry
+- Admin bypass via environment variable
 
-## Version History
+**Endpoints:**
+- `GET /api/usage` - Check remaining quota (non-consuming)
+- `POST /api/bypass` - Activate bypass code session
+- `GET /api/bypass?code=XXX` - URL parameter activation
 
-**v0.2.8** (Current)
-- Content Status & Notification System - automated Notion notifications for fresh data
-- All Notion syncs now include status field ("New" or "Updated")
-- Enables database automations for alerts when new analyses arrive
+### Performance Optimizations
 
-**v0.2.7**
-- Market analysis - holistic market context before stock analysis
-- US indices, VIX, sector rotation, economic indicators, market news
-- Market regime classification (Risk-On/Risk-Off/Transition)
-- Syncs to Notion Market Context database
+**v1.0.11 Optimizations (Nov 2-3, 2025):**
+- **Sequential deletion** replaced parallel batches to eliminate Notion API conflicts
+- **90 blocks deleted in ~18 seconds** (was failing with 504 timeouts)
+- **Zero conflict errors** (was 50-93% failure rate with parallelism)
+- **Total analysis time:** 30-45 seconds (was timing out at 60+ seconds)
 
-**v0.2.6**
-- Notion comparison sync for multi-stock comparisons
-- Automatically saves comparison results to Notion
+**Key insights:**
+- Notion's eventual consistency requires sequential block operations
+- Pre-flight delays don't help (conflicts occur during operations)
+- Reliability > Performance for write-heavy operations
 
-**v0.2.5**
-- Comparative analysis system
-- Multi-stock rankings and buy recommendations
+---
 
-**v0.2.4**
-- Pattern backtesting system
-- Validates if patterns predict price movements
+## Quick Start
 
-**v0.2.3**
-- Centralized scoring configuration with documented thresholds
-- All magic numbers now have clear financial/technical justifications
-- 100% backward compatible scoring
-- Improved code transparency and maintainability
+### Prerequisites
 
-**v0.2.2**
-- Added pattern recognition
-- Added pattern score and signal
-- Added detected patterns tracking
-- Enhanced technical analysis
+- Node.js 18+ and npm
+- Vercel account (Pro plan for 300s timeout)
+- API keys: FMP, FRED, Google Gemini, Notion
+- Upstash Redis database (free tier works)
 
-**v0.2.0**
-- Multi-factor scoring system
-- Dual-API architecture
-- Confidence scoring
-- Historical tracking
+### Installation
+
+```bash
+# Clone repository
+git clone https://github.com/shalomormsby/stock-intelligence.git
+cd stock-intelligence
+
+# Install dependencies
+npm install
+
+# Copy environment template
+cp .env.example .env
+
+# Add your API keys to .env (never commit this file!)
+# See SETUP.md for detailed configuration instructions
+```
+
+### Local Development
+
+```bash
+# Start Vercel dev server (localhost:3000)
+npm run dev
+
+# Test analysis endpoint
+curl -X POST http://localhost:3000/api/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"ticker": "AAPL", "userId": "test-user"}'
+
+# Check health
+curl http://localhost:3000/api/health
+```
+
+### Deployment
+
+```bash
+# Install Vercel CLI
+npm i -g vercel
+
+# Deploy to production
+vercel --prod
+
+# Configure environment variables in Vercel dashboard
+# See DEPLOYMENT.md for detailed instructions
+```
+
+---
+
+## Documentation
+
+### Essential Reading
+
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System design, component structure, data flow diagrams
+- **[SETUP.md](SETUP.md)** - Complete setup guide for beta testers and contributors
+- **[API.md](API.md)** - API endpoint documentation with examples
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Deployment checklist and production configuration
+- **[ROADMAP.md](ROADMAP.md)** - Current status, completed work, future plans
+
+### Additional Resources
+
+- **[CHANGELOG.md](CHANGELOG.md)** - Version history and release notes
+- **[docs/guides/](docs/guides/)** - Implementation guides (Notion setup, rate limiting, etc.)
+- **[.github/FILE_ORGANIZATION.md](.github/FILE_ORGANIZATION.md)** - File organization standards
+
+---
+
+## Project Status
+
+**Current Version:** v1.0.0-beta.1
+
+**Completed (v1.0.0):**
+- ✅ TypeScript/Vercel serverless architecture
+- ✅ Multi-factor scoring engine (~2,500 LOC)
+- ✅ FMP + FRED API integration (11 + 6 calls per analysis)
+- ✅ Rate limiting system (Upstash Redis)
+- ✅ LLM abstraction layer (Google Gemini, OpenAI, Anthropic)
+- ✅ Notion database integration (read/write optimizations)
+- ✅ Performance optimizations (sequential deletion, conflict resolution)
+
+**In Progress (v1.0.2):**
+- ⏳ HTML analyzer page (WordPress-hosted, Tailwind CSS + Vanilla JS)
+- ⏳ Admin dashboard for API monitoring
+- ⏳ User-facing analyzer interface (ticker input → view results)
+
+**Planned (v2.0):**
+- 📋 Next.js frontend application (responsive, mobile-first)
+- 📋 PostgreSQL migration (Supabase, 10-15x faster than Notion)
+- 📋 Trend charts (Recharts, score history over time)
+- 📋 Portfolio tracking and watchlists
+
+**Timeline:**
+- v1.0.2 completion: ~3-5 hours remaining
+- v2.0 migration: 25-35 hours (months 2-3)
+
+See [ROADMAP.md](ROADMAP.md) for detailed sprint planning.
+
+---
+
+## Cost Structure
+
+**Monthly Operating Costs (v1.0.2):**
+
+| Service | Cost | Usage |
+|---------|------|-------|
+| Vercel Pro | $20/month | 300s timeout, unlimited invocations |
+| FMP API | $22-29/month | Stock data, fundamentals, technical indicators |
+| Google Gemini | $40/month | 3,000 analyses (@ $0.013 each) |
+| FRED API | Free | Macroeconomic data |
+| Notion | Free | Database storage (v1.0.2 only) |
+| Upstash Redis | Free | Rate limiting state (under free tier limits) |
+| **Total** | **$82-89/month** | For personal use (up to 3,000 analyses/month) |
+
+**v2.0 Upgrade (PostgreSQL):**
+- Add Supabase: $0-25/month (free tier → Pro as needed)
+- Total: $102-134/month (10-15x faster database, unlimited scale)
+
+---
 
 ## License
 
-This project is licensed under the **Business Source License 1.1**.
+**Business Source License 1.1**
 
-### What This Means
+### You CAN:
+- ✅ Use for personal, educational, and non-commercial purposes
+- ✅ View and study the source code
+- ✅ Modify for your own personal use
+- ✅ Fork on GitHub for non-commercial projects
 
-**✅ You CAN:**
-- Use this software for personal, educational, and non-commercial purposes
-- View and study the source code
-- Modify it for your own personal use
-- Fork it on GitHub for non-commercial projects
-- Learn from the implementation
+### You CANNOT:
+- ❌ Provide commercial stock analysis services
+- ❌ Sell this software or derivative works
+- ❌ Compete with the original author's offerings
 
-**❌ You CANNOT:**
-- Use this software to provide a commercial stock analysis service
-- Sell this software or derivative works
-- Use it in a way that competes with the original author's offerings
+### Change Date: October 23, 2029
+After this date, the software becomes available under the **MIT License** (fully open source).
 
-**⏰ Future:**
-- On **October 23, 2029**, this software will automatically become available under the **MIT License**
-- After that date, it will be fully open source with no restrictions
+**Commercial licensing:** Contact shalom.ormsby@gmail.com
 
-### Commercial Licensing
+See [LICENSE](LICENSE) file for full terms.
 
-Interested in using this software commercially? Contact: shalom.ormsby@gmail.com
+---
 
-For full license terms, see the [LICENSE](LICENSE) file.
+## Support & Contact
 
-## Support
+**Author:** Shalom Ormsby
+**Email:** shalom.ormsby@gmail.com
+**Repository:** [github.com/shalomormsby/stock-intelligence](https://github.com/shalomormsby/stock-intelligence)
 
-For issues, questions, or feature requests, please [contact information or issue tracker].
+**For issues:**
+- Check documentation in [docs/](docs/) folder first
+- Review [CHANGELOG.md](CHANGELOG.md) for recent changes
+- Open an issue on GitHub (when repository is public)
+
+**For bugs:**
+- Include: ticker, error message, expected vs. actual behavior
+- Check [ROADMAP.md](ROADMAP.md) to see if issue is already known
+- Provide Vercel function logs if possible
+
+---
+
+## Contributing
+
+This is currently a personal project, but contributions are welcome for:
+- Bug reports and fixes
+- Documentation improvements
+- Performance optimizations
+- Feature suggestions (see [ROADMAP.md](ROADMAP.md) first)
+
+**Before contributing:**
+1. Read [ARCHITECTURE.md](ARCHITECTURE.md) to understand system design
+2. Review [.github/FILE_ORGANIZATION.md](.github/FILE_ORGANIZATION.md) for file organization standards
+3. Check [ROADMAP.md](ROADMAP.md) to avoid duplicating planned work
+
+---
+
+## Acknowledgments
+
+Built with:
+- [Vercel](https://vercel.com) - Serverless platform
+- [Financial Modeling Prep](https://financialmodelingprep.com) - Market data
+- [FRED](https://fred.stlouisfed.org) - Economic data
+- [Google Gemini](https://ai.google.dev) - LLM analysis generation
+- [Notion](https://notion.so) - Database integration (v1.0.2)
+- [Upstash](https://upstash.com) - Redis rate limiting
+
+---
+
+*For legacy v0.2.x Python documentation, see [docs/legacy/README_v0.2.x.md](docs/legacy/README_v0.2.x.md)*
