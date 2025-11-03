@@ -47,4 +47,18 @@ For current, actively-maintained documentation, see the project root:
 
 ---
 
+## File Organization Guidelines
+
+For detailed guidelines on where files should be placed, naming conventions, and maintenance procedures, see:
+
+**[../.github/FILE_ORGANIZATION.md](../.github/FILE_ORGANIZATION.md)**
+
+This document provides:
+- Decision trees for file placement
+- File movement checklists
+- Periodic maintenance schedules
+- Deprecation procedures
+
+---
+
 *Last updated: November 3, 2025*

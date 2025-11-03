@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Project Structure Reorganization (2025-11-03)
+
+**Type**: Refactoring
+**Status**: ✅ Complete
+**Impact**: Developer experience, code review readiness
+
+#### Changes
+
+**Reorganized 25 documentation files** from root directory into logical folder structure:
+
+**File Organization:**
+- **Root (7 essential docs):** README.md, ARCHITECTURE.md, CHANGELOG.md, ROADMAP.md, API.md, SETUP.md, DEPLOYMENT.md
+- **docs/archive/ (11 files):** Phase completion markers (ERROR_HANDLING_PHASE*, V1.0_BUILD_PROGRESS.md, etc.)
+- **docs/guides/ (6 files):** Implementation guides (NOTION_DATABASE_TEMPLATE.md, RATE_LIMITING_SETUP.md, etc.)
+- **docs/legacy/ (6 files):** Superseded version docs (V0.3.0_*, README_V1.md, ROADMAP_UPDATE_v1.0.x.md)
+- **tests/deprecated/ (2 files):** Legacy Python test files with deprecation notices
+
+**Benefits:**
+- ✅ Root directory decluttered (30 → 7 markdown files)
+- ✅ Clear separation: essential vs. archive vs. legacy
+- ✅ Easy to find frequently-referenced documentation
+- ✅ Git history preserved (used `git mv`)
+- ✅ Zero breaking changes (verified via TypeScript compilation)
+- ✅ Added [docs/README.md](docs/README.md) navigation guide
+
+**File Organization Guidelines:**
+
+Going forward, maintain this structure:
+- **Root level:** Only essential, actively-maintained documentation
+- **docs/archive/:** Historical phase completion markers and implementation logs
+- **docs/guides/:** How-to guides and technical references for features
+- **docs/legacy/:** Superseded version documentation (v0.x, old v1.0.x updates)
+- **tests/deprecated/:** Obsolete test files with clear deprecation notices
+
+**Commits:**
+- `97c2936` - Refactor: Organize project structure for code review readiness
+- `1c8417e` - Docs: Add README.md to docs/ folder for navigation guidance
+
+---
+
 ### v1.0.5 → v1.0.11: Notion API Conflict Resolution Journey (2025-11-02 to 2025-11-03)
 
 **Status**: ✅ RESOLVED
