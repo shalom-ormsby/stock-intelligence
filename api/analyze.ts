@@ -506,6 +506,11 @@ export default async function handler(
       notionCalls += 1;
       console.log(`✅ Written to Stock Analyses page: ${analysesPageId} (${writeDuration}ms)`);
 
+      // Wait for Notion's backend to settle after modifying parent page structure
+      // This prevents conflict_error when creating child pages under the same parent
+      console.log('[Notion] Waiting 500ms for backend to settle...');
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       // 2. Create child analysis page with dated title
       const analysisDate = new Date().toLocaleDateString('en-US', {
         month: 'short',
