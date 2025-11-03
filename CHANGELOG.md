@@ -37,13 +37,17 @@ The AI prompt (introduced in v1.0.4) instructs the LLM to generate callout synta
 
 However, the markdown parser had **no handler for callout syntax**, so it treated `<callout>` tags as regular paragraph text.
 
+**Additional Issue (Discovered in Testing):**
+Some LLM providers escape the callout tags as `\<callout\>` instead of `<callout>`, causing them to bypass the initial parser fix.
+
 ### Solution
 
 Enhanced `markdownToBlocks()` to recognize and convert callout syntax to proper Notion API callout blocks:
 
-**Added Callout Parser** ([lib/notion-client.ts:1030-1086](lib/notion-client.ts#L1030-L1086)):
-- Detects opening tag: `<callout icon="..." color="...">`
-- Collects content until closing tag: `</callout>`
+**Added Callout Parser** ([lib/notion-client.ts:1030-1088](lib/notion-client.ts#L1030-L1088)):
+- Detects opening tag: `<callout icon="..." color="...">` **or** `\<callout icon="..." color="..."\>` (escaped)
+- Handles both escaped and unescaped syntax via regex: `/^\\?<callout\s+icon="([^"]+)"\s+color="([^"]+)"\\?>/`
+- Collects content until closing tag: `</callout>` or `\</callout\>` (escaped)
 - Parses rich text with **bold** formatting support
 - Converts color shorthand to Notion format (e.g., `green_bg` → `green_background`)
 - Creates proper Notion callout block structure
@@ -76,11 +80,12 @@ Enhanced `markdownToBlocks()` to recognize and convert callout syntax to proper 
 
 ### Changed
 
-- **lib/notion-client.ts**: Added callout block parsing to `markdownToBlocks()` (lines 1030-1086)
-  - Regex pattern to extract icon and color attributes
-  - Multi-line content collection until closing tag
+- **lib/notion-client.ts**: Added callout block parsing to `markdownToBlocks()` (lines 1030-1088)
+  - Regex pattern to extract icon and color attributes from both escaped and unescaped syntax
+  - Multi-line content collection until closing tag (handles both `</callout>` and `\</callout\>`)
   - Rich text parsing with newline preservation
   - Color shorthand to Notion format conversion
+  - Supports both LLM-generated formats: `<callout>` and `\<callout\>`
 
 ### Impact
 
