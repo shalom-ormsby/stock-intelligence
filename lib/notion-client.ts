@@ -1199,7 +1199,14 @@ export class NotionClient {
       // Step 1: Delete all existing child blocks (only if mode is 'replace')
       if (mode === 'replace') {
         const deleteStartTime = Date.now();
-        console.log(`[Notion] Deleting existing content from page ${pageId}...`);
+        console.log(`[Notion] Starting REPLACE mode for page ${pageId}...`);
+
+        // Pre-flight delay: Wait for Notion's backend to finish any processing
+        // before we start touching the page (prevents conflict_error)
+        console.log('[Notion] Pre-flight: Waiting 2 seconds for page to settle...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        console.log(`[Notion] Collecting blocks to delete...`);
 
         // Step 1a: Collect all block IDs (paginated)
         const blockIdsToDelete: string[] = [];
