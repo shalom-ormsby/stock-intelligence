@@ -1,11 +1,12 @@
 /**
- * Notion Client for Stock Intelligence v1.0
+ * Notion Client for Stock Intelligence v1.0.2
  *
  * Handles all Notion API operations:
  * - Writing analysis metrics to Stock Analyses database
- * - Polling for "Send to History" button click
+ * - Managing 3-state Content Status (Analyzing → Complete → Error)
  * - Archiving completed analyses to Stock History
  *
+ * v1.0.2: Simplified to 3-state Content Status system
  * Ported from Python v0.3.0 NotionClient class
  */
 
@@ -82,12 +83,9 @@ interface PatternData {
 }
 
 type ContentStatus =
-  | 'Pending Analysis'
-  | 'Send to History'
-  | 'Logged in History'
-  | 'Analysis Incomplete'
-  | 'New'
-  | 'Updated';
+  | 'Analyzing'
+  | 'Complete'
+  | 'Error';
 
 export class NotionClient {
   private client: Client;
@@ -106,8 +104,7 @@ export class NotionClient {
    * Sync analysis data to Notion Stock Analyses database
    *
    * @param data - Analysis data containing ticker, scores, technical/fundamental metrics
-   * @param usePollingWorkflow - If true, sets Content Status to "Pending Analysis" and waits for AI completion.
-   *                             If false, sets to "New"/"Updated" and creates history immediately.
+   * @param usePollingWorkflow - Deprecated in v1.0.2. Content Status is now managed by /api/analyze endpoint.
    * @returns Object containing page IDs for Stock Analyses and Stock History (if created)
    *
    * @example
@@ -130,8 +127,7 @@ export class NotionClient {
     // Upsert to Stock Analyses
     const analysesPageId = await this.upsertAnalyses(
       data.ticker,
-      properties,
-      usePollingWorkflow
+      properties
     );
 
     console.log(
@@ -163,11 +159,12 @@ export class NotionClient {
   /**
    * Upsert page in Stock Analyses database
    * Updates existing page if ticker exists, creates new page otherwise
+   *
+   * Note: Content Status is NOT set here. It's managed by the /api/analyze endpoint.
    */
   private async upsertAnalyses(
     ticker: string,
-    properties: Record<string, any>,
-    usePollingWorkflow: boolean
+    properties: Record<string, any>
   ): Promise<string | null> {
     try {
       // Find existing page by ticker
@@ -177,26 +174,8 @@ export class NotionClient {
         'title'
       );
 
-      // Set Content Status based on workflow
-      if (usePollingWorkflow) {
-        // v0.3.0 workflow: Set to "Pending Analysis"
-        properties['Content Status'] = {
-          select: { name: 'Pending Analysis' },
-        };
-        console.log(
-          '[Notion] Setting Content Status: Pending Analysis (v0.3.0 polling workflow)'
-        );
-      } else {
-        // v0.2.9 workflow: Set to "Updated" or "New"
-        properties['Content Status'] = {
-          select: { name: existingPageId ? 'Updated' : 'New' },
-        };
-        console.log(
-          `[Notion] Setting Content Status: ${
-            existingPageId ? 'Updated' : 'New'
-          } (v0.2.9 legacy workflow)`
-        );
-      }
+      // Note: Content Status will be managed by analyze endpoint
+      // Don't set it here - it will be set to "Analyzing" by the endpoint
 
       if (existingPageId) {
         // Update existing page with retry
@@ -252,9 +231,8 @@ export class NotionClient {
         title: [{ text: { content: `${ticker} - ${formattedDate}` } }],
       };
 
-      // Always set Content Status to "New" for history
-      properties['Content Status'] = { select: { name: 'New' } };
-      console.log('[Notion] Setting Content Status: New (history record)');
+      // Note: Stock History doesn't use Content Status in v1.0.2
+      // Removed to simplify 3-state system (Analyzing/Complete/Error only for Stock Analyses)
 
       const response = await withRetry(
         async () =>
@@ -527,17 +505,20 @@ export class NotionClient {
   }
 
   /**
-   * Poll Stock Analyses page until user clicks "Send to History" button
+   * Poll Stock Analyses page until status becomes "Complete"
+   *
+   * @deprecated This method is deprecated in v1.0.2. Content Status is now managed
+   * automatically by the /api/analyze endpoint (Analyzing → Complete → Error).
    *
    * Continuously checks a Stock Analyses page for Content Status changes.
-   * Returns when status becomes "Send to History" (indicating AI analysis is complete)
+   * Returns when status becomes "Complete" (indicating AI analysis is complete)
    * or when timeout is reached.
    *
    * @param pageId - Notion page ID to poll
    * @param timeout - Maximum time to wait in seconds (default: 600 = 10 minutes)
    * @param pollInterval - How often to check status in seconds (default: 10)
    * @param skipPolling - If true, skip polling and return immediately (default: false)
-   * @returns True if "Send to History" status detected, false if timeout or skipped
+   * @returns True if "Complete" status detected, false if timeout or skipped
    *
    * @example
    * ```typescript
@@ -548,9 +529,7 @@ export class NotionClient {
    * ```
    *
    * @remarks
-   * - Part of v0.3.0 polling workflow
-   * - Sets Content Status to "Analysis Incomplete" on timeout
-   * - Designed for use after writing metrics but before AI analysis completes
+   * - Sets Content Status to "Error" on timeout
    */
   async waitForAnalysisCompletion(
     pageId: string,
@@ -586,7 +565,7 @@ export class NotionClient {
             | ContentStatus
             | undefined;
 
-          if (status === 'Send to History') {
+          if (status === 'Complete') {
             console.log('✅ AI analysis complete! Starting archival...');
             return true;
           }
@@ -607,18 +586,18 @@ export class NotionClient {
       await new Promise((resolve) => setTimeout(resolve, pollInterval * 1000));
     }
 
-    // Timeout reached - set status to "Analysis Incomplete"
+    // Timeout reached - set status to "Error"
     console.log('⏱️  Timeout reached. Analysis not completed within time limit.');
-    console.log('🔄 Setting Content Status to "Analysis Incomplete"...');
+    console.log('🔄 Setting Content Status to "Error"...');
 
     try {
       await this.client.pages.update({
         page_id: pageId,
         properties: {
-          'Content Status': { select: { name: 'Analysis Incomplete' } },
+          'Content Status': { select: { name: 'Error' } },
         },
       });
-      console.log('✅ Status updated to "Analysis Incomplete"');
+      console.log('✅ Status updated to "Error"');
     } catch (error) {
       console.error('⚠️  Could not update status:', error);
     }
@@ -633,7 +612,7 @@ export class NotionClient {
    *
    * Copies all properties and content blocks from a Stock Analyses page to create
    * a new historical record in Stock History. This is typically called after AI
-   * analysis is complete and the user has clicked "Send to History".
+   * analysis is complete.
    *
    * @param pageId - Notion page ID of the Stock Analyses page to archive
    * @returns Page ID of the newly created Stock History entry, or null if failed
@@ -648,9 +627,9 @@ export class NotionClient {
    *
    * @remarks
    * - Creates a new page in Stock History (append-only, never updates)
-   * - Excludes Stock Analyses-specific properties (Owner, Send to History, etc.)
-   * - Sets Content Status to "Historical"
-   * - Updates original page Content Status to "Logged in History"
+   * - Excludes Stock Analyses-specific properties (Owner, etc.)
+   * - Does NOT update Content Status (already set to "Complete" by /api/analyze)
+   * - Stock History pages don't use Content Status (simplified in v1.0.2)
    * - Copies all content blocks (except synced blocks)
    */
   async archiveToHistory(pageId: string): Promise<string | null> {
@@ -724,7 +703,7 @@ export class NotionClient {
       propertiesToCopy['Name'] = {
         title: [{ text: { content: `${ticker} - ${formattedDate}` } }],
       };
-      propertiesToCopy['Content Status'] = { select: { name: 'Historical' } };
+      // Note: Stock History doesn't use Content Status in v1.0.2
 
       // Create Stock History page
       const historyPage = await this.client.pages.create({
@@ -750,15 +729,8 @@ export class NotionClient {
         console.log('ℹ️  No content blocks to copy (analysis may still be pending)');
       }
 
-      // Update original Stock Analyses page to "Logged in History"
-      await this.client.pages.update({
-        page_id: pageId,
-        properties: {
-          'Content Status': { select: { name: 'Logged in History' } },
-        },
-      });
-
-      console.log('✅ Stock Analyses page marked as "Logged in History"');
+      // Note: Content Status already set to "Complete" by /api/analyze endpoint
+      // No need to update it again
       console.log('🎉 Archival complete!');
 
       return historyPage.id;
@@ -791,17 +763,19 @@ export class NotionClient {
    * Update the Content Status property of a Notion page
    *
    * @param pageId - Notion page ID or URL
-   * @param status - New status value. For Stock Analyses: "Pending Analysis" | "Send to History" | "Logged in History" | "Analysis Incomplete" | "New" | "Updated"
-   *                 For Stock History: "New" | "Historical"
+   * @param status - New status value: "Analyzing" | "Complete" | "Error"
    * @returns Promise that resolves when update is complete
    *
    * @example
    * ```typescript
-   * // Mark analysis ready for review
-   * await notionClient.updateContentStatus(pageId, "Send to History");
+   * // Mark analysis as in progress
+   * await notionClient.updateContentStatus(pageId, "Analyzing");
    *
-   * // Mark analysis completed
-   * await notionClient.updateContentStatus(pageId, "Logged in History");
+   * // Mark analysis as completed
+   * await notionClient.updateContentStatus(pageId, "Complete");
+   *
+   * // Mark analysis as failed
+   * await notionClient.updateContentStatus(pageId, "Error");
    * ```
    */
   async updateContentStatus(

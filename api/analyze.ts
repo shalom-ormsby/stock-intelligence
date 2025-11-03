@@ -362,6 +362,11 @@ export default async function handler(
       console.log(`   Stock History page ID: ${historyPageId}`);
     }
 
+    // Set Content Status to "Analyzing" (triggers Notion automation)
+    console.log('\n📊 Setting Content Status: Analyzing...');
+    await notionClient.updateContentStatus(analysesPageId, 'Analyzing');
+    notionCalls += 1;
+
     // LLM Analysis Workflow (v1.0.2)
     console.log('\n📊 Step 4/7: Querying historical analyses...');
 
@@ -535,6 +540,11 @@ export default async function handler(
 
       notionWriteDuration = Date.now() - notionWriteStartTime;
       console.log(`⏱️  Total Notion write time: ${notionWriteDuration}ms`);
+
+      // Set Content Status to "Complete" (triggers Notion automation)
+      console.log('\n📊 Setting Content Status: Complete...');
+      await notionClient.updateContentStatus(analysesPageId, 'Complete');
+      notionCalls += 1;
     } catch (error) {
       notionWriteDuration = Date.now() - notionWriteStartTime;
       console.error(`❌ Failed to write analysis to Notion after ${notionWriteDuration}ms:`, error);
