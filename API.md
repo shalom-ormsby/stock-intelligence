@@ -401,3 +401,7 @@ For issues or questions:
 - Check the [Vercel documentation](https://vercel.com/docs)
 - Review the [Notion API documentation](https://developers.notion.com)
 - Open an issue in the project repository
+
+---
+
+*Last updated: November 3, 2025*

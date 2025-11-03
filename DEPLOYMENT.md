@@ -317,3 +317,7 @@ Deployments → [Previous Deployment] → Promote to Production
 - [Vercel Serverless Functions](https://vercel.com/docs/functions)
 - [Notion API Documentation](https://developers.notion.com)
 - [API Documentation](./API.md)
+
+---
+
+*Last updated: November 3, 2025*

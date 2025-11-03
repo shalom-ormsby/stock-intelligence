@@ -255,3 +255,9 @@ For full license terms, see the [LICENSE](LICENSE) file.
 ## Support
 
 For issues, questions, or feature requests, please [contact information or issue tracker].
+
+---
+
+**⚠️ NOTE:** This README reflects v0.2.x (legacy Python implementation). The project has migrated to v1.0+ (TypeScript/Vercel serverless). For current documentation, see [ARCHITECTURE.md](ARCHITECTURE.md), [SETUP.md](SETUP.md), and [API.md](API.md).
+
+*Last updated: November 3, 2025*

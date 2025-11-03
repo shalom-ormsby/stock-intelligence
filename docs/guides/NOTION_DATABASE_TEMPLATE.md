@@ -362,3 +362,6 @@ Now that you have the visual reference, go set up your database:
 4. Invite beta users once confirmed working
 
 Good luck! 🚀
+---
+
+*Last updated: November 3, 2025*

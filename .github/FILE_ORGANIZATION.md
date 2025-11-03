@@ -72,6 +72,11 @@ How-to guides and technical references for specific features.
 - Be descriptive (e.g., `NOTION_DATABASE_TEMPLATE.md`)
 - Avoid version numbers (guides should be current)
 
+**Timestamp requirement:**
+- All guides must include a "Last updated" timestamp at the bottom
+- Format: `*Last updated: Month DD, YYYY*`
+- Update timestamp whenever content changes significantly
+
 #### `/docs/legacy/`
 Superseded version documentation that's no longer applicable.
 
@@ -212,6 +217,64 @@ Superseded version documentation that's no longer applicable.
 
 **Is it a script?**
 - **Yes** → `/scripts/`
+
+---
+
+## Documentation Standards
+
+### Timestamps
+
+**All documentation files must include a "Last updated" timestamp** to help readers assess content freshness.
+
+**Required format:**
+```markdown
+---
+
+*Last updated: November 3, 2025*
+```
+
+**Placement:**
+- At the very bottom of the file
+- Below a horizontal rule (`---`)
+- Italicized for visual distinction
+
+**When to update:**
+- Whenever content changes significantly
+- After adding/removing sections
+- When updating examples or instructions
+- Not for minor typos (use judgment)
+
+**Files requiring timestamps:**
+- ✅ All root-level documentation (README.md, ARCHITECTURE.md, API.md, etc.)
+- ✅ All `/docs/guides/` files
+- ✅ `/docs/README.md` navigation guide
+- ❌ CHANGELOG.md (has dated entries)
+- ❌ `/docs/archive/` files (historical, frozen)
+- ❌ `/docs/legacy/` files (superseded, frozen)
+
+**Why this matters:**
+- Git commit dates aren't visible when reading the file
+- Readers need to know if information is current
+- Helps during documentation audits/reviews
+- Makes it clear which docs are actively maintained
+
+**Example:**
+
+```markdown
+# Setup Guide
+
+## Installation
+
+...content here...
+
+## Configuration
+
+...content here...
+
+---
+
+*Last updated: November 3, 2025*
+```
 
 ---
 

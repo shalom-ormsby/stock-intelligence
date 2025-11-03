@@ -149,3 +149,6 @@ This is the TL;DR version of [USER_SETTINGS_PHASE1.md](USER_SETTINGS_PHASE1.md).
 **Your backend APIs already work!** This is just wiring up the UI.
 
 Good luck! 🎉
+---
+
+*Last updated: November 3, 2025*

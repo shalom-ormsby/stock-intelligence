@@ -498,3 +498,6 @@ For Upstash-specific issues:
 - Support: https://upstash.com/docs
 - Discord: https://discord.gg/upstash
 - Email: support@upstash.com
+---
+
+*Last updated: November 3, 2025*

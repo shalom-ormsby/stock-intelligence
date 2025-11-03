@@ -396,3 +396,6 @@ For issues or questions:
 - Verify environment variables are set correctly
 - Ensure Notion database schema matches requirements
 - Test API endpoints directly with curl to isolate issues
+---
+
+*Last updated: November 3, 2025*
