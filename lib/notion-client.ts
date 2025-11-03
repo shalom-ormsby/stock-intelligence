@@ -1232,6 +1232,7 @@ export class NotionClient {
         const batchSize = 10;
         const batchDelay = 100; // 100ms between batches
         let deletedCount = 0;
+        const failedDeletes: Array<{ blockId: string; error: string }> = [];
 
         for (let i = 0; i < blockIdsToDelete.length; i += batchSize) {
           const batch = blockIdsToDelete.slice(i, i + batchSize);
@@ -1243,12 +1244,14 @@ export class NotionClient {
             this.client.blocks.delete({ block_id: blockId })
               .then(() => {
                 deletedCount++;
-                return blockId;
+                return { blockId, success: true, error: null };
               })
               .catch((error: any) => {
-                // Log but don't fail - some blocks can't be deleted
-                console.warn(`[Notion] Could not delete block ${blockId.substring(0, 8)}:`, error.message);
-                return null;
+                // Track failed deletes
+                const errorMsg = error.message || String(error);
+                failedDeletes.push({ blockId: blockId.substring(0, 8), error: errorMsg });
+                console.warn(`[Notion] Failed to delete block ${blockId.substring(0, 8)}:`, errorMsg);
+                return { blockId, success: false, error: errorMsg };
               })
           );
 
@@ -1263,6 +1266,20 @@ export class NotionClient {
 
         const deleteDuration = Date.now() - deleteStartTime;
         console.log(`[Notion] Deleted ${deletedCount}/${blockIdsToDelete.length} blocks in ${deleteDuration}ms (${Math.ceil(deletedCount / (deleteDuration / 1000))} blocks/sec)`);
+
+        // CRITICAL: Validate all blocks were deleted
+        if (deletedCount < blockIdsToDelete.length) {
+          const failedCount = blockIdsToDelete.length - deletedCount;
+          const errorSummary = failedDeletes.slice(0, 5).map(f => `${f.blockId}: ${f.error}`).join('; ');
+          throw new Error(
+            `Failed to delete ${failedCount}/${blockIdsToDelete.length} blocks. ` +
+            `Cannot proceed with REPLACE mode to avoid content duplication. ` +
+            `Sample errors: ${errorSummary}` +
+            (failedDeletes.length > 5 ? ` (and ${failedDeletes.length - 5} more)` : '')
+          );
+        }
+
+        console.log(`[Notion] ✅ All ${deletedCount} blocks successfully deleted`);
       } else {
         console.log(`[Notion] Appending content to page ${pageId} (mode: ${mode})...`);
       }
