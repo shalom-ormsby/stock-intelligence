@@ -1141,30 +1141,22 @@ export class NotionClient {
         const deleteStartTime = Date.now();
         console.log(`[Notion] Deleting existing content from page ${pageId}...`);
 
+        // Step 1a: Collect all block IDs (paginated)
+        const blockIdsToDelete: string[] = [];
         let hasMore = true;
         let cursor: string | undefined = undefined;
-        let deletedCount = 0;
 
         while (hasMore) {
-          // List child blocks (paginated, 100 per request)
           const response = await this.client.blocks.children.list({
             block_id: pageId,
             start_cursor: cursor,
             page_size: 100,
           });
 
-          // Delete each block
+          // Collect block IDs
           for (const block of response.results) {
             if ('id' in block) {
-              try {
-                await this.client.blocks.delete({
-                  block_id: block.id,
-                });
-                deletedCount++;
-              } catch (deleteError: any) {
-                // Ignore errors for blocks that can't be deleted (e.g., dividers)
-                console.warn(`[Notion] Could not delete block ${block.id}:`, deleteError.message);
-              }
+              blockIdsToDelete.push(block.id);
             }
           }
 
@@ -1172,8 +1164,45 @@ export class NotionClient {
           cursor = response.next_cursor || undefined;
         }
 
+        console.log(`[Notion] Found ${blockIdsToDelete.length} blocks to delete`);
+
+        // Step 1b: Delete blocks in parallel batches to avoid rate limits
+        // Notion rate limit: ~3 req/sec average, but allows bursts
+        // Delete 10 blocks in parallel per batch, then wait 100ms
+        const batchSize = 10;
+        const batchDelay = 100; // 100ms between batches
+        let deletedCount = 0;
+
+        for (let i = 0; i < blockIdsToDelete.length; i += batchSize) {
+          const batch = blockIdsToDelete.slice(i, i + batchSize);
+          const batchNum = Math.floor(i / batchSize) + 1;
+          const totalBatches = Math.ceil(blockIdsToDelete.length / batchSize);
+
+          // Delete all blocks in this batch in parallel
+          const deletePromises = batch.map(blockId =>
+            this.client.blocks.delete({ block_id: blockId })
+              .then(() => {
+                deletedCount++;
+                return blockId;
+              })
+              .catch((error: any) => {
+                // Log but don't fail - some blocks can't be deleted
+                console.warn(`[Notion] Could not delete block ${blockId.substring(0, 8)}:`, error.message);
+                return null;
+              })
+          );
+
+          await Promise.all(deletePromises);
+          console.log(`[Notion] Deleted batch ${batchNum}/${totalBatches} (${batch.length} blocks)`);
+
+          // Add delay between batches (except for the last batch)
+          if (i + batchSize < blockIdsToDelete.length) {
+            await new Promise(resolve => setTimeout(resolve, batchDelay));
+          }
+        }
+
         const deleteDuration = Date.now() - deleteStartTime;
-        console.log(`[Notion] Deleted ${deletedCount} existing blocks in ${deleteDuration}ms`);
+        console.log(`[Notion] Deleted ${deletedCount}/${blockIdsToDelete.length} blocks in ${deleteDuration}ms (${Math.ceil(deletedCount / (deleteDuration / 1000))} blocks/sec)`);
       } else {
         console.log(`[Notion] Appending content to page ${pageId} (mode: ${mode})...`);
       }
