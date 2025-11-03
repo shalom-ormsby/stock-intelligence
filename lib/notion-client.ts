@@ -554,14 +554,14 @@ export class NotionClient {
 
     while (Date.now() < endTime) {
       try {
-        // Query page for current Content Status
+        // Query page for current Status
         const page = (await this.client.pages.retrieve({
           page_id: pageId,
         })) as PageObjectResponse;
 
-        const contentStatusProperty = page.properties['Content Status'];
-        if (contentStatusProperty?.type === 'select') {
-          const status = contentStatusProperty.select?.name as
+        const statusProperty = page.properties['Status'];
+        if (statusProperty?.type === 'status') {
+          const status = statusProperty.status?.name as
             | ContentStatus
             | undefined;
 
@@ -588,13 +588,13 @@ export class NotionClient {
 
     // Timeout reached - set status to "Error"
     console.log('⏱️  Timeout reached. Analysis not completed within time limit.');
-    console.log('🔄 Setting Content Status to "Error"...');
+    console.log('🔄 Setting Status to "Error"...');
 
     try {
       await this.client.pages.update({
         page_id: pageId,
         properties: {
-          'Content Status': { select: { name: 'Error' } },
+          'Status': { status: { name: 'Error' } },
         },
       });
       console.log('✅ Status updated to "Error"');
@@ -647,7 +647,7 @@ export class NotionClient {
 
       // Properties to exclude from copy
       const EXCLUDE_PROPERTIES = new Set([
-        'Content Status', // Workflow-specific
+        'Status', // Workflow-specific
         'Owner', // Workflow-specific
         'Send to History', // Button property
         'Next Review Date', // Stock Analyses-specific
@@ -760,7 +760,7 @@ export class NotionClient {
   }
 
   /**
-   * Update the Content Status property of a Notion page
+   * Update the Status property of a Notion page
    *
    * @param pageId - Notion page ID or URL
    * @param status - New status value: "Analyzing" | "Complete" | "Error"
@@ -795,15 +795,15 @@ export class NotionClient {
       await this.client.pages.update({
         page_id: id,
         properties: {
-          'Content Status': {
-            select: { name: status },
+          'Status': {
+            status: { name: status },
           },
         },
       });
 
-      console.log(`✅ Updated Content Status to "${status}"`);
+      console.log(`✅ Updated Status to "${status}"`);
     } catch (error) {
-      console.error('❌ Error updating Content Status:', error);
+      console.error('❌ Error updating Status:', error);
       throw error;
     }
   }
@@ -839,8 +839,8 @@ export class NotionClient {
                   },
                 ],
               },
-              'Content Status': {
-                select: {
+              'Status': {
+                status: {
                   name: 'Error',
                 },
               },

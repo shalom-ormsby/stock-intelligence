@@ -7,7 +7,8 @@
  * - Schema validation
  * - Template creation
  *
- * Schema version: v1.0.2
+ * Schema version: v1.0.14
+ * - v1.0.14: Changed to Status property type (from Select), renamed from "Content Status" to "Status"
  * - v1.0.2: Simplified Content Status to 3 states (Analyzing, Complete, Error)
  * - v1.0.0: Initial TypeScript port (matches v0.3.0 Python schema)
  */
@@ -75,10 +76,10 @@ export const STOCK_ANALYSES_SCHEMA: NotionProperty[] = [
   },
   { name: 'Data Completeness', type: 'number', description: 'Percentage of data available (0-1)' },
 
-  // Workflow (v1.0.2: Simplified 3-state system)
+  // Workflow (v1.0.14: Status property type)
   {
-    name: 'Content Status',
-    type: 'select',
+    name: 'Status',
+    type: 'status',
     options: ['Analyzing', 'Complete', 'Error'],
     description: 'Analysis lifecycle status (triggers Notion automations)'
   },
@@ -128,11 +129,11 @@ export const STOCK_HISTORY_SCHEMA: NotionProperty[] = [
   { name: 'Ticker', type: 'rich_text', required: true, description: 'Stock ticker symbol' },
   { name: 'Analysis Date', type: 'date', required: true, description: 'Date and time of analysis' },
 
-  // All other fields same as Stock Analyses (except Owner and Content Status)
-  // Content Status removed in v1.0.2 (Stock History is append-only, no workflow tracking needed)
+  // All other fields same as Stock Analyses (except Owner and Status)
+  // Status removed in v1.0.2 (Stock History is append-only, no workflow tracking needed)
 
   // ... (all other properties from STOCK_ANALYSES_SCHEMA except excluded ones)
-  // Excluded: Owner, Content Status, Send to History, Next Review Date, AI summary, Holding Type
+  // Excluded: Owner, Status, Send to History, Next Review Date, AI summary, Holding Type
 ];
 
 /**
