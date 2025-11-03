@@ -313,10 +313,10 @@ export class NotionClient {
     data: AnalysisData,
     dbType: 'analyses' | 'history'
   ): Record<string, any> {
-    const { ticker, companyName, timestamp, technical, fundamental, scores } =
+    const { ticker, companyName, timestamp, technical, fundamental, macro, scores } =
       data;
 
-    // Calculate data completeness (28 total fields from v0.3.0)
+    // Calculate data completeness (24 total fields to match validators.ts)
     const fields = [
       technical.current_price,
       technical.ma_50,
@@ -338,10 +338,15 @@ export class NotionClient {
       fundamental.beta,
       technical.week_52_high,
       technical.week_52_low,
+      // Macro fields (4 fields)
+      macro.fed_funds_rate,
+      macro.unemployment,
+      macro.vix,
+      macro.yield_curve_spread,
     ];
 
     const available = fields.filter((f) => f !== undefined && f !== null).length;
-    const totalFields = 28; // From v0.3.0
+    const totalFields = 24; // Matches validators.ts: 2 critical + 22 optional
     const completeness = available / totalFields;
 
     // Data quality grade

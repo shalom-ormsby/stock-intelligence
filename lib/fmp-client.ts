@@ -57,7 +57,16 @@ interface HistoricalPrice {
 
 interface TechnicalIndicator {
   date: string;
-  value: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  // Dynamic property based on indicator type
+  rsi?: number;
+  sma?: number;
+  ema?: number;
+  [key: string]: any; // Allow other indicator types
 }
 
 interface CompanyProfile {
@@ -98,13 +107,19 @@ interface BalanceSheet {
 
 interface FinancialRatios {
   date: string;
-  debtToEquity: number;
+  symbol: string;
+  period: string;
+  // Correct property names from FMP API
+  debtEquityRatio: number;
+  debtToEquity?: number; // Alias for backwards compatibility
   currentRatio: number;
   quickRatio: number;
-  priceToEarningsRatio: number;
+  priceEarningsRatio: number;
+  priceToEarningsRatio?: number; // Alias for backwards compatibility
   priceToBookRatio: number;
   returnOnEquity: number;
   returnOnAssets: number;
+  [key: string]: any; // Allow other ratios
 }
 
 export class FMPClient {

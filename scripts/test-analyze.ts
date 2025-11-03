@@ -85,11 +85,11 @@ async function testAnalysis(
 
     const technical = {
       current_price: fmpData.quote.price,
-      ma_50: fmpData.technicalIndicators.sma50[0]?.value,
-      ma_200: fmpData.technicalIndicators.sma200[0]?.value,
-      rsi: fmpData.technicalIndicators.rsi[0]?.value,
-      macd: fmpData.technicalIndicators.ema12[0]?.value,
-      macd_signal: fmpData.technicalIndicators.ema26[0]?.value,
+      ma_50: fmpData.technicalIndicators.sma50[0]?.sma,
+      ma_200: fmpData.technicalIndicators.sma200[0]?.sma,
+      rsi: fmpData.technicalIndicators.rsi[0]?.rsi,
+      macd: fmpData.technicalIndicators.ema12[0]?.ema,
+      macd_signal: fmpData.technicalIndicators.ema26[0]?.ema,
       volume: fmpData.quote.volume,
       avg_volume_20d: fmpData.quote.avgVolume,
       volatility_30d: undefined,
@@ -102,11 +102,11 @@ async function testAnalysis(
 
     const fundamental = {
       company_name: fmpData.profile.companyName,
-      market_cap: fmpData.profile.marketCap,
-      pe_ratio: fmpData.fundamentals.ratios[0]?.priceToEarningsRatio,
+      market_cap: fmpData.quote.marketCap || fmpData.profile.marketCap,
+      pe_ratio: fmpData.fundamentals.ratios[0]?.priceEarningsRatio || fmpData.fundamentals.ratios[0]?.priceToEarningsRatio,
       eps: fmpData.fundamentals.incomeStatements[0]?.eps,
       revenue_ttm: fmpData.fundamentals.incomeStatements[0]?.revenue,
-      debt_to_equity: fmpData.fundamentals.ratios[0]?.debtToEquity,
+      debt_to_equity: fmpData.fundamentals.ratios[0]?.debtEquityRatio || fmpData.fundamentals.ratios[0]?.debtToEquity,
       beta: fmpData.profile.beta,
     };
 
