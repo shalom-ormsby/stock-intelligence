@@ -508,8 +508,9 @@ export default async function handler(
 
       // Wait for Notion's backend to settle after modifying parent page structure
       // This prevents conflict_error when creating child pages under the same parent
-      console.log('[Notion] Waiting 500ms for backend to settle...');
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // 3 seconds needed for large pages (93+ blocks), scales with block count
+      console.log('[Notion] Waiting 3 seconds for backend to settle...');
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       // 2. Create child analysis page with dated title
       const analysisDate = new Date().toLocaleDateString('en-US', {
