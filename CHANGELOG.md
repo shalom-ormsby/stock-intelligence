@@ -7,6 +7,98 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### v1.0.7: Fix Callout Block Rendering (2025-11-02)
+
+**Status**: Ready for deployment
+
+**Objective:** Fix AI-generated callout blocks rendering as escaped text instead of formatted Notion callout blocks.
+
+### Problem Statement
+
+Callout blocks in AI-generated analysis were rendering as raw text instead of formatted blocks:
+- **Stock History pages**: Displayed escaped markup like `<callout icon="🟠" color="orange_bg">` as literal text
+- **Stock Analyses pages**: Callout recommendation summary not visually distinct from body content
+- **User experience**: Professional formatting lost; pages looked broken
+- **Readability**: Key recommendation summary blended into body text
+
+### Root Cause
+
+The `markdownToBlocks()` function in [lib/notion-client.ts](lib/notion-client.ts#L1016) only recognized:
+- H2/H3 headings (`##`, `###`)
+- Bullet points (`-`, `*`)
+- Regular paragraphs
+
+The AI prompt (introduced in v1.0.4) instructs the LLM to generate callout syntax:
+```markdown
+<callout icon="🟢" color="green_bg">
+**STRONG BUY** | Entry: $195-201 | Target: $230-275 | Stop: $190
+</callout>
+```
+
+However, the markdown parser had **no handler for callout syntax**, so it treated `<callout>` tags as regular paragraph text.
+
+### Solution
+
+Enhanced `markdownToBlocks()` to recognize and convert callout syntax to proper Notion API callout blocks:
+
+**Added Callout Parser** ([lib/notion-client.ts:1030-1086](lib/notion-client.ts#L1030-L1086)):
+- Detects opening tag: `<callout icon="..." color="...">`
+- Collects content until closing tag: `</callout>`
+- Parses rich text with **bold** formatting support
+- Converts color shorthand to Notion format (e.g., `green_bg` → `green_background`)
+- Creates proper Notion callout block structure
+
+**Notion API Callout Structure:**
+```typescript
+{
+  object: 'block',
+  type: 'callout',
+  callout: {
+    rich_text: [...],  // Parsed markdown content
+    icon: { emoji: '🟢' },
+    color: 'green_background'
+  }
+}
+```
+
+**Color Mapping:**
+| Input | Notion Color |
+|-------|--------------|
+| `green_bg` | `green_background` |
+| `red_bg` | `red_background` |
+| `orange_bg` | `orange_background` |
+| `yellow_bg` | `yellow_background` |
+| `blue_bg` | `blue_background` |
+| `gray_bg` | `gray_background` |
+| `purple_bg` | `purple_background` |
+| `pink_bg` | `pink_background` |
+| `brown_bg` | `brown_background` |
+
+### Changed
+
+- **lib/notion-client.ts**: Added callout block parsing to `markdownToBlocks()` (lines 1030-1086)
+  - Regex pattern to extract icon and color attributes
+  - Multi-line content collection until closing tag
+  - Rich text parsing with newline preservation
+  - Color shorthand to Notion format conversion
+
+### Impact
+
+- **Callout blocks now render properly** on all analysis pages
+- **Recommendation summaries are visually distinct** with color-coded backgrounds and emoji icons
+- **Professional formatting restored** across Stock Analyses and Stock History pages
+- **No changes to AI prompt or content generation** - existing v1.0.4 prompt works as intended
+
+### Testing
+
+Generate new analysis for any ticker to verify:
+- [ ] Callout renders at top of Stock Analyses page
+- [ ] Callout renders at top of Stock History page
+- [ ] Color-coding matches recommendation (green/yellow/orange/red)
+- [ ] Emoji icon displays correctly
+- [ ] Bold formatting preserved inside callout
+- [ ] No other formatting regression (headings, bullets, tables)
+
 ### v1.0.4: Optimized Analysis Output (2025-11-02)
 
 **Status**: Complete and deployed

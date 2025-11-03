@@ -1027,6 +1027,64 @@ export class NotionClient {
         continue;
       }
 
+      // Callout block (<callout icon="..." color="...">)
+      if (line.startsWith('<callout')) {
+        const calloutMatch = line.match(/<callout\s+icon="([^"]+)"\s+color="([^"]+)">/);
+        if (calloutMatch) {
+          const [, icon, color] = calloutMatch;
+
+          // Collect callout content until closing tag
+          const calloutLines: string[] = [];
+          i++;
+          while (i < lines.length) {
+            const contentLine = lines[i].trim();
+            if (contentLine === '</callout>') {
+              i++; // Move past closing tag
+              break;
+            }
+            if (contentLine) {
+              calloutLines.push(contentLine);
+            }
+            i++;
+          }
+
+          // Convert color shorthand to Notion format
+          const colorMap: { [key: string]: string } = {
+            'green_bg': 'green_background',
+            'red_bg': 'red_background',
+            'orange_bg': 'orange_background',
+            'yellow_bg': 'yellow_background',
+            'blue_bg': 'blue_background',
+            'gray_bg': 'gray_background',
+            'purple_bg': 'purple_background',
+            'pink_bg': 'pink_background',
+            'brown_bg': 'brown_background',
+          };
+          const notionColor = colorMap[color] || color;
+
+          // Parse callout content as rich text
+          const richText: Array<any> = [];
+          for (const contentLine of calloutLines) {
+            // Add newline between lines (except first)
+            if (richText.length > 0) {
+              richText.push({ type: 'text', text: { content: '\n' } });
+            }
+            richText.push(...this.parseRichText(contentLine));
+          }
+
+          blocks.push({
+            object: 'block',
+            type: 'callout',
+            callout: {
+              rich_text: richText.length > 0 ? richText : [{ type: 'text', text: { content: '' } }],
+              icon: { emoji: icon },
+              color: notionColor,
+            },
+          });
+          continue;
+        }
+      }
+
       // H3 heading (###)
       if (line.startsWith('### ')) {
         blocks.push({
