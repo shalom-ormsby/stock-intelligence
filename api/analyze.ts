@@ -246,9 +246,10 @@ export default async function handler(
       `   FMP: ${fmpCalls} calls | FRED: ${fredCalls} calls | Total: ${fmpCalls + fredCalls} calls`
     );
 
-    // Calculate historical price changes from fetched data
+    // Calculate historical price changes and volatility from fetched data
     let price_change_1m: number | undefined = undefined;
     let price_change_5d: number | undefined = undefined;
+    let volatility_30d: number | undefined = undefined;
 
     if (fmpData.historical && fmpData.historical.length > 0) {
       const currentPrice = fmpData.quote.price;
@@ -275,8 +276,42 @@ export default async function handler(
           `   📊 5D Price Change: ${price_change_5d > 0 ? '+' : ''}${(price_change_5d * 100).toFixed(2)}% (${price5dAgo.toFixed(2)} → ${currentPrice.toFixed(2)})`
         );
       }
+
+      // Calculate 30-day volatility (standard deviation of daily returns)
+      // Requires at least 30 days of data for accurate calculation
+      if (fmpData.historical.length >= 30) {
+        const dailyReturns: number[] = [];
+
+        // Calculate daily returns for the past 30 days
+        for (let i = 0; i < 29; i++) {
+          const currentClose = fmpData.historical[i].close;
+          const previousClose = fmpData.historical[i + 1].close;
+
+          if (currentClose > 0 && previousClose > 0) {
+            const dailyReturn = (currentClose - previousClose) / previousClose;
+            dailyReturns.push(dailyReturn);
+          }
+        }
+
+        // Calculate standard deviation (volatility)
+        if (dailyReturns.length >= 20) {
+          // Need at least 20 valid returns for meaningful calculation
+          const mean = dailyReturns.reduce((sum, val) => sum + val, 0) / dailyReturns.length;
+          const squaredDiffs = dailyReturns.map(val => Math.pow(val - mean, 2));
+          const variance = squaredDiffs.reduce((sum, val) => sum + val, 0) / dailyReturns.length;
+          volatility_30d = Math.sqrt(variance);
+
+          console.log(
+            `   📊 30D Volatility: ${(volatility_30d * 100).toFixed(2)}% std dev (${dailyReturns.length} days)`
+          );
+        } else {
+          console.warn(`⚠️  Insufficient valid returns for volatility calculation (${dailyReturns.length} < 20)`);
+        }
+      } else {
+        console.warn(`⚠️  Insufficient historical data for volatility calculation (${fmpData.historical.length} < 30 days)`);
+      }
     } else {
-      console.warn('⚠️  No historical data available for price change calculations');
+      console.warn('⚠️  No historical data available for price change and volatility calculations');
     }
 
     // Extract data for scoring
@@ -289,7 +324,7 @@ export default async function handler(
       macd_signal: fmpData.technicalIndicators.ema26[0]?.ema,
       volume: fmpData.quote.volume,
       avg_volume_20d: fmpData.quote.avgVolume,
-      volatility_30d: undefined, // TODO: Calculate from historical data
+      volatility_30d, // Calculated from historical data
       price_change_1d: fmpData.quote.change / fmpData.quote.previousClose,
       price_change_5d, // Calculated from historical data
       price_change_1m, // Calculated from historical data
