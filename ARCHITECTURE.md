@@ -80,6 +80,8 @@ Stock Intelligence is a **serverless backend system** that provides automated st
 
 # Stock Analyses Data Flow
 
+```
+
 ## 1. Trigger & Input
 ┌─────────────────┐
 │   Web App UI    │  User enters ticker symbol
@@ -175,7 +177,7 @@ Stock Intelligence is a **serverless backend system** that provides automated st
 │    button (redirects to page)   │
 └─────────────────────────────────┘
 
-
+```
 
 ---
 
