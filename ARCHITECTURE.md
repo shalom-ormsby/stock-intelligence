@@ -1,6 +1,6 @@
 # Stock Intelligence Architecture
 
-*Last updated: November 3, 2025 at 9:09 AM*
+*Last updated: November 3, 2025 at 4:51 PM*
 
 **Version:** 1.0.2-alpha (Hybrid Approach Phase 1)
 **Status:** In Development (v1.0.2 HTML Analyzer Page)
@@ -11,16 +11,17 @@
 
 1. [System Overview](#system-overview)
 2. [Technology Stack](#technology-stack)
-3. [Architecture Diagram](#architecture-diagram)
-4. [Component Structure](#component-structure)
-5. [Data Flow](#data-flow)
-6. [API Endpoints](#api-endpoints)
-7. [External Integrations](#external-integrations)
-8. [Rate Limiting Architecture](#rate-limiting-architecture)
-9. [Security Model](#security-model)
-10. [Deployment Architecture](#deployment-architecture)
-11. [Configuration](#configuration)
-12. [Design Decisions](#design-decisions)
+3. [Data Flow Diagram](#data-flow-diagram)
+4. [Architecture Diagram](#architecture-diagram)
+5. [Component Structure](#component-structure)
+6. [Data Flow](#data-flow)
+7. [API Endpoints](#api-endpoints)
+8. [External Integrations](#external-integrations)
+9. [Rate Limiting Architecture](#rate-limiting-architecture)
+10. [Security Model](#security-model)
+11. [Deployment Architecture](#deployment-architecture)
+12. [Configuration](#configuration)
+13. [Design Decisions](#design-decisions)
 
 ---
 
@@ -74,6 +75,107 @@ Stock Intelligence is a **serverless backend system** that provides automated st
 - **ts-node** - Local testing scripts
 - **dotenv** - Environment variable management
 - **Vercel CLI** - Local development server
+
+## Data Flow Diagram (v1.0.2)
+
+# Stock Analyses Data Flow
+
+## 1. Trigger & Input
+┌─────────────────┐
+│   Web App UI    │  User enters ticker symbol
+│  (Frontend)     │  Clicks "Analyze"
+└────────┬────────┘
+         │
+         ▼
+
+## 2. API Request
+┌─────────────────────────────────┐
+│  Vercel Serverless Function     │
+│  (60s timeout on Pro plan)      │
+└────────┬────────────────────────┘
+         │
+         ▼
+
+## 3. Data Ingestion (Parallel)
+┌──────────────┐        ┌──────────────┐
+│  FMP API     │        │  FRED API    │
+│  - Price     │        │  - Macro     │
+│  - Volume    │        │  - Economic  │
+│  - Technical │        │  - Rates     │
+│  - Fundamental        │              │
+└──────┬───────┘        └──────┬───────┘
+       │                       │
+       └───────────┬───────────┘
+                   ▼
+
+## 4. LLM Processing
+┌─────────────────────────────────┐
+│   LLM Abstraction Layer         │
+│   (Gemini / Claude / OpenAI)    │
+│                                 │
+│  Input:                         │
+│  - Raw financial metrics        │
+│  - Price & volume data          │
+│  - Technical indicators         │
+│  - Macro context                │
+│                                 │
+│  Output:                        │
+│  - Recommendation               │
+│  - Composite scores (0-5)       │
+│  - Pattern detection            │
+│  - AI summary                   │
+│  - Full markdown analysis       │
+└────────┬────────────────────────┘
+         │
+         ▼
+
+## 5. Notion Write (Sequential bottleneck)
+┌─────────────────────────────────────────┐
+│  Notion API Write                       │
+│  (Rate limits: ~3 rps, 100 blocks/call) │
+│                                         │
+│  Two targets:                           │
+│  A) Main Stock Page                     │
+│     └─ Overwrite with latest analysis   │
+│                                         │
+│  B) Stock History Archive               │
+│     └─ Create timestamped snapshot      │
+│                                         │
+│  Operations:                            │
+│  1. Update page properties (metadata)   │
+│  2. Delete old content blocks           │
+│  3. Write new content blocks            │
+│     (batched due to size)               │
+└────────┬────────────────────────────────┘
+         │
+         ▼
+
+## 6. Database Update
+┌─────────────────────────────────┐
+│  Stock Analyses Database        │
+│  @Stock Analyses                   │
+│                                 │
+│  Updated properties:            │
+│  - Status: "Complete"           │
+│  - All metric columns           │
+│  - Scores & ratings             │
+│  - Analysis Date                │
+│  - API Calls Used               │
+└────────┬────────────────────────┘
+         │
+         ▼
+
+## 7. Response & UI
+┌─────────────────────────────────┐
+│  Web App Frontend               │
+│                                 │
+│  - Stop "Analyzing..." spinner  │
+│  - Display success              │
+│  - "View Results in Notion"     │
+│    button (redirects to page)   │
+└─────────────────────────────────┘
+
+
 
 ---
 
