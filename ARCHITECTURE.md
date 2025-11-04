@@ -179,6 +179,29 @@ Stock Intelligence is a **serverless backend system** that provides automated st
 
 ```
 
+## Data Schema in Notion
+
+Each analysis page contains:
+
+├─ Properties (50+ columns in database)
+│  ├─ Core: Ticker, Status, Analysis Date
+│  ├─ Price: Current, 50/200 MA, 52W High/Low
+│  ├─ Scores: Composite, Technical, Fundamental, Macro, Risk, Sentiment, Sector
+│  ├─ Indicators: RSI, MACD, Volume, Beta, Volatility
+│  ├─ Fundamental: P/E, EPS, Market Cap, Debt/Equity
+│  └─ Meta: Confidence, Data Quality Grade, API Calls
+│
+└─ Page Content (markdown)
+├─ Recommendation callout (colored, emoji)
+├─ Executive Summary
+├─ Technical Analysis
+├─ Fundamental Analysis
+├─ Macro & Sector Context
+├─ Catalysts & Events
+├─ Risks & Considerations
+├─ Trade Setup (entry/exit/stops in table)
+└─ Position Sizing Guidance
+
 ---
 
 ## Architecture Diagram (v1.0.2)
