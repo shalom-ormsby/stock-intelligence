@@ -181,6 +181,7 @@ Stock Intelligence is a **serverless backend system** that provides automated st
 
 ## Data Schema in Notion
 
+```
 Each analysis page contains:
 
 ├─ Properties (50+ columns in database)
@@ -201,6 +202,8 @@ Each analysis page contains:
 ├─ Risks & Considerations
 ├─ Trade Setup (entry/exit/stops in table)
 └─ Position Sizing Guidance
+
+```
 
 ---
 
