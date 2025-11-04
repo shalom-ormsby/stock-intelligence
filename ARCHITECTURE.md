@@ -11,8 +11,8 @@
 
 1. [System Overview](#system-overview)
 2. [Technology Stack](#technology-stack)
-3. [Data Flow Diagram](#data-flow-diagram)
-4. [Architecture Diagram](#architecture-diagram)
+3. [Data Flow Diagram](#data-flow-diagram-v102)
+4. [Architecture Diagram](#architecture-diagram-v102)
 5. [Component Structure](#component-structure)
 6. [Data Flow](#data-flow)
 7. [API Endpoints](#api-endpoints)
