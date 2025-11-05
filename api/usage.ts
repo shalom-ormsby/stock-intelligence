@@ -16,13 +16,14 @@
  */
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { RateLimiter, extractUserId } from '../lib/rate-limiter';
+import { RateLimiter } from '../lib/rate-limiter';
+import { validateSession, getUserByEmail } from '../lib/auth';
 import { log, LogLevel } from '../lib/logger';
 
 export interface UsageResponse {
   success: boolean;
   usage?: {
-    used: number;
+    count: number;
     remaining: number;
     total: number;
     resetAt: string;
@@ -44,8 +45,8 @@ export default async function handler(
     return;
   }
 
-  // Accept both GET and POST requests
-  if (req.method !== 'GET' && req.method !== 'POST') {
+  // Accept only GET requests
+  if (req.method !== 'GET') {
     res.status(405).json({
       success: false,
       error: 'Method not allowed',
@@ -54,17 +55,27 @@ export default async function handler(
   }
 
   try {
-    // Extract user ID from request
-    const userId = extractUserId(req);
-
-    if (!userId) {
-      log(LogLevel.WARN, 'Usage check failed - missing user ID');
-      res.status(400).json({
+    // Validate session
+    const session = await validateSession(req);
+    if (!session) {
+      res.status(401).json({
         success: false,
-        error: 'User ID required. Include userId in request body or X-User-ID header.',
+        error: 'Not authenticated',
       });
       return;
     }
+
+    // Get user data
+    const user = await getUserByEmail(session.email);
+    if (!user) {
+      res.status(500).json({
+        success: false,
+        error: 'User not found',
+      });
+      return;
+    }
+
+    const userId = user.id;
 
     // Get usage from rate limiter
     const rateLimiter = new RateLimiter();
@@ -78,7 +89,7 @@ export default async function handler(
       res.status(200).json({
         success: true,
         usage: {
-          used: 0,
+          count: 0,
           remaining: 999,
           total: 10,
           resetAt: new Date(Date.now() + 86400000).toISOString(),
@@ -93,14 +104,14 @@ export default async function handler(
 
     log(LogLevel.INFO, 'Usage check successful', {
       userId,
-      used: usage.count,
+      count: usage.count,
       remaining: usage.remaining,
     });
 
     res.status(200).json({
       success: true,
       usage: {
-        used: usage.count,
+        count: usage.count,
         remaining: usage.remaining,
         total: 10,
         resetAt: usage.resetAt.toISOString(),

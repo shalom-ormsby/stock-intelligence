@@ -8,6 +8,7 @@
  * - Per-user rate limiting (10 analyses/day)
  * - Distributed state tracking with Upstash Redis
  * - Automatic daily reset at midnight UTC
+ * - Admin user automatic bypass (via ADMIN_USER_ID env var)
  * - Session-based bypass code support
  * - Development mode bypass
  * - Graceful error handling (fails open if Redis unavailable)
@@ -39,12 +40,14 @@ export class RateLimiter {
   private redisToken: string;
   private maxAnalyses: number;
   private enabled: boolean;
+  private adminUserId: string;
 
   constructor() {
     this.redisUrl = process.env.UPSTASH_REDIS_REST_URL || '';
     this.redisToken = process.env.UPSTASH_REDIS_REST_TOKEN || '';
     this.maxAnalyses = parseInt(process.env.RATE_LIMIT_MAX_ANALYSES || '10');
     this.enabled = process.env.RATE_LIMIT_ENABLED !== 'false';
+    this.adminUserId = process.env.ADMIN_USER_ID || '';
 
     if (this.enabled && (!this.redisUrl || !this.redisToken)) {
       log(
@@ -60,12 +63,25 @@ export class RateLimiter {
    * Check if user has remaining quota, increment counter if allowed
    *
    * This is the main method called by the analyze endpoint. It checks for:
-   * 1. Active bypass session (highest priority)
-   * 2. Development mode bypass
-   * 3. Normal rate limiting
+   * 1. Admin user automatic bypass (highest priority)
+   * 2. Active bypass session
+   * 3. Development mode bypass
+   * 4. Normal rate limiting
    */
   async checkAndIncrement(userId: string): Promise<RateLimitResult> {
-    // Check for active bypass session first (highest priority)
+    // Check if user is admin (automatic bypass)
+    if (this.adminUserId && userId === this.adminUserId) {
+      log(LogLevel.INFO, 'Request allowed via admin auto-bypass', { userId });
+      return {
+        allowed: true,
+        remaining: 999,
+        resetAt: this.getNextMidnightUTC(),
+        total: 999,
+        bypassed: true,
+      };
+    }
+
+    // Check for active bypass session
     const hasBypass = await this.hasActiveBypass(userId);
     if (hasBypass) {
       log(LogLevel.INFO, 'Request allowed via active bypass session', { userId });

@@ -825,4 +825,59 @@ For detailed setup and testing instructions, see:
 
 ---
 
+## 🐛 Bug Fixes & Resolutions
+
+### Bug: Admin Bypass Code Stored But Never Activated (Fixed: November 5, 2025)
+
+**Issue:** Bypass activation flow was incomplete - admin had bypass code in database but no way to activate it, causing rate limit blocks despite having valid code.
+
+**Root Cause:**
+- Backend `/api/bypass` endpoint existed but no UI to trigger it
+- User Settings page had no activation button/form
+- Admin hitting rate limits despite valid bypass code in database
+
+**Resolution Implemented:**
+
+1. **Created Settings Page** ([public/settings.html](public/settings.html))
+   - Bypass code input form with activation button
+   - Real-time bypass status display (Active/Inactive)
+   - Expiration countdown timer
+   - Usage statistics dashboard
+   - Auto-refresh every 30 seconds
+   - Clean Tailwind CSS UI matching analyzer page
+
+2. **Added Navigation Links**
+   - Added Settings link to analyze.html navigation
+   - Bidirectional navigation between Analyzer and Settings
+
+3. **Implemented Admin Auto-Bypass** ([lib/rate-limiter.ts:70-81](lib/rate-limiter.ts#L70-L81))
+   - Admin user automatically bypasses rate limits
+   - No manual activation required for admin
+   - Uses `ADMIN_USER_ID` environment variable
+   - Priority order: Admin bypass → Session bypass → Normal limits
+
+4. **Updated API Endpoints**
+   - Enhanced `/api/auth/session` to include user ID
+   - Updated `/api/usage` to use session authentication
+   - Fixed bypass status reporting in usage endpoint
+
+**Setup Instructions:**
+
+To enable admin auto-bypass, add to Vercel environment variables:
+```bash
+ADMIN_USER_ID="<your-notion-page-id>"  # Found in Beta Users database
+```
+
+To use manual bypass activation:
+1. Navigate to Settings page: `/settings.html`
+2. Enter bypass code (value from `RATE_LIMIT_BYPASS_CODE` env var)
+3. Click "Activate Unlimited Access"
+4. Bypass remains active until midnight UTC
+
+**Testing:** All TypeScript compilation tests passed. Manual testing required once deployed.
+
+**Impact:** Critical bug resolved - admin can now use the system without rate limit restrictions.
+
+---
+
 **Design Philosophy:** Impeccable but simple. Personal decision-support tool for daily stock analyses ahead of earnings. Not enterprise software.

@@ -20,6 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({
       authenticated: true,
       user: {
+        id: session.userId, // Notion page ID (for rate limiting)
         email: session.email,
         name: session.name,
         notionUserId: session.notionUserId,
