@@ -114,6 +114,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       status: user.status,
     });
 
+    // Auto-approve admin email
+    const adminEmail = process.env.ADMIN_EMAIL;
+    if (adminEmail && userEmail.toLowerCase() === adminEmail.toLowerCase() && user.status !== 'approved') {
+      log(LogLevel.INFO, 'Auto-approving admin user', { email: userEmail });
+      const { updateUserStatus } = await import('../../lib/auth');
+      await updateUserStatus(user.id, 'approved');
+      user.status = 'approved'; // Update local copy
+    }
+
     // Step 4: Check approval status
     if (user.status === 'pending') {
       log(LogLevel.INFO, 'User pending approval', { email: userEmail });
