@@ -11,6 +11,7 @@ import { log, LogLevel } from '../../lib/logger';
 import {
   storeUserSession,
   createOrUpdateUser,
+  updateUserStatus,
 } from '../../lib/auth';
 
 interface NotionOAuthTokenResponse {
@@ -34,20 +35,22 @@ interface NotionOAuthTokenResponse {
   };
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
     const { code, error: oauthError } = req.query;
 
     // Handle OAuth errors (user denied access, etc.)
     if (oauthError) {
       log(LogLevel.WARN, 'OAuth authorization denied', { error: oauthError });
-      return res.redirect('/?error=access_denied');
+      res.redirect('/?error=access_denied');
+      return;
     }
 
     // Validate authorization code
     if (!code || typeof code !== 'string') {
       log(LogLevel.WARN, 'Missing authorization code');
-      return res.redirect('/?error=missing_code');
+      res.redirect('/?error=missing_code');
+      return;
     }
 
     const clientId = process.env.NOTION_OAUTH_CLIENT_ID;
@@ -56,7 +59,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!clientId || !clientSecret || !redirectUri) {
       log(LogLevel.ERROR, 'OAuth configuration incomplete');
-      return res.redirect('/?error=server_config');
+      res.redirect('/?error=server_config');
+      return;
     }
 
     // Step 1: Exchange authorization code for access token
@@ -82,7 +86,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         status: tokenResponse.status,
         error: errorText,
       });
-      return res.redirect('/?error=token_exchange_failed');
+      res.redirect('/?error=token_exchange_failed');
+      return;
     }
 
     const tokenData = await tokenResponse.json() as NotionOAuthTokenResponse;
@@ -118,7 +123,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const adminEmail = process.env.ADMIN_EMAIL;
     if (adminEmail && userEmail.toLowerCase() === adminEmail.toLowerCase() && user.status !== 'approved') {
       log(LogLevel.INFO, 'Auto-approving admin user', { email: userEmail });
-      const { updateUserStatus } = await import('../../lib/auth');
       await updateUserStatus(user.id, 'approved');
       user.status = 'approved'; // Update local copy
     }
@@ -126,12 +130,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Step 4: Check approval status
     if (user.status === 'pending') {
       log(LogLevel.INFO, 'User pending approval', { email: userEmail });
-      return res.redirect('/?status=pending');
+      res.redirect('/?status=pending');
+      return;
     }
 
     if (user.status === 'denied') {
       log(LogLevel.INFO, 'User access denied', { email: userEmail });
-      return res.redirect('/?status=denied');
+      res.redirect('/?status=denied');
+      return;
     }
 
     // Step 5: User is approved - create session
@@ -148,18 +154,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
 
       // Redirect to analyzer
-      return res.redirect('/analyze.html');
+      res.redirect('/analyze.html');
+      return;
     }
 
     // Fallback (should never reach here)
     log(LogLevel.ERROR, 'Unexpected user status', { status: user.status });
-    return res.redirect('/?error=unknown_status');
+    res.redirect('/?error=unknown_status');
   } catch (error) {
     log(LogLevel.ERROR, 'OAuth callback error', {
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     });
 
-    return res.redirect('/?error=oauth_failed');
+    res.redirect('/?error=oauth_failed');
   }
 }
