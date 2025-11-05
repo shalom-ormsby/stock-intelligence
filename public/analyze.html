@@ -27,12 +27,32 @@
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
+    <!-- Top Nav Bar -->
+    <nav class="bg-white shadow-sm border-b border-gray-200">
+        <div class="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
+            <div class="flex items-center">
+                <span class="text-xl font-bold text-gray-900">📊 Stock Intelligence</span>
+            </div>
+            <div class="flex items-center space-x-4">
+                <span class="text-sm text-gray-600">
+                    <span class="font-medium" id="user-email">Loading...</span>
+                </span>
+                <button
+                    onclick="window.location.href='/api/auth/logout'"
+                    class="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded transition duration-200"
+                >
+                    Logout
+                </button>
+            </div>
+        </div>
+    </nav>
+
     <!-- Main Container -->
     <div class="max-w-6xl mx-auto p-6">
         <!-- Header -->
         <div class="text-center mb-8">
-            <h1 class="text-4xl font-bold text-gray-900 mb-2">Stock Intelligence</h1>
-            <p class="text-gray-600">AI-Powered Stock Analysis</p>
+            <h1 class="text-3xl font-bold text-gray-900 mb-2">Analyze Stock</h1>
+            <p class="text-gray-600">Enter a ticker symbol to get AI-powered analysis</p>
         </div>
 
         <!-- Main Analyzer Section -->
@@ -145,6 +165,31 @@
     </div>
 
     <script>
+        // Check authentication on page load
+        async function checkAuth() {
+            try {
+                const response = await fetch('/api/auth/session');
+                const data = await response.json();
+
+                if (!data.authenticated) {
+                    // Not authenticated - redirect to landing page
+                    window.location.href = '/';
+                    return false;
+                }
+
+                // Show user email in nav
+                document.getElementById('user-email').textContent = data.user.email;
+                return true;
+            } catch (error) {
+                console.error('Auth check failed:', error);
+                window.location.href = '/';
+                return false;
+            }
+        }
+
+        // Run auth check immediately
+        checkAuth();
+
         // Check for admin parameter
         const urlParams = new URLSearchParams(window.location.search);
         const isAdmin = urlParams.get('admin') === 'true';
@@ -182,7 +227,7 @@
                     },
                     body: JSON.stringify({
                         ticker: ticker,
-                        userId: 'web-user-' + Date.now(), // Temporary user ID
+                        // userId will be extracted from session by the API
                     }),
                 });
 

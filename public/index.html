@@ -1,1 +1,174 @@
-<!DOCTYPE html><html><body><h1>Welcome to the Stock Intelligence platform.</h1><p>API endpoints are available at /api/*</p></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Intelligence - AI-Powered Stock Analysis</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="min-h-screen flex items-center justify-center px-4">
+        <div class="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow-lg">
+
+            <!-- Logo/Icon -->
+            <div class="text-center">
+                <div class="text-6xl mb-4">📊</div>
+                <h1 class="text-3xl font-bold text-gray-900">Stock Intelligence</h1>
+                <p class="mt-2 text-gray-600">AI-powered stock analysis in your Notion workspace</p>
+            </div>
+
+            <!-- Status Messages -->
+            <div id="status-pending" class="hidden p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div class="flex items-start">
+                    <div class="text-2xl mr-3">⏳</div>
+                    <div>
+                        <p class="text-yellow-800 font-medium">Account Pending Approval</p>
+                        <p class="text-yellow-700 text-sm mt-1">
+                            Your account has been created and is awaiting admin approval.
+                            You'll receive an email when approved (usually within 24 hours).
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="status-denied" class="hidden p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div class="flex items-start">
+                    <div class="text-2xl mr-3">❌</div>
+                    <div>
+                        <p class="text-red-800 font-medium">Access Denied</p>
+                        <p class="text-red-700 text-sm mt-1">
+                            Your account application has been denied. Please contact support if you believe this is an error.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="error" class="hidden p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div class="flex items-start">
+                    <div class="text-2xl mr-3">⚠️</div>
+                    <div>
+                        <p class="text-red-800 font-medium">Authentication Error</p>
+                        <p class="text-red-700 text-sm mt-1" id="error-message">
+                            An error occurred during sign in. Please try again.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sign In Button -->
+            <div class="space-y-4">
+                <button
+                    onclick="window.location.href='/api/auth/authorize'"
+                    class="w-full flex items-center justify-center px-4 py-3 border border-transparent text-base font-medium rounded-md text-white bg-black hover:bg-gray-800 transition duration-200"
+                >
+                    <svg class="w-5 h-5 mr-2" viewBox="0 0 100 100" fill="currentColor">
+                        <path d="M6.017 4.313l55.333 -0.106c1.952 0 3.535 1.583 3.535 3.535v55.333c0 1.952 -1.583 3.535 -3.535 3.535h-55.333c-1.952 0-3.535 -1.583 -3.535 -3.535v-55.333c0 -1.952 1.583 -3.535 3.535 -3.535z" />
+                        <path d="M61.35 0.227l-55.333 0.106c-1.952 0 -3.535 1.583 -3.535 3.535v55.333c0 1.952 1.583 3.535 3.535 3.535h55.333c1.952 0 3.535 -1.583 3.535 -3.535v-55.333c0 -1.952 -1.583 -3.535 -3.535 -3.535zM32.15 16.46h-5.899v29.445h5.899v-29.445zM32.15 11.39h-5.899v4.658h5.899v-4.658z" fill="white"/>
+                    </svg>
+                    Sign in with Notion
+                </button>
+
+                <p class="text-xs text-center text-gray-500">
+                    First time? <a href="#setup" class="text-blue-600 hover:underline">View setup guide</a>
+                </p>
+            </div>
+
+            <!-- Setup Instructions (Collapsible) -->
+            <div id="setup" class="mt-8 border-t pt-6">
+                <h3 class="font-semibold text-gray-900 mb-3">Quick Setup (2 minutes)</h3>
+                <ol class="text-sm text-gray-600 space-y-3">
+                    <li class="flex items-start">
+                        <span class="font-bold text-gray-900 mr-2">1.</span>
+                        <span>
+                            <a href="https://ormsby.notion.site/Stock-Intelligence-28ca1d1b67e080ea8424c9e64f4648a9?source=copy_link"
+                               target="_blank"
+                               class="text-blue-600 hover:underline font-medium">
+                                Duplicate this Notion template
+                            </a> to your workspace
+                        </span>
+                    </li>
+                    <li class="flex items-start">
+                        <span class="font-bold text-gray-900 mr-2">2.</span>
+                        <span>Click <strong>"Sign in with Notion"</strong> above</span>
+                    </li>
+                    <li class="flex items-start">
+                        <span class="font-bold text-gray-900 mr-2">3.</span>
+                        <span>Select your duplicated <strong>"Stock Intelligence"</strong> page when prompted</span>
+                    </li>
+                    <li class="flex items-start">
+                        <span class="font-bold text-gray-900 mr-2">4.</span>
+                        <span>Wait for admin approval (usually within 24 hours)</span>
+                    </li>
+                    <li class="flex items-start">
+                        <span class="font-bold text-gray-900 mr-2">5.</span>
+                        <span>Return and sign in to start analyzing stocks! 🚀</span>
+                    </li>
+                </ol>
+            </div>
+
+            <!-- Features -->
+            <div class="mt-8 border-t pt-6">
+                <h3 class="font-semibold text-gray-900 mb-3">What you get:</h3>
+                <ul class="text-sm text-gray-600 space-y-2">
+                    <li class="flex items-center">
+                        <svg class="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        AI-powered stock analysis with technical and fundamental data
+                    </li>
+                    <li class="flex items-center">
+                        <svg class="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        Automated analysis saved directly to your Notion workspace
+                    </li>
+                    <li class="flex items-center">
+                        <svg class="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        Historical tracking and trend analysis
+                    </li>
+                    <li class="flex items-center">
+                        <svg class="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        10 analyses per day (beta)
+                    </li>
+                </ul>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // Show status messages based on URL params
+        const params = new URLSearchParams(window.location.search);
+
+        if (params.get('status') === 'pending') {
+            document.getElementById('status-pending').classList.remove('hidden');
+        }
+
+        if (params.get('status') === 'denied') {
+            document.getElementById('status-denied').classList.remove('hidden');
+        }
+
+        const errorParam = params.get('error');
+        if (errorParam) {
+            const errorMessages = {
+                'access_denied': 'You denied access to your Notion workspace. Please try again and grant access.',
+                'missing_code': 'Authorization code missing. Please try signing in again.',
+                'server_config': 'Server configuration error. Please contact support.',
+                'token_exchange_failed': 'Failed to complete authentication. Please try again.',
+                'oauth_failed': 'Authentication failed. Please try again or contact support.',
+                'unknown_status': 'Unexpected error occurred. Please contact support.',
+            };
+
+            const errorDiv = document.getElementById('error');
+            const errorMessage = document.getElementById('error-message');
+
+            errorMessage.textContent = errorMessages[errorParam] || 'An error occurred during sign in. Please try again.';
+            errorDiv.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>

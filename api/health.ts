@@ -12,7 +12,6 @@
  */
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { isAuthEnabled } from '../lib/auth';
 
 interface HealthResponse {
   status: 'ok' | 'error';
@@ -62,16 +61,14 @@ export default async function handler(
   }
 
   try {
-    const authEnabled = isAuthEnabled();
-
     const response: HealthResponse = {
       status: 'ok',
       version: '1.0.0-beta.1',
       timestamp: new Date().toISOString(),
       environment: process.env.VERCEL_ENV || 'development',
       auth: {
-        enabled: authEnabled,
-        method: authEnabled ? 'X-API-Key or Bearer token' : 'none',
+        enabled: true,
+        method: 'Notion OAuth (session-based)',
       },
       endpoints: [
         {
@@ -84,13 +81,25 @@ export default async function handler(
           path: '/api/analyze',
           method: 'POST',
           description: 'Analyze a stock and sync to Notion',
-          requiresAuth: authEnabled,
+          requiresAuth: true,
         },
         {
-          path: '/api/webhook',
-          method: 'POST',
-          description: 'Notion webhook handler for analysis triggers and archiving',
-          requiresAuth: authEnabled,
+          path: '/api/auth/authorize',
+          method: 'GET',
+          description: 'Initiate Notion OAuth flow',
+          requiresAuth: false,
+        },
+        {
+          path: '/api/auth/session',
+          method: 'GET',
+          description: 'Check current session status',
+          requiresAuth: false,
+        },
+        {
+          path: '/api/admin/*',
+          method: 'GET/POST',
+          description: 'Admin dashboard endpoints',
+          requiresAuth: true,
         },
       ],
       config: {

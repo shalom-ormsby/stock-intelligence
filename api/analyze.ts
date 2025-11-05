@@ -22,12 +22,12 @@ import { createFMPClient } from '../lib/fmp-client';
 import { createFREDClient } from '../lib/fred-client';
 import { createStockScorer } from '../lib/scoring';
 import { createNotionClient, AnalysisData } from '../lib/notion-client';
-import { requireAuth } from '../lib/auth';
+import { requireAuth as requireAuthSession, getUserByEmail, decryptToken, incrementUserAnalyses } from '../lib/auth';
 import { validateStockData, validateTicker } from '../lib/validators';
 import { createTimer, logAnalysisStart, logAnalysisComplete, logAnalysisFailed } from '../lib/logger';
 import { formatErrorResponse, formatErrorForNotion } from '../lib/utils';
 import { getErrorCode, getStatusCode, RateLimitError } from '../lib/errors';
-import { RateLimiter, extractUserId, getSecondsUntilMidnightUTC } from '../lib/rate-limiter';
+import { RateLimiter, getSecondsUntilMidnightUTC } from '../lib/rate-limiter';
 import { LLMFactory } from '../lib/llm/LLMFactory';
 import { AnalysisContext } from '../lib/llm/types';
 
@@ -115,9 +115,10 @@ export default async function handler(
     return;
   }
 
-  // Check authentication (optional - only if API_KEY env var is set)
-  if (!requireAuth(req, res)) {
-    return;
+  // Check authentication - require valid session
+  const session = await requireAuthSession(req, res);
+  if (!session) {
+    return; // requireAuthSession already sent error response
   }
 
   const timer = createTimer('Stock Analysis');
@@ -126,30 +127,44 @@ export default async function handler(
   let rateLimitResult: any = null;
 
   try {
+    // Get user data and decrypt their OAuth token
+    const user = await getUserByEmail(session.email);
+    if (!user) {
+      res.status(500).json({
+        success: false,
+        error: 'User not found',
+        details: 'User record not found in database',
+      });
+      return;
+    }
+
+    // Check if user is approved
+    if (user.status !== 'approved') {
+      res.status(403).json({
+        success: false,
+        error: 'Account not approved',
+        details: 'Your account is pending approval or has been denied. Please contact support.',
+      });
+      return;
+    }
+
+    // Decrypt user's OAuth access token
+    const userAccessToken = await decryptToken(user.accessToken);
+
     // Parse request body
     const body: AnalyzeRequest =
       typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
 
     const {
       ticker: rawTicker,
-      userId,
       usePollingWorkflow = true,
       timeout = 600,
       pollInterval = 10,
       skipPolling = false,
     } = body;
 
-    // Extract user ID for rate limiting
-    const extractedUserId = userId || extractUserId(req);
-
-    if (!extractedUserId) {
-      res.status(400).json({
-        success: false,
-        error: 'User ID required',
-        details: 'User ID is required for rate limiting. Include userId in request body or X-User-ID header.',
-      });
-      return;
-    }
+    // Use user's Notion page ID for rate limiting
+    const extractedUserId = user.id;
 
     // Check rate limit BEFORE processing analysis
     const rateLimiter = new RateLimiter();
@@ -188,10 +203,8 @@ export default async function handler(
     // Initialize API clients
     const fmpApiKey = process.env.FMP_API_KEY;
     const fredApiKey = process.env.FRED_API_KEY;
-    const notionApiKey = process.env.NOTION_API_KEY;
     const stockAnalysesDbId = process.env.STOCK_ANALYSES_DB_ID;
     const stockHistoryDbId = process.env.STOCK_HISTORY_DB_ID;
-    const notionUserId = process.env.NOTION_USER_ID;
 
     // Validate environment variables
     if (!fmpApiKey) {
@@ -199,9 +212,6 @@ export default async function handler(
     }
     if (!fredApiKey) {
       throw new Error('FRED_API_KEY environment variable is not set');
-    }
-    if (!notionApiKey) {
-      throw new Error('NOTION_API_KEY environment variable is not set');
     }
     if (!stockAnalysesDbId) {
       throw new Error('STOCK_ANALYSES_DB_ID environment variable is not set');
@@ -213,11 +223,13 @@ export default async function handler(
     const fmpClient = createFMPClient(fmpApiKey);
     const fredClient = createFREDClient(fredApiKey);
     const scorer = createStockScorer();
+
+    // Use user's OAuth token and Notion User ID
     const notionClient = createNotionClient({
-      apiKey: notionApiKey,
+      apiKey: userAccessToken, // User's OAuth token
       stockAnalysesDbId,
       stockHistoryDbId,
-      userId: notionUserId,
+      userId: user.notionUserId, // User's Notion User ID
     });
 
     // Track API calls
@@ -723,6 +735,12 @@ export default async function handler(
       res.setHeader('X-RateLimit-Total', rateLimitResult.total.toString());
       res.setHeader('X-RateLimit-Reset', rateLimitResult.resetAt.toISOString());
     }
+
+    // Increment user's analysis counters (non-blocking)
+    incrementUserAnalyses(user.id).catch((error) => {
+      console.error('Failed to increment user analyses:', error);
+      // Don't throw - this is non-critical
+    });
 
     res.status(200).json(response);
   } catch (error) {

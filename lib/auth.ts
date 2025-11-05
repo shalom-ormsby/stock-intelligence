@@ -1,78 +1,604 @@
 /**
- * API Authentication Middleware
+ * Authentication & User Management Library for Stock Intelligence v1.0.0
  *
- * Provides optional API key authentication for public endpoints.
+ * Provides OAuth session management, user CRUD operations, and token encryption.
+ * Uses Upstash Redis for session storage and Notion for user data persistence.
  *
- * Usage:
- * 1. Set API_KEY environment variable in Vercel
- * 2. If set, clients must include X-API-Key header
- * 3. If not set, endpoints are publicly accessible without auth
- *
- * v1.0 - Vercel Serverless + TypeScript
+ * Features:
+ * - Session management (24-hour Redis-backed sessions)
+ * - User CRUD operations (Notion Beta Users database)
+ * - OAuth token encryption (AES-256-GCM)
+ * - Admin authorization helpers
  */
 
+import { Client } from '@notionhq/client';
 import { VercelRequest, VercelResponse } from '@vercel/node';
+import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import { log, LogLevel } from './logger';
 
-export interface AuthError {
-  success: false;
-  error: string;
-  details: string;
+// ============================================================================
+// Types & Interfaces
+// ============================================================================
+
+export interface Session {
+  userId: string;
+  email: string;
+  name: string;
+  notionUserId: string;
+  createdAt: number;
+}
+
+export interface User {
+  id: string; // Notion page ID
+  notionUserId: string; // Notion user ID from OAuth
+  email: string;
+  name: string;
+  workspaceId: string;
+  accessToken: string; // Encrypted
+  status: 'pending' | 'approved' | 'denied';
+  signupDate: string;
+  dailyAnalyses: number;
+  totalAnalyses: number;
+  bypassActive: boolean;
+  notes?: string;
+}
+
+export interface CreateUserData {
+  notionUserId: string;
+  email: string;
+  name: string;
+  workspaceId: string;
+  accessToken: string; // Plain text - will be encrypted before storing
+}
+
+// ============================================================================
+// Configuration
+// ============================================================================
+
+const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL || '';
+const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || '';
+const BETA_USERS_DB_ID = process.env.NOTION_BETA_USERS_DB_ID || '';
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || '';
+const SESSION_TTL = 24 * 60 * 60; // 24 hours in seconds
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || '';
+
+// Initialize Notion client for user management
+const notion = new Client({ auth: process.env.NOTION_API_KEY });
+
+// ============================================================================
+// Session Management (Redis)
+// ============================================================================
+
+/**
+ * Store user session in Redis with 24-hour TTL
+ * Sets HTTP-only secure cookie with session ID
+ */
+export async function storeUserSession(
+  res: VercelResponse,
+  sessionData: Omit<Session, 'createdAt'>
+): Promise<void> {
+  const sessionId = randomBytes(32).toString('hex');
+  const session: Session = {
+    ...sessionData,
+    createdAt: Date.now(),
+  };
+
+  try {
+    // Store session in Redis
+    await fetch(`${REDIS_URL}/set/${sessionId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${REDIS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(session),
+    });
+
+    // Set TTL
+    await fetch(`${REDIS_URL}/expire/${sessionId}/${SESSION_TTL}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${REDIS_TOKEN}`,
+      },
+    });
+
+    // Set HTTP-only secure cookie
+    const isProduction = process.env.NODE_ENV === 'production';
+    const cookieOptions = [
+      `si_session=${sessionId}`,
+      'Path=/',
+      `Max-Age=${SESSION_TTL}`,
+      'HttpOnly',
+      'SameSite=Lax',
+      ...(isProduction ? ['Secure'] : []),
+    ];
+
+    res.setHeader('Set-Cookie', cookieOptions.join('; '));
+
+    log(LogLevel.INFO, 'Session stored successfully', {
+      userId: sessionData.userId,
+      email: sessionData.email,
+    });
+  } catch (error) {
+    log(LogLevel.ERROR, 'Failed to store session', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw new Error('Failed to create session');
+  }
 }
 
 /**
- * Validate API key from request headers
- *
- * @param req - Vercel request object
- * @returns true if authenticated or auth disabled, false otherwise
+ * Validate session from request cookie
+ * Returns session data if valid, null otherwise
  */
-export function validateApiKey(req: VercelRequest): boolean {
-  const apiKey = process.env.API_KEY;
+export async function validateSession(req: VercelRequest): Promise<Session | null> {
+  try {
+    // Extract session ID from cookie
+    const cookies = req.headers.cookie || '';
+    const sessionCookie = cookies
+      .split(';')
+      .find((c) => c.trim().startsWith('si_session='));
 
-  // If no API key is configured, allow all requests (development mode)
-  if (!apiKey) {
-    return true;
+    if (!sessionCookie) {
+      return null;
+    }
+
+    const sessionId = sessionCookie.split('=')[1].trim();
+
+    // Retrieve session from Redis
+    const response = await fetch(`${REDIS_URL}/get/${sessionId}`, {
+      headers: {
+        Authorization: `Bearer ${REDIS_TOKEN}`,
+      },
+    });
+
+    const data = (await response.json()) as { result: string | null };
+
+    if (!data.result) {
+      return null;
+    }
+
+    const session = JSON.parse(data.result) as Session;
+
+    // Check if session is expired (shouldn't happen with Redis TTL, but double-check)
+    const age = Date.now() - session.createdAt;
+    if (age > SESSION_TTL * 1000) {
+      await clearUserSession(sessionId);
+      return null;
+    }
+
+    return session;
+  } catch (error) {
+    log(LogLevel.ERROR, 'Failed to validate session', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+/**
+ * Clear user session (logout)
+ * Removes session from Redis and clears cookie
+ */
+export async function clearUserSession(
+  sessionIdOrRes: string | VercelResponse
+): Promise<void> {
+  try {
+    // If passed a response object, extract session ID from request
+    if (typeof sessionIdOrRes !== 'string') {
+      const res = sessionIdOrRes;
+      // Clear cookie
+      res.setHeader(
+        'Set-Cookie',
+        'si_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax'
+      );
+      return;
+    }
+
+    // Delete session from Redis
+    const sessionId = sessionIdOrRes;
+    await fetch(`${REDIS_URL}/del/${sessionId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${REDIS_TOKEN}`,
+      },
+    });
+
+    log(LogLevel.INFO, 'Session cleared successfully');
+  } catch (error) {
+    log(LogLevel.ERROR, 'Failed to clear session', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+// ============================================================================
+// Token Encryption (AES-256-GCM)
+// ============================================================================
+
+/**
+ * Encrypt OAuth access token using AES-256-GCM
+ * Returns base64-encoded encrypted string with IV and auth tag
+ */
+export async function encryptToken(token: string): Promise<string> {
+  if (!ENCRYPTION_KEY) {
+    throw new Error('ENCRYPTION_KEY not configured');
   }
 
-  // Check for API key in headers (X-API-Key or Authorization: Bearer <key>)
-  const headerApiKey = req.headers['x-api-key'] as string;
-  const authHeader = req.headers['authorization'] as string;
-  const bearerToken = authHeader?.replace('Bearer ', '');
+  try {
+    // Generate random IV (initialization vector)
+    const iv = randomBytes(16);
 
-  // Validate API key
-  return headerApiKey === apiKey || bearerToken === apiKey;
+    // Create cipher
+    const key = Buffer.from(ENCRYPTION_KEY, 'hex');
+    const cipher = createCipheriv('aes-256-gcm', key, iv);
+
+    // Encrypt token
+    let encrypted = cipher.update(token, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+
+    // Get auth tag
+    const authTag = cipher.getAuthTag();
+
+    // Combine IV + encrypted data + auth tag
+    const combined = Buffer.concat([
+      iv,
+      Buffer.from(encrypted, 'hex'),
+      authTag,
+    ]);
+
+    return combined.toString('base64');
+  } catch (error) {
+    log(LogLevel.ERROR, 'Failed to encrypt token', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw new Error('Token encryption failed');
+  }
 }
 
 /**
- * Middleware to require API key authentication
- * Returns true if request should continue, false if unauthorized response sent
- *
- * @param req - Vercel request object
- * @param res - Vercel response object
- * @returns true if authenticated, false if unauthorized
+ * Decrypt OAuth access token
+ * Returns plain text token
  */
-export function requireAuth(
+export async function decryptToken(encryptedToken: string): Promise<string> {
+  if (!ENCRYPTION_KEY) {
+    throw new Error('ENCRYPTION_KEY not configured');
+  }
+
+  try {
+    // Decode base64
+    const combined = Buffer.from(encryptedToken, 'base64');
+
+    // Extract IV (first 16 bytes)
+    const iv = combined.subarray(0, 16);
+
+    // Extract auth tag (last 16 bytes)
+    const authTag = combined.subarray(combined.length - 16);
+
+    // Extract encrypted data (middle part)
+    const encrypted = combined.subarray(16, combined.length - 16);
+
+    // Create decipher
+    const key = Buffer.from(ENCRYPTION_KEY, 'hex');
+    const decipher = createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(authTag);
+
+    // Decrypt token
+    let decrypted = decipher.update(encrypted.toString('hex'), 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+
+    return decrypted;
+  } catch (error) {
+    log(LogLevel.ERROR, 'Failed to decrypt token', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw new Error('Token decryption failed');
+  }
+}
+
+// ============================================================================
+// User Management (Notion CRUD)
+// ============================================================================
+
+/**
+ * Create or update user in Beta Users database
+ * If user exists (by email), updates their info
+ * If new user, creates with status: 'pending'
+ */
+export async function createOrUpdateUser(userData: CreateUserData): Promise<User> {
+  if (!BETA_USERS_DB_ID) {
+    throw new Error('NOTION_BETA_USERS_DB_ID not configured');
+  }
+
+  try {
+    // Check if user already exists
+    const existingUser = await getUserByEmail(userData.email);
+
+    // Encrypt access token
+    const encryptedToken = await encryptToken(userData.accessToken);
+
+    if (existingUser) {
+      // Update existing user
+      log(LogLevel.INFO, 'Updating existing user', { email: userData.email });
+
+      await notion.pages.update({
+        page_id: existingUser.id,
+        properties: {
+          Name: { title: [{ text: { content: userData.name } }] },
+          'Notion User ID': { rich_text: [{ text: { content: userData.notionUserId } }] },
+          'Workspace ID': { rich_text: [{ text: { content: userData.workspaceId } }] },
+          'Access Token': { rich_text: [{ text: { content: encryptedToken } }] },
+        },
+      });
+
+      return {
+        ...existingUser,
+        name: userData.name,
+        notionUserId: userData.notionUserId,
+        workspaceId: userData.workspaceId,
+        accessToken: encryptedToken,
+      };
+    } else {
+      // Create new user with 'pending' status
+      log(LogLevel.INFO, 'Creating new user', { email: userData.email });
+
+      const response = await notion.pages.create({
+        parent: { database_id: BETA_USERS_DB_ID },
+        properties: {
+          Name: { title: [{ text: { content: userData.name } }] },
+          Email: { email: userData.email },
+          'Notion User ID': { rich_text: [{ text: { content: userData.notionUserId } }] },
+          'Workspace ID': { rich_text: [{ text: { content: userData.workspaceId } }] },
+          'Access Token': { rich_text: [{ text: { content: encryptedToken } }] },
+          Status: { select: { name: 'Pending' } },
+          'Daily Analyses': { number: 0 },
+          'Total Analyses': { number: 0 },
+          'Bypass Active': { checkbox: false },
+        },
+      });
+
+      return {
+        id: response.id,
+        notionUserId: userData.notionUserId,
+        email: userData.email,
+        name: userData.name,
+        workspaceId: userData.workspaceId,
+        accessToken: encryptedToken,
+        status: 'pending',
+        signupDate: new Date().toISOString(),
+        dailyAnalyses: 0,
+        totalAnalyses: 0,
+        bypassActive: false,
+      };
+    }
+  } catch (error) {
+    log(LogLevel.ERROR, 'Failed to create/update user', {
+      email: userData.email,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw new Error('Failed to save user data');
+  }
+}
+
+/**
+ * Get user by email from Beta Users database
+ */
+export async function getUserByEmail(email: string): Promise<User | null> {
+  if (!BETA_USERS_DB_ID) {
+    throw new Error('NOTION_BETA_USERS_DB_ID not configured');
+  }
+
+  try {
+    const response = await notion.databases.query({
+      database_id: BETA_USERS_DB_ID,
+      filter: {
+        property: 'Email',
+        email: { equals: email },
+      },
+    });
+
+    if (response.results.length === 0) {
+      return null;
+    }
+
+    const page = response.results[0] as any;
+    return mapNotionPageToUser(page);
+  } catch (error) {
+    log(LogLevel.ERROR, 'Failed to get user by email', {
+      email,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw new Error('Failed to retrieve user');
+  }
+}
+
+/**
+ * Get user by Notion User ID
+ */
+export async function getUserByNotionId(notionUserId: string): Promise<User | null> {
+  if (!BETA_USERS_DB_ID) {
+    throw new Error('NOTION_BETA_USERS_DB_ID not configured');
+  }
+
+  try {
+    const response = await notion.databases.query({
+      database_id: BETA_USERS_DB_ID,
+      filter: {
+        property: 'Notion User ID',
+        rich_text: { equals: notionUserId },
+      },
+    });
+
+    if (response.results.length === 0) {
+      return null;
+    }
+
+    const page = response.results[0] as any;
+    return mapNotionPageToUser(page);
+  } catch (error) {
+    log(LogLevel.ERROR, 'Failed to get user by Notion ID', {
+      notionUserId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw new Error('Failed to retrieve user');
+  }
+}
+
+/**
+ * Update user status (pending/approved/denied)
+ */
+export async function updateUserStatus(
+  userId: string,
+  status: 'pending' | 'approved' | 'denied'
+): Promise<void> {
+  try {
+    await notion.pages.update({
+      page_id: userId,
+      properties: {
+        Status: { select: { name: status.charAt(0).toUpperCase() + status.slice(1) } },
+      },
+    });
+
+    log(LogLevel.INFO, 'User status updated', { userId, status });
+  } catch (error) {
+    log(LogLevel.ERROR, 'Failed to update user status', {
+      userId,
+      status,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw new Error('Failed to update user status');
+  }
+}
+
+/**
+ * Get all users (for admin dashboard)
+ */
+export async function getAllUsers(): Promise<User[]> {
+  if (!BETA_USERS_DB_ID) {
+    throw new Error('NOTION_BETA_USERS_DB_ID not configured');
+  }
+
+  try {
+    const response = await notion.databases.query({
+      database_id: BETA_USERS_DB_ID,
+      sorts: [{ property: 'Signup Date', direction: 'descending' }],
+    });
+
+    return response.results.map((page) => mapNotionPageToUser(page as any));
+  } catch (error) {
+    log(LogLevel.ERROR, 'Failed to get all users', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw new Error('Failed to retrieve users');
+  }
+}
+
+/**
+ * Increment user's analysis counters
+ */
+export async function incrementUserAnalyses(userId: string): Promise<void> {
+  try {
+    // Get current counts
+    const page = await notion.pages.retrieve({ page_id: userId }) as any;
+    const dailyAnalyses = page.properties['Daily Analyses']?.number || 0;
+    const totalAnalyses = page.properties['Total Analyses']?.number || 0;
+
+    // Increment both counters
+    await notion.pages.update({
+      page_id: userId,
+      properties: {
+        'Daily Analyses': { number: dailyAnalyses + 1 },
+        'Total Analyses': { number: totalAnalyses + 1 },
+      },
+    });
+
+    log(LogLevel.INFO, 'User analysis counters incremented', { userId });
+  } catch (error) {
+    log(LogLevel.ERROR, 'Failed to increment user analyses', {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    // Don't throw - this is non-critical
+  }
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Map Notion page object to User interface
+ */
+function mapNotionPageToUser(page: any): User {
+  const props = page.properties;
+
+  return {
+    id: page.id,
+    notionUserId: props['Notion User ID']?.rich_text?.[0]?.text?.content || '',
+    email: props.Email?.email || '',
+    name: props.Name?.title?.[0]?.text?.content || '',
+    workspaceId: props['Workspace ID']?.rich_text?.[0]?.text?.content || '',
+    accessToken: props['Access Token']?.rich_text?.[0]?.text?.content || '',
+    status: (props.Status?.select?.name?.toLowerCase() || 'pending') as User['status'],
+    signupDate: props['Signup Date']?.created_time || '',
+    dailyAnalyses: props['Daily Analyses']?.number || 0,
+    totalAnalyses: props['Total Analyses']?.number || 0,
+    bypassActive: props['Bypass Active']?.checkbox || false,
+    notes: props.Notes?.rich_text?.[0]?.text?.content || undefined,
+  };
+}
+
+/**
+ * Check if email is admin
+ */
+export function isAdmin(email: string): boolean {
+  return email === ADMIN_EMAIL;
+}
+
+/**
+ * Require authentication middleware
+ * Returns session if authenticated, sends 401 and returns null otherwise
+ */
+export async function requireAuth(
   req: VercelRequest,
   res: VercelResponse
-): boolean {
-  if (!validateApiKey(req)) {
-    const errorResponse: AuthError = {
-      success: false,
-      error: 'Unauthorized',
-      details: 'Valid API key required. Include X-API-Key header or Authorization: Bearer <key>',
-    };
+): Promise<Session | null> {
+  const session = await validateSession(req);
 
-    res.status(401).json(errorResponse);
-    return false;
+  if (!session) {
+    res.status(401).json({
+      success: false,
+      error: 'Not authenticated',
+      message: 'Please sign in to continue',
+    });
+    return null;
   }
 
-  return true;
+  return session;
 }
 
 /**
- * Check if API key authentication is enabled
- *
- * @returns true if API_KEY env var is set
+ * Require admin middleware
+ * Returns session if admin, sends 403 and returns null otherwise
  */
-export function isAuthEnabled(): boolean {
-  return !!process.env.API_KEY;
+export async function requireAdmin(
+  req: VercelRequest,
+  res: VercelResponse
+): Promise<Session | null> {
+  const session = await requireAuth(req, res);
+
+  if (!session) {
+    return null;
+  }
+
+  if (!isAdmin(session.email)) {
+    res.status(403).json({
+      success: false,
+      error: 'Forbidden',
+      message: 'Admin access required',
+    });
+    return null;
+  }
+
+  return session;
 }
