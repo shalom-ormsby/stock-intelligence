@@ -65,7 +65,7 @@ export class APITimeoutError extends StockIntelligenceError {
     super(
       `${service} API timeout after ${timeout}ms`,
       'API_TIMEOUT',
-      `Unable to fetch data from ${service}. The service is taking too long to respond. Please try again in a moment.`,
+      `🤨 This is taking longer than usual\n\nOur data provider is running slow right now. Try again in a couple minutes?`,
       504
     );
   }
@@ -103,7 +103,7 @@ export class DataNotFoundError extends StockIntelligenceError {
     super(
       `${dataType} data not found for ${ticker}`,
       'DATA_NOT_FOUND',
-      `Unable to find ${dataType} for ${ticker}. This ticker may not be supported, may be delisted, or data is temporarily unavailable.`,
+      `¯\\_(ツ)_/¯ Missing some data for ${ticker}\n\nWe couldn't find complete ${dataType}. Could be a smaller stock with limited data, or the info's temporarily unavailable.\n\nYou can still run the analysis, but heads up—it might be incomplete.`,
       404
     );
   }
@@ -121,7 +121,7 @@ export class InvalidTickerError extends StockIntelligenceError {
     super(
       `Invalid ticker symbol: ${ticker}${details}`,
       'INVALID_TICKER',
-      `"${ticker}" is not a valid stock ticker. Please check the symbol and try again.`,
+      `🤔 Can't find "${ticker}"\n\nDouble-check the ticker symbol. Stock symbols are usually 3-5 letters (like NVDA or MSFT).`,
       400
     );
   }
@@ -138,7 +138,7 @@ export class NotionAPIError extends StockIntelligenceError {
     super(
       `Notion API error during ${operation}: ${details}`,
       'NOTION_API_ERROR',
-      `Unable to save analysis results to Notion. The ${operation} operation failed. Your analysis data may not have been saved.`,
+      `🤦‍♂️ Couldn't save to Notion\n\nSomething went wrong on our end. The analysis finished, but we couldn't write it to Notion.\n\nTry again? 🤞`,
       500
     );
   }
@@ -201,8 +201,7 @@ export class RateLimitError extends StockIntelligenceError {
     super(
       `User rate limit exceeded - limit will reset at ${resetTime} PT`,
       'USER_RATE_LIMIT_EXCEEDED',
-      `Daily analysis limit reached. Your limit will reset at ${resetTime} PT. ` +
-        `Upgrade to Pro for 50 analyses per day or enter your bypass code in Settings.`,
+      `💪 Superuser alert! 🤩\n\nYou just hit our freebie limit (10 analyses a day on the house).\n\nWanna power up? View plans at https://shalomormsby.com/analyze/pricing to run more analyses per day.\n\n[Settings](https://stock-intelligence.vercel.app/settings.html)`,
       429
     );
 

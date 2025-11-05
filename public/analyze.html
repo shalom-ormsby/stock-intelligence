@@ -111,9 +111,8 @@
 
             <!-- Error Display -->
             <div id="error-display" class="mt-6 hidden">
-                <div class="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <h3 class="text-lg font-semibold text-red-800 mb-2">Error</h3>
-                    <p class="text-red-700" id="error-text"></p>
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p class="text-blue-800 whitespace-pre-line" id="error-text"></p>
                 </div>
             </div>
 
@@ -286,7 +285,13 @@
 
         function showError(message) {
             hideAll();
-            document.getElementById('error-text').textContent = message;
+            const errorTextEl = document.getElementById('error-text');
+
+            // Convert markdown links to HTML links
+            // Pattern: [text](url)
+            const htmlMessage = message.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="underline hover:text-blue-600 font-medium" target="_blank">$1</a>');
+
+            errorTextEl.innerHTML = htmlMessage;
             document.getElementById('error-display').classList.remove('hidden');
         }
 
