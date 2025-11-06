@@ -300,10 +300,18 @@ export function getUserMessage(error: unknown): string {
   }
 
   if (error instanceof Error) {
-    return 'An unexpected error occurred. Please try again or contact support if the problem persists.';
+    return '🫣 Uh-oh!\n\nSomething went wrong in many steps of crafting this stock analysis for you.\n\nWish I could tell you the exact cause, but I can\'t right now. Sorry about that.\n\nTry again? 🤞';
   }
 
-  return 'An unknown error occurred. Please try again.';
+  return '🫣 Uh-oh!\n\nSomething went wrong in many steps of crafting this stock analysis for you.\n\nWish I could tell you the exact cause, but I can\'t right now. Sorry about that.\n\nTry again? 🤞';
+}
+
+/**
+ * Check if error is a generic unexpected error (not a Stock Intelligence error)
+ * Used to apply different styling (red/pink vs blue)
+ */
+export function isUnexpectedError(error: unknown): boolean {
+  return !isStockIntelligenceError(error);
 }
 
 /**

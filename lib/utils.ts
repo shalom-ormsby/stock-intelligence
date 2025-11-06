@@ -312,9 +312,10 @@ export function formatErrorResponse(error: unknown, ticker?: string): {
     message: string;
     ticker?: string;
     timestamp: string;
+    isUnexpected?: boolean;
   };
 } {
-  const { getErrorCode, getUserMessage } = require('./errors');
+  const { getErrorCode, getUserMessage, isUnexpectedError } = require('./errors');
 
   return {
     success: false,
@@ -323,6 +324,7 @@ export function formatErrorResponse(error: unknown, ticker?: string): {
       message: getUserMessage(error),
       ...(ticker && { ticker }),
       timestamp: new Date().toISOString(),
+      isUnexpected: isUnexpectedError(error),
     },
   };
 }

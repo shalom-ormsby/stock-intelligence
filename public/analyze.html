@@ -111,8 +111,8 @@
 
             <!-- Error Display -->
             <div id="error-display" class="mt-6 hidden">
-                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <p class="text-blue-800 whitespace-pre-line" id="error-text"></p>
+                <div id="error-box" class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p id="error-text" class="text-blue-800 whitespace-pre-line"></p>
                 </div>
             </div>
 
@@ -208,12 +208,12 @@
             const ticker = document.getElementById('ticker').value.trim().toUpperCase();
 
             if (!ticker) {
-                showError('Please enter a stock ticker');
+                showError('Please enter a stock ticker', false);
                 return;
             }
 
             if (!/^[A-Z0-9-]{1,10}$/.test(ticker)) {
-                showError('Invalid ticker format. Use 1-10 alphanumeric characters and hyphens.');
+                showError('Invalid ticker format. Use 1-10 alphanumeric characters and hyphens.', false);
                 return;
             }
 
@@ -244,7 +244,7 @@
                     const text = await response.text();
                     const preview = text.substring(0, 200);
                     console.error('Non-JSON response from server:', preview);
-                    showError(`Server error (${response.status}): ${preview.replace(/<[^>]*>/g, '').trim()}`);
+                    showError(`Server error (${response.status}): ${preview.replace(/<[^>]*>/g, '').trim()}`, true);
                     return;
                 }
 
@@ -256,11 +256,12 @@
                 } else {
                     // Show actual error message from backend
                     const errorMsg = data.error?.message || data.error || 'Analysis failed';
-                    showError(errorMsg);
+                    const isUnexpected = data.error?.isUnexpected || false;
+                    showError(errorMsg, isUnexpected);
                 }
             } catch (error) {
                 console.error('Analysis request failed:', error);
-                showError('Request failed: ' + error.message);
+                showError('Request failed: ' + error.message, true);
             }
         });
 
@@ -287,13 +288,24 @@
             document.getElementById('results-display').classList.remove('hidden');
         }
 
-        function showError(message) {
+        function showError(message, isUnexpected = false) {
             hideAll();
             const errorTextEl = document.getElementById('error-text');
+            const errorBox = document.getElementById('error-box');
+
+            // Apply red/pink styling for unexpected errors, blue for expected errors
+            if (isUnexpected) {
+                errorBox.className = 'bg-red-50 border border-red-200 rounded-lg p-4';
+                errorTextEl.className = 'text-red-800 whitespace-pre-line';
+            } else {
+                errorBox.className = 'bg-blue-50 border border-blue-200 rounded-lg p-4';
+                errorTextEl.className = 'text-blue-800 whitespace-pre-line';
+            }
 
             // Convert markdown links to HTML links
             // Pattern: [text](url)
-            const htmlMessage = message.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="underline hover:text-blue-600 font-medium" target="_blank">$1</a>');
+            const linkColor = isUnexpected ? 'text-red-900 hover:text-red-600' : 'hover:text-blue-600';
+            const htmlMessage = message.replace(/\[([^\]]+)\]\(([^)]+)\)/g, `<a href="$2" class="underline ${linkColor} font-medium" target="_blank">$1</a>`);
 
             errorTextEl.innerHTML = htmlMessage;
             document.getElementById('error-display').classList.remove('hidden');
