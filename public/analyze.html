@@ -222,6 +222,9 @@
             showStatus('Analyzing ' + ticker + '...');
 
             try {
+                // Detect user's timezone automatically (v1.0.3)
+                const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
                 const response = await fetch('/api/analyze', {
                     method: 'POST',
                     headers: {
@@ -229,6 +232,7 @@
                     },
                     body: JSON.stringify({
                         ticker: ticker,
+                        timezone: userTimezone, // Send browser timezone for rate limiting and timestamps
                         // userId will be extracted from session by the API
                     }),
                 });

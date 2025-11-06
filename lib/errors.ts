@@ -1,5 +1,5 @@
 /**
- * Custom Error Classes for Stock Intelligence v1.0
+ * Custom Error Classes for Stock Intelligence v1.0.3
  *
  * Provides user-friendly error messages and structured error codes
  * for all failure scenarios in the stock analysis system.
@@ -13,9 +13,14 @@
  *   - NotionAPIError
  *   - ValidationError
  *   - InsufficientDataError
- *   - RateLimitError (user-level rate limiting)
+ *   - RateLimitError (user-level rate limiting, timezone-aware)
  *   - APIResponseError
+ *
+ * v1.0.3 Changes:
+ * - RateLimitError now accepts timezone parameter for proper reset time formatting
  */
+
+import { formatResetTime, validateTimezone, getTimezoneFromEnv, type SupportedTimezone } from './timezone';
 
 /**
  * Base error class for all Stock Intelligence errors
@@ -180,32 +185,33 @@ export class InsufficientDataError extends StockIntelligenceError {
 }
 
 /**
- * Rate Limit Error (User-Level)
+ * Rate Limit Error (User-Level, Timezone-Aware)
  *
  * Thrown when user exceeds their daily analysis quota.
  * Different from APIRateLimitError - this is for our application's user-level limits.
+ *
+ * v1.0.3: Now accepts timezone parameter to show reset time in user's timezone
  */
 export class RateLimitError extends StockIntelligenceError {
   public readonly resetAt: Date;
+  public readonly timezone: SupportedTimezone;
 
-  constructor(resetAt: Date, _remaining: number = 0) {
-    const resetTime = resetAt.toLocaleString('en-US', {
-      timeZone: 'America/Los_Angeles',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
+  constructor(resetAt: Date, timezone?: string, _remaining: number = 0) {
+    // Validate and normalize timezone
+    const userTimezone = validateTimezone(timezone, getTimezoneFromEnv());
+
+    // Format reset time in user's timezone with abbreviation
+    const resetTime = formatResetTime(resetAt, userTimezone);
 
     super(
-      `User rate limit exceeded - limit will reset at ${resetTime} PT`,
+      `User rate limit exceeded - limit will reset at ${resetTime}`,
       'USER_RATE_LIMIT_EXCEEDED',
       `💪 Superuser alert! 🤩\n\nYou just hit our freebie limit (10 analyses a day on the house).\n\nWanna power up? View plans at https://shalomormsby.com/analyze/pricing to run more analyses per day.\n\n[Settings](https://stock-intelligence.vercel.app/settings.html)`,
       429
     );
 
     this.resetAt = resetAt;
+    this.timezone = userTimezone;
   }
 
   toJSON() {
@@ -215,6 +221,7 @@ export class RateLimitError extends StockIntelligenceError {
       message: this.userMessage,
       statusCode: this.statusCode,
       resetAt: this.resetAt.toISOString(),
+      timezone: this.timezone,
     };
   }
 }

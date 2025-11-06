@@ -1,16 +1,19 @@
 /**
- * Notion Client for Stock Intelligence v1.0.2
+ * Notion Client for Stock Intelligence v1.0.3
  *
  * Handles all Notion API operations:
  * - Writing analysis metrics to Stock Analyses database
  * - Managing 3-state Content Status (Analyzing → Complete → Error)
  * - Archiving completed analyses to Stock History
+ * - Timezone-aware timestamp formatting
  *
+ * v1.0.3: Added timezone support for history page titles
  * v1.0.2: Simplified to 3-state Content Status system
  * Ported from Python v0.3.0 NotionClient class
  */
 
 import { Client } from '@notionhq/client';
+import { formatTimestampInTimezone, validateTimezone, getTimezoneFromEnv, type SupportedTimezone } from './timezone';
 import {
   PageObjectResponse,
 } from '@notionhq/client/build/src/api-endpoints';
@@ -22,6 +25,7 @@ interface NotionConfig {
   stockAnalysesDbId: string;
   stockHistoryDbId: string;
   userId?: string; // For notifications
+  timezone?: string; // User's IANA timezone (optional, defaults to env)
 }
 
 interface AnalysisData {
@@ -92,12 +96,14 @@ export class NotionClient {
   private stockAnalysesDbId: string;
   private stockHistoryDbId: string;
   private userId?: string;
+  private timezone: SupportedTimezone;
 
   constructor(config: NotionConfig) {
     this.client = new Client({ auth: config.apiKey });
     this.stockAnalysesDbId = config.stockAnalysesDbId;
     this.stockHistoryDbId = config.stockHistoryDbId;
     this.userId = config.userId;
+    this.timezone = validateTimezone(config.timezone, getTimezoneFromEnv());
   }
 
   /**
@@ -210,6 +216,8 @@ export class NotionClient {
 
   /**
    * Create new entry in Stock History database
+   *
+   * Timezone-aware: Formats timestamp in user's timezone (v1.0.3)
    */
   private async createHistory(
     ticker: string,
@@ -217,14 +225,8 @@ export class NotionClient {
     properties: Record<string, any>
   ): Promise<string | null> {
     try {
-      const formattedDate = timestamp.toLocaleString('en-US', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      });
+      // Format date in user's timezone with abbreviation
+      const formattedDate = formatTimestampInTimezone(timestamp, this.timezone);
 
       // Override Name property for history
       properties['Name'] = {
@@ -687,14 +689,8 @@ export class NotionClient {
       const ticker = tickerProp.title[0]?.plain_text || 'Unknown';
       const analysisDate = new Date(dateProp.date?.start || Date.now());
 
-      const formattedDate = analysisDate.toLocaleString('en-US', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      });
+      // Format date in user's timezone with abbreviation (v1.0.3)
+      const formattedDate = formatTimestampInTimezone(analysisDate, this.timezone);
 
       // Set Stock History specific properties
       propertiesToCopy['Ticker'] = {
@@ -1310,9 +1306,12 @@ export class NotionClient {
 
   /**
    * Create a child analysis page under a parent ticker page
+   *
+   * Timezone-aware: Date string should already be formatted in user's timezone (v1.0.3)
+   *
    * @param parentPageId - ID of the parent ticker page
    * @param ticker - Stock ticker symbol
-   * @param date - Analysis date (e.g., "Nov 1, 2025")
+   * @param date - Analysis date already formatted in user's timezone (e.g., "Nov 1, 2025")
    * @param content - Markdown-formatted analysis content
    * @param properties - Additional page properties (scores, recommendation, etc.)
    * @returns ID of the created child page

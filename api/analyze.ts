@@ -13,6 +13,7 @@
  *    - Child analysis page (dated)
  *    - Stock History database (archived)
  *
+ * v1.0.3 - Timezone Support (Multi-timezone rate limiting and timestamp formatting)
  * v1.0.2 - LLM Integration (Gemini Flash 2.5)
  * v1.0 - Vercel Serverless + TypeScript
  */
@@ -27,13 +28,15 @@ import { validateStockData, validateTicker } from '../lib/validators';
 import { createTimer, logAnalysisStart, logAnalysisComplete, logAnalysisFailed } from '../lib/logger';
 import { formatErrorResponse, formatErrorForNotion } from '../lib/utils';
 import { getErrorCode, getStatusCode, RateLimitError } from '../lib/errors';
-import { RateLimiter, getSecondsUntilMidnightUTC } from '../lib/rate-limiter';
+import { RateLimiter } from '../lib/rate-limiter';
 import { LLMFactory } from '../lib/llm/LLMFactory';
 import { AnalysisContext } from '../lib/llm/types';
+import { validateTimezone, getTimezoneFromEnv, getSecondsUntilMidnight } from '../lib/timezone';
 
 interface AnalyzeRequest {
   ticker: string;
   userId?: string; // User ID for rate limiting (required for rate limiting)
+  timezone?: string; // User's IANA timezone (e.g., "America/Los_Angeles") - v1.0.3
   usePollingWorkflow?: boolean; // Default: true (v0.3.0 workflow)
   timeout?: number; // Polling timeout in seconds (default: 600 = 10 minutes)
   pollInterval?: number; // Poll interval in seconds (default: 10)
@@ -157,21 +160,26 @@ export default async function handler(
 
     const {
       ticker: rawTicker,
+      timezone: requestTimezone,
       usePollingWorkflow = true,
       timeout = 600,
       pollInterval = 10,
       skipPolling = false,
     } = body;
 
+    // Validate and normalize timezone (v1.0.3)
+    // Priority: request timezone > env default
+    const userTimezone = validateTimezone(requestTimezone, getTimezoneFromEnv());
+
     // Use user's Notion page ID for rate limiting
     const extractedUserId = user.id;
 
-    // Check rate limit BEFORE processing analysis
+    // Check rate limit BEFORE processing analysis (timezone-aware in v1.0.3)
     const rateLimiter = new RateLimiter();
-    rateLimitResult = await rateLimiter.checkAndIncrement(extractedUserId);
+    rateLimitResult = await rateLimiter.checkAndIncrement(extractedUserId, userTimezone);
 
     if (!rateLimitResult.allowed) {
-      throw new RateLimitError(rateLimitResult.resetAt);
+      throw new RateLimitError(rateLimitResult.resetAt, userTimezone);
     }
 
     // Validate ticker with custom validator
@@ -224,12 +232,13 @@ export default async function handler(
     const fredClient = createFREDClient(fredApiKey);
     const scorer = createStockScorer();
 
-    // Use user's OAuth token and Notion User ID
+    // Use user's OAuth token, Notion User ID, and timezone (v1.0.3)
     const notionClient = createNotionClient({
       apiKey: userAccessToken, // User's OAuth token
       stockAnalysesDbId,
       stockHistoryDbId,
       userId: user.notionUserId, // User's Notion User ID
+      timezone: userTimezone, // User's timezone for timestamp formatting
     });
 
     // Track API calls
@@ -597,8 +606,10 @@ export default async function handler(
       console.log('[Notion] Waiting 3 seconds for backend to settle...');
       await new Promise(resolve => setTimeout(resolve, 3000));
 
-      // 2. Create child analysis page with dated title
-      const analysisDate = new Date().toLocaleDateString('en-US', {
+      // 2. Create child analysis page with dated title (timezone-aware in v1.0.3)
+      const now = new Date();
+      const analysisDate = now.toLocaleDateString('en-US', {
+        timeZone: userTimezone,
         month: 'short',
         day: 'numeric',
         year: 'numeric'
@@ -755,19 +766,21 @@ export default async function handler(
       logAnalysisFailed(ticker, errorCode, { duration }, error as Error);
     }
 
-    // Special handling for rate limit errors
+    // Special handling for rate limit errors (timezone-aware in v1.0.3)
     if (error instanceof RateLimitError) {
-      const retryAfter = getSecondsUntilMidnightUTC();
+      const retryAfter = getSecondsUntilMidnight(error.timezone);
 
       res.setHeader('Retry-After', retryAfter.toString());
       res.setHeader('X-RateLimit-Remaining', '0');
       res.setHeader('X-RateLimit-Reset', error.resetAt.toISOString());
+      res.setHeader('X-RateLimit-Timezone', error.timezone);
 
       res.status(429).json({
         success: false,
         error: error.userMessage,
         code: error.code,
         resetAt: error.resetAt.toISOString(),
+        timezone: error.timezone,
         retryAfter,
       });
       return;
