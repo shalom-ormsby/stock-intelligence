@@ -1,8 +1,8 @@
-# Stock Intelligence API v1.0
+# Sage Stocks API v1.0
 
 *Last updated: November 3, 2025 at 9:09 AM*
 
-Public API documentation for Stock Intelligence serverless endpoints.
+Public API documentation for Sage Stocks serverless endpoints.
 
 ## Base URL
 

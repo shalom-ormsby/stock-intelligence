@@ -1,7 +1,7 @@
 /**
  * Notion Database Schema Definitions
  *
- * Defines the expected structure for all Notion databases used in Stock Intelligence.
+ * Defines the expected structure for all Notion databases used in Sage Stocks.
  * Used for:
  * - Documentation
  * - Schema validation

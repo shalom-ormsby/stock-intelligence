@@ -1,11 +1,11 @@
 /**
- * Custom Error Classes for Stock Intelligence v1.0.3
+ * Custom Error Classes for Sage Stocks v1.0.3
  *
  * Provides user-friendly error messages and structured error codes
  * for all failure scenarios in the stock analysis system.
  *
  * Error Hierarchy:
- * - StockIntelligenceError (base class)
+ * - SageStocksError (base class)
  *   - APITimeoutError
  *   - APIRateLimitError
  *   - DataNotFoundError
@@ -31,7 +31,7 @@ import { formatResetTime, validateTimezone, getTimezoneFromEnv, type SupportedTi
  * - Error code (for debugging/monitoring)
  * - HTTP status code (for API responses)
  */
-export class StockIntelligenceError extends Error {
+export class SageStocksError extends Error {
   constructor(
     message: string,
     public code: string,
@@ -65,7 +65,7 @@ export class StockIntelligenceError extends Error {
  * Thrown when external API call exceeds timeout threshold.
  * Common causes: Network issues, API service degradation
  */
-export class APITimeoutError extends StockIntelligenceError {
+export class APITimeoutError extends SageStocksError {
   constructor(service: string, timeout: number) {
     super(
       `${service} API timeout after ${timeout}ms`,
@@ -82,7 +82,7 @@ export class APITimeoutError extends StockIntelligenceError {
  * Thrown when external API rate limit is exceeded.
  * Common causes: Too many requests in short period
  */
-export class APIRateLimitError extends StockIntelligenceError {
+export class APIRateLimitError extends SageStocksError {
   constructor(service: string, retryAfter?: number) {
     const retryMessage = retryAfter
       ? ` Please wait ${retryAfter} seconds before trying again.`
@@ -103,7 +103,7 @@ export class APIRateLimitError extends StockIntelligenceError {
  * Thrown when required data is completely missing for a ticker.
  * Common causes: Invalid ticker, delisted stock, API data gap
  */
-export class DataNotFoundError extends StockIntelligenceError {
+export class DataNotFoundError extends SageStocksError {
   constructor(ticker: string, dataType: string) {
     super(
       `${dataType} data not found for ${ticker}`,
@@ -120,7 +120,7 @@ export class DataNotFoundError extends StockIntelligenceError {
  * Thrown when ticker symbol fails validation.
  * Common causes: Typo, non-existent symbol, special characters
  */
-export class InvalidTickerError extends StockIntelligenceError {
+export class InvalidTickerError extends SageStocksError {
   constructor(ticker: string, reason?: string) {
     const details = reason ? ` (${reason})` : '';
     super(
@@ -138,7 +138,7 @@ export class InvalidTickerError extends StockIntelligenceError {
  * Thrown when Notion API operations fail.
  * Common causes: Network issues, invalid properties, rate limits
  */
-export class NotionAPIError extends StockIntelligenceError {
+export class NotionAPIError extends SageStocksError {
   constructor(operation: string, details: string) {
     super(
       `Notion API error during ${operation}: ${details}`,
@@ -155,7 +155,7 @@ export class NotionAPIError extends StockIntelligenceError {
  * Thrown when input validation fails.
  * Common causes: Missing required fields, invalid data format
  */
-export class ValidationError extends StockIntelligenceError {
+export class ValidationError extends SageStocksError {
   constructor(field: string, issue: string) {
     super(
       `Validation failed for ${field}: ${issue}`,
@@ -172,7 +172,7 @@ export class ValidationError extends StockIntelligenceError {
  * Thrown when critical data fields are missing, preventing analysis.
  * Different from DataNotFoundError - this is for partial data issues.
  */
-export class InsufficientDataError extends StockIntelligenceError {
+export class InsufficientDataError extends SageStocksError {
   constructor(ticker: string, missingFields: string[]) {
     const fieldList = missingFields.join(', ');
     super(
@@ -192,7 +192,7 @@ export class InsufficientDataError extends StockIntelligenceError {
  *
  * v1.0.3: Now accepts timezone parameter to show reset time in user's timezone
  */
-export class RateLimitError extends StockIntelligenceError {
+export class RateLimitError extends SageStocksError {
   public readonly resetAt: Date;
   public readonly timezone: SupportedTimezone;
 
@@ -206,7 +206,7 @@ export class RateLimitError extends StockIntelligenceError {
     super(
       `User rate limit exceeded - limit will reset at ${resetTime}`,
       'USER_RATE_LIMIT_EXCEEDED',
-      `💪 Superuser alert! 🤩\n\nYou just hit our freebie limit (10 analyses a day on the house).\n\nWanna power up? View plans at https://shalomormsby.com/analyze/pricing to run more analyses per day.\n\n[Settings](https://stock-intelligence.vercel.app/settings.html)`,
+      `💪 Superuser alert! 🤩\n\nYou just hit our freebie limit (10 analyses a day on the house).\n\nWanna power up? View plans at https://shalomormsby.com/analyze/pricing to run more analyses per day.\n\n[Settings](https://sagestocks.vercel.app/settings.html)`,
       429
     );
 
@@ -232,7 +232,7 @@ export class RateLimitError extends StockIntelligenceError {
  * Thrown when external API returns an error response.
  * Captures HTTP status and API-specific error messages.
  */
-export class APIResponseError extends StockIntelligenceError {
+export class APIResponseError extends SageStocksError {
   constructor(
     service: string,
     status: number,
@@ -283,19 +283,19 @@ export class APIResponseError extends StockIntelligenceError {
 }
 
 /**
- * Check if an error is a Stock Intelligence error
+ * Check if an error is a Sage Stocks error
  */
-export function isStockIntelligenceError(
+export function isSageStocksError(
   error: unknown
-): error is StockIntelligenceError {
-  return error instanceof StockIntelligenceError;
+): error is SageStocksError {
+  return error instanceof SageStocksError;
 }
 
 /**
  * Get user-friendly error message from any error
  */
 export function getUserMessage(error: unknown): string {
-  if (isStockIntelligenceError(error)) {
+  if (isSageStocksError(error)) {
     return error.userMessage;
   }
 
@@ -307,18 +307,18 @@ export function getUserMessage(error: unknown): string {
 }
 
 /**
- * Check if error is a generic unexpected error (not a Stock Intelligence error)
+ * Check if error is a generic unexpected error (not a Sage Stocks error)
  * Used to apply different styling (red/pink vs blue)
  */
 export function isUnexpectedError(error: unknown): boolean {
-  return !isStockIntelligenceError(error);
+  return !isSageStocksError(error);
 }
 
 /**
  * Get error code from any error
  */
 export function getErrorCode(error: unknown): string {
-  if (isStockIntelligenceError(error)) {
+  if (isSageStocksError(error)) {
     return error.code;
   }
 
@@ -329,7 +329,7 @@ export function getErrorCode(error: unknown): string {
  * Get HTTP status code from any error
  */
 export function getStatusCode(error: unknown): number {
-  if (isStockIntelligenceError(error)) {
+  if (isSageStocksError(error)) {
     return error.statusCode;
   }
 

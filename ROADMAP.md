@@ -1,4 +1,4 @@
-# Stock Intelligence Roadmap
+# Sage Stocks Roadmap
 
 **Last Updated:** November 1, 2025
 

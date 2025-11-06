@@ -1,4 +1,4 @@
-# Stock Intelligence Architecture
+# Sage Stocks Architecture
 
 *Last updated: November 3, 2025 at 4:51 PM*
 
@@ -27,7 +27,7 @@
 
 ## System Overview
 
-Stock Intelligence is a **serverless backend system** that provides automated stock analysis using technical and fundamental data, with LLM-generated analysis narratives. It's designed as a personal decision-support tool currently using Notion for storage (transitioning to PostgreSQL in v2.0).
+Sage Stocks is a **serverless backend system** that provides automated stock analysis using technical and fundamental data, with LLM-generated analysis narratives. It's designed as a personal decision-support tool currently using Notion for storage (transitioning to PostgreSQL in v2.0).
 
 **Core Capabilities:**
 - Real-time stock analysis (technical + fundamental indicators)
@@ -970,7 +970,7 @@ stock-intelligence/
   - Economic indicators
 
 - `errors.ts` - Custom error classes
-  - `StockIntelligenceError` (base class)
+  - `SageStocksError` (base class)
   - `RateLimitError` (429 status)
   - `ValidationError` (400 status)
   - `NotionError` (Notion API failures)

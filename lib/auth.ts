@@ -1,5 +1,5 @@
 /**
- * Authentication & User Management Library for Stock Intelligence v1.0.0
+ * Authentication & User Management Library for Sage Stocks v1.0.0
  *
  * Provides OAuth session management, user CRUD operations, and token encryption.
  * Uses Upstash Redis for session storage and Notion for user data persistence.

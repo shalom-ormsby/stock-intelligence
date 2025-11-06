@@ -1,5 +1,5 @@
 /**
- * Notion Poller for Stock Intelligence v1.0
+ * Notion Poller for Sage Stocks v1.0
  *
  * Polls Stock Analyses database to detect when users request new analysis.
  * Enables user-triggered workflow:

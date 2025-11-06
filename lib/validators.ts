@@ -1,5 +1,5 @@
 /**
- * Data Validation for Stock Intelligence v1.0
+ * Data Validation for Sage Stocks v1.0
  *
  * Validates ticker symbols, API responses, and data completeness.
  * Prevents NaN/undefined scores by catching missing data early.

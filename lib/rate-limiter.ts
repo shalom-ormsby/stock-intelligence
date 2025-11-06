@@ -1,5 +1,5 @@
 /**
- * Rate Limiter for Stock Intelligence v1.0.3
+ * Rate Limiter for Sage Stocks v1.0.3
  *
  * Implements user-level rate limiting using Upstash Redis for distributed state tracking.
  * Each user gets 10 stock analyses per day, with automatic reset at midnight in their timezone.

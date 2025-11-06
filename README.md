@@ -1,4 +1,4 @@
-# Stock Intelligence
+# Sage Stocks
 
 *Last updated: November 3, 2025 at 9:09 AM*
 
@@ -12,7 +12,7 @@
 
 ## Overview
 
-Stock Intelligence is a **personal decision-support tool** for equity analysis, built on a serverless TypeScript architecture. It combines real-time market data, sophisticated scoring algorithms, and AI-generated analysis to help you make informed trading decisions ahead of earnings and major market events.
+Sage Stocks is a **personal decision-support tool** for equity analysis, built on a serverless TypeScript architecture. It combines real-time market data, sophisticated scoring algorithms, and AI-generated analysis to help you make informed trading decisions ahead of earnings and major market events.
 
 **Design Philosophy:** *Impeccable but simple.* Built for daily stock analyses, not enterprise scale. Clean architecture, production-grade code, minimal complexity.
 
@@ -176,8 +176,8 @@ Composite score (1.0-5.0) calculated from weighted categories:
 
 ```bash
 # Clone repository
-git clone https://github.com/shalomormsby/stock-intelligence.git
-cd stock-intelligence
+git clone https://github.com/shalomormsby/sagestocks.git
+cd sagestocks
 
 # Install dependencies
 npm install
@@ -317,7 +317,7 @@ See [LICENSE](LICENSE) file for full terms.
 
 **Author:** Shalom Ormsby
 **Email:** shalom.ormsby@gmail.com
-**Repository:** [github.com/shalomormsby/stock-intelligence](https://github.com/shalomormsby/stock-intelligence)
+**Repository:** [github.com/shalomormsby/sagestocks](https://github.com/shalomormsby/sagestocks)
 
 **For issues:**
 - Check documentation in [docs/](docs/) folder first

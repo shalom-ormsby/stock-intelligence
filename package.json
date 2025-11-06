@@ -1,7 +1,7 @@
 {
-  "name": "stock-intelligence",
+  "name": "sagestocks",
   "version": "1.0.0-beta.1",
-  "description": "Stock Intelligence v1.0 - Vercel Serverless + Notion Integration",
+  "description": "Sage Stocks v1.0 - Vercel Serverless + Notion Integration",
   "main": "index.js",
   "scripts": {
     "dev": "vercel dev",

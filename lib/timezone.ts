@@ -1,5 +1,5 @@
 /**
- * Timezone Utilities for Stock Intelligence
+ * Timezone Utilities for Sage Stocks
  *
  * Provides timezone-aware date formatting and validation for multi-timezone support.
  * Supports users from Hawaii (UTC-10) to Central Europe (UTC+1/+2).

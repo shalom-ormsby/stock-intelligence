@@ -1,5 +1,5 @@
 /**
- * Structured Logging for Stock Intelligence v1.0
+ * Structured Logging for Sage Stocks v1.0
  *
  * Provides JSON-formatted logging for Vercel function logs.
  * All logs are written to console (stdout/stderr) and appear in Vercel dashboard.
@@ -8,7 +8,7 @@
  * (Sentry, Datadog, LogRocket, etc.)
  */
 
-import { StockIntelligenceError, getErrorCode } from './errors';
+import { SageStocksError, getErrorCode } from './errors';
 
 /**
  * Log severity levels
@@ -122,7 +122,7 @@ export function log(
         name: error.name,
         message: error.message,
         ...(config.includeStackTrace && { stack: error.stack }),
-        ...(error instanceof StockIntelligenceError && { code: error.code }),
+        ...(error instanceof SageStocksError && { code: error.code }),
       },
     }),
   };

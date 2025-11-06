@@ -1,5 +1,5 @@
 /**
- * Notion Client for Stock Intelligence v1.0.3
+ * Notion Client for Sage Stocks v1.0.3
  *
  * Handles all Notion API operations:
  * - Writing analysis metrics to Stock Analyses database

@@ -1,5 +1,5 @@
 /**
- * Utility Functions for Stock Intelligence v1.0
+ * Utility Functions for Sage Stocks v1.0
  *
  * Common utilities for error handling, timeouts, and data processing.
  */

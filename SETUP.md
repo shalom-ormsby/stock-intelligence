@@ -1,4 +1,4 @@
-# Stock Intelligence v1.0 - Setup Guide
+# Sage Stocks v1.0 - Setup Guide
 
 *Last updated: November 3, 2025 at 9:09 AM*
 
