@@ -1,6 +1,30 @@
 # Sage Stocks Roadmap
 
-**Last Updated:** November 1, 2025
+**Last Updated:** November 7, 2025 ⚠️ STRATEGIC PIVOT - See v1.0.4 and v2.0 updates
+
+---
+
+## ⚠️ Strategic Changes (November 7, 2025)
+
+**This update supersedes all prior guidance regarding automation and v2.0 scope.**
+
+**Key Changes:**
+
+1. **v1.0.4 Created:** "Stock Analysis Automation Engine"
+   - Moved basic automation from v2.0 into core platform (v1.0.x series)
+   - Transforms single-use analyzer into scheduled automation engine
+   - Includes: scheduled jobs, daily execution, backfill, digest notifications, database schema
+   - Rationale: Basic automation is core functionality, not an advanced feature
+
+2. **v2.0 Refocused:** Renamed from "Full Automation" to "Autonomous Intelligence"
+   - Removed basic scheduling infrastructure (now in v1.0.4)
+   - Now focuses on: advanced analytics (historical trends, predictive insights), enhanced notifications (email/SMS, Slack, mobile push), market context dashboard, autonomous intelligence features
+   - Builds on top of v1.0.4 automation foundation
+   - True "next level" capabilities requiring database migration
+
+3. **v2.2 Deprecated:** Content redistributed between v1.0.4 and v2.0
+
+**Impact:** v1.0.4 becomes the next critical milestone. Users get automation sooner, v2.0 focuses on genuine intelligence features.
 
 ---
 
@@ -564,13 +588,72 @@ For 76 blocks:
 
 ## 🔮 Future Sprints
 
-### v2.0: Custom Frontend Migration - Hybrid Approach Phase 2 (Planned)
+### v1.0.4: Stock Analysis Automation Engine (Next - Awaiting Guidance)
+
+⚠️ **STRATEGIC PIVOT:** This sprint moves basic automation from v2.0 into core platform (v1.0.x series).
+
+*Transform single-use analyzer into scheduled automation engine*
+
+**Objective:** Build foundational automation infrastructure to enable daily stock analysis without manual intervention.
+
+**Scope:**
+- Scheduled job architecture (GitHub Actions/Vercel Cron)
+- Daily execution engine (analyze multiple tickers automatically)
+- Backfill capability (historical analysis generation)
+- Digest notification system (Notion Inbox delivery)
+- Database schema updates (job tracking, execution history)
+- 5-phase implementation plan
+
+**Rationale:**
+Basic automation is core platform functionality, not an advanced feature. Users need scheduled analysis before they need predictive AI or multi-channel notifications.
+
+**Status:** Awaiting detailed implementation guidance from product owner.
+
+**Estimated Time:** TBD (awaiting guidance)
+
+**Completion Target:** TBD
+
+---
+
+### v2.0: Autonomous Intelligence (Planned)
+
+⚠️ **SCOPE UPDATED:** Removed basic scheduling infrastructure (moved to v1.0.4). This version now focuses exclusively on advanced intelligence, analytics, and multi-channel capabilities.
+
+*Advanced analytics, predictive insights, and autonomous intelligence building on v1.0.4 automation foundation*
+
+**Core Focus Areas:**
+
+**1. Advanced Analytics**
+- Historical trend analysis (multi-week patterns, seasonality)
+- Predictive insights (score forecasting, price target modeling)
+- Comparative analysis (peer benchmarking, sector positioning)
+- Backtesting engine (recommendation accuracy tracking)
+
+**2. Enhanced Notifications**
+- Multi-channel delivery (email, SMS, Slack, mobile push)
+- Intelligent routing (urgency-based channel selection)
+- Customizable alert thresholds and triggers
+- Rich notification templates with charts/visualizations
+
+**3. Market Context Dashboard**
+- Real-time sector performance heat maps
+- Market regime detection (Risk-On/Risk-Off/Transition)
+- Economic calendar integration (earnings, Fed meetings, data releases)
+- Correlation analysis (portfolio vs market/sector)
+
+**4. Autonomous Intelligence Features**
+- Auto-portfolio rebalancing suggestions
+- Risk exposure monitoring and alerts
+- Position sizing recommendations
+- Opportunity scanning (find similar stocks with better metrics)
+
+**Phase 2A: Custom Frontend Migration (Prerequisite)**
 
 *Next.js application with PostgreSQL database for production scale*
 
-**Strategic Rationale:**
+**Strategic Rationale for Database Migration:**
 
-Notion is becoming a performance bottleneck:
+Notion is a performance bottleneck for advanced features:
 - Historical queries: 2-5 seconds (slow, no indexing)
 - 3 database writes: 6-10 seconds (3 sequential API calls, 3 req/sec rate limit)
 - No time-series optimization
@@ -605,10 +688,9 @@ PostgreSQL (Supabase) solves these issues:
 - **Rate Limiting:** Upstash Redis (existing)
 - **Hosting:** Vercel ($20/month Pro plan)
 
-**Core Features:**
+**Implementation Phases:**
 
 **Phase 2A: Frontend Application (20-25 hours)**
-
 - Authentication pages (login, signup, password reset)
 - Analyzer page (ticker input, real-time status, results display)
 - Historical analysis view (list of past analyses with trends)
@@ -617,7 +699,6 @@ PostgreSQL (Supabase) solves these issues:
 - Responsive design (mobile-first)
 
 **Phase 2B: Database Migration (5-10 hours)**
-
 - Set up Supabase project
 - Design PostgreSQL schema (users, analyses, watchlists, etc.)
 - Modify `/api/analyze` to use PostgreSQL instead of Notion
@@ -627,14 +708,29 @@ PostgreSQL (Supabase) solves these issues:
 - Data migration from Notion to PostgreSQL (existing analyses)
 - Row-level security (RLS) policies
 
-**Phase 2C: Advanced Features (Future)**
+**Phase 2C: Advanced Analytics Engine (8-12 hours)**
+- Historical trend analysis engine
+- Predictive modeling (score forecasting)
+- Backtesting framework (recommendation accuracy)
+- Comparative analysis tools (peer benchmarking)
 
-- Price alerts (notify when score changes)
-- Portfolio tracking (position sizing, P&L)
-- Backtesting (how accurate were past recommendations?)
-- Comparison tools (AAPL vs MSFT side-by-side)
-- Social features (share analyses, follow users)
-- Mobile app (React Native)
+**Phase 2D: Enhanced Notification System (6-10 hours)**
+- Multi-channel integration (email, SMS, Slack, push)
+- Intelligent routing logic (urgency-based)
+- Rich notification templates with embedded charts
+- Alert customization UI
+
+**Phase 2E: Market Context Dashboard (8-12 hours)**
+- Sector performance heat maps
+- Market regime detection algorithm
+- Economic calendar integration
+- Correlation analysis engine
+
+**Phase 2F: Autonomous Intelligence (10-15 hours)**
+- Portfolio rebalancing suggestions
+- Risk exposure monitoring
+- Position sizing recommendations
+- Opportunity scanner
 
 **Database Schema (PostgreSQL):**
 
@@ -697,11 +793,18 @@ CREATE TABLE analyses (
 
 **Similar cost, much better performance and scalability.**
 
-**Timeline:** Month 2-3 after v1.0.2 deployment
+**Prerequisites:**
+- v1.0.4 automation foundation must be complete
+- Database migration (Phase 2A-2B) enables advanced features
 
-**Estimated Time:** 25-35 hours total
+**Timeline:** Q1-Q2 2026 (after v1.0.4 ships and automation is validated)
 
-**Completion Target:** December 2025 - January 2026
+**Estimated Time:**
+- Frontend + Database Migration: 25-35 hours
+- Advanced Features (2C-2F): 32-49 hours
+- **Total: 57-84 hours**
+
+**Completion Target:** Q2 2026
 
 ---
 
@@ -727,55 +830,11 @@ CREATE TABLE analyses (
 
 **Estimated Time:** ~6-10 hours total
 
-### v2.2: Full Automation
+### v2.2: Deprecated
 
-*Autonomous portfolio monitoring with intelligent notifications*
-
-**Scheduled Jobs:**
-
-- Design scheduled job architecture (GitHub Actions/Vercel Cron)
-- Build portfolio monitoring automation (nightly refresh)
-- Implement market context automation (daily at 8am PT)
-- Design job failure notification system
-
-**Historical Trends & Analytics:**
-
-- Build historical trend analysis engine
-- Query Stock History for time-series data
-- Calculate trend metrics (slope, volatility, inflection points)
-- Auto-generate trend charts in Stock Analyses pages
-- Auto-generate AI trend narratives from historical patterns
-- Research Notion chart embedding options
-
-**Intelligent Digest Notifications:**
-
-- Design digest notification system (batched alerts)
-- Design notification timing rules (market hours, urgency levels)
-- Create change detection logic (price, scores, recommendations)
-- Implement threshold-based alerting (>3% moves, RSI extremes)
-- Add news/event tracking (earnings calendar, major announcements)
-- Build digest notification delivery to Notion Inbox
-
-**Market Context Dashboard:**
-
-- Build sector performance calculator
-- Create market regime detection algorithm
-- Daily Market Context page generation
-
-**Enhanced UX:**
-
-- Create Portfolio dashboard with attention filter
-- Design auto-archiving system (mark old analyses as Historical)
-- Evaluate API rate limits for automation scale
-
-**Testing:**
-
-- Test end-to-end autonomous workflow (1 week unattended)
-- Test mobile experience for all features
-
-**Timing:** After v1.1 ships and user base is stable
-
-**Estimated Time:** ~15-20 hours
+⚠️ **MERGED INTO v1.0.4 and v2.0** - This sprint's scope has been redistributed:
+- Basic automation → v1.0.4 (scheduled jobs, daily execution, digest notifications)
+- Advanced features → v2.0 (predictive analytics, multi-channel notifications, autonomous intelligence)
 
 ---
 
