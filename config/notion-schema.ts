@@ -117,6 +117,20 @@ export const STOCK_ANALYSES_SCHEMA: NotionProperty[] = [
   // System fields
   { name: 'Protocol Version', type: 'rich_text', description: 'Software version used' },
   { name: 'API Calls Used', type: 'number', description: 'Total API calls for this analysis' },
+
+  // v1.0.4: Automation support
+  {
+    name: 'Analysis Cadence',
+    type: 'select',
+    options: ['None', 'Daily'],
+    description: 'How often to automatically analyze this stock (opt-in per stock)'
+  },
+  { name: 'Last Auto-Analysis', type: 'date', description: 'Timestamp of last automated analysis execution' },
+  {
+    name: 'Next Scheduled',
+    type: 'formula',
+    description: 'Next scheduled analysis date/time (for display only)'
+  },
 ];
 
 /**
@@ -241,6 +255,37 @@ export const USAGE_TRACKING_SCHEMA: NotionProperty[] = [
 ];
 
 /**
+ * Beta Users Database Schema (v1.0.4 - NEW)
+ * User account management and subscription tracking
+ */
+export const BETA_USERS_SCHEMA: NotionProperty[] = [
+  { name: 'Name', type: 'title', required: true, description: 'User full name' },
+  { name: 'Email', type: 'email', required: true, description: 'User email address' },
+  { name: 'Notion User ID', type: 'rich_text', description: 'Notion user ID from OAuth' },
+  { name: 'Workspace ID', type: 'rich_text', description: 'Notion workspace ID' },
+  { name: 'Access Token', type: 'rich_text', description: 'Encrypted OAuth access token' },
+  {
+    name: 'Status',
+    type: 'select',
+    options: ['Pending', 'Approved', 'Denied'],
+    description: 'Account approval status'
+  },
+  { name: 'Signup Date', type: 'created_time', description: 'Account creation date' },
+  { name: 'Daily Analyses', type: 'number', description: 'Analyses run today' },
+  { name: 'Total Analyses', type: 'number', description: 'All-time analysis count' },
+  { name: 'Bypass Active', type: 'checkbox', description: 'Rate limit bypass status' },
+  { name: 'Notes', type: 'rich_text', description: 'Admin notes' },
+  // v1.0.4: Automation support
+  {
+    name: 'Subscription Tier',
+    type: 'select',
+    options: ['Free', 'Starter', 'Analyst', 'Pro'],
+    description: 'Subscription level - determines analysis quotas and feature access'
+  },
+  { name: 'Timezone', type: 'rich_text', description: 'User IANA timezone (e.g., America/Los_Angeles)' },
+];
+
+/**
  * Beta Feedback Database Schema (v1.0 - NEW)
  * Collects feedback from beta users
  */
@@ -286,6 +331,7 @@ export const ALL_SCHEMAS = {
   stockComparisons: STOCK_COMPARISONS_SCHEMA,
   marketContext: MARKET_CONTEXT_SCHEMA,
   usageTracking: USAGE_TRACKING_SCHEMA,
+  betaUsers: BETA_USERS_SCHEMA,
   betaFeedback: BETA_FEEDBACK_SCHEMA,
 };
 
@@ -298,5 +344,6 @@ export const DATABASE_NAMES = {
   stockComparisons: 'Stock Comparisons',
   marketContext: 'Market Context',
   usageTracking: 'Usage Tracking',
+  betaUsers: 'Beta Users',
   betaFeedback: 'Beta Feedback',
 };

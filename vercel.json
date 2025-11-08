@@ -12,8 +12,17 @@
     },
     "api/page/analyze.ts": {
       "maxDuration": 10
+    },
+    "api/cron/scheduled-analyses.ts": {
+      "maxDuration": 300
     }
   },
+  "crons": [
+    {
+      "path": "/api/cron/scheduled-analyses",
+      "schedule": "0 14 * * *"
+    }
+  ],
   "buildCommand": "npm run type-check",
   "rewrites": [
     {

@@ -41,6 +41,9 @@ export interface User {
   totalAnalyses: number;
   bypassActive: boolean;
   notes?: string;
+  // v1.0.4: Automation support
+  subscriptionTier?: 'Free' | 'Starter' | 'Analyst' | 'Pro';
+  timezone?: string; // IANA timezone (e.g., "America/Los_Angeles")
 }
 
 export interface CreateUserData {
@@ -545,6 +548,9 @@ function mapNotionPageToUser(page: any): User {
     totalAnalyses: props['Total Analyses']?.number || 0,
     bypassActive: props['Bypass Active']?.checkbox || false,
     notes: props.Notes?.rich_text?.[0]?.text?.content || undefined,
+    // v1.0.4: Automation support
+    subscriptionTier: (props['Subscription Tier']?.select?.name || 'Free') as User['subscriptionTier'],
+    timezone: props.Timezone?.rich_text?.[0]?.text?.content || undefined,
   };
 }
 
