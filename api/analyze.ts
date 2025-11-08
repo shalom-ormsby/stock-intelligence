@@ -118,10 +118,22 @@ export default async function handler(
     return;
   }
 
-  // Check authentication - require valid session
-  const session = await requireAuthSession(req, res);
-  if (!session) {
-    return; // requireAuthSession already sent error response
+  // Check authentication - require valid session or cron bypass
+  let session: { email: string } | null = null;
+
+  // Check for cron bypass header (v1.0.4 - scheduled analyses)
+  const cronUserEmail = req.headers['x-cron-user-email'] as string | undefined;
+
+  if (cronUserEmail) {
+    // Cron-initiated request - bypass session check
+    console.log('[ANALYZE] Cron-initiated request for user:', cronUserEmail);
+    session = { email: cronUserEmail };
+  } else {
+    // Normal request - require session
+    session = await requireAuthSession(req, res);
+    if (!session) {
+      return; // requireAuthSession already sent error response
+    }
   }
 
   const timer = createTimer('Stock Analysis');

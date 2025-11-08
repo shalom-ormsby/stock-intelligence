@@ -14,15 +14,15 @@
  *    - Execute analyses
  *    - Update Last Auto-Analysis timestamps
  * 5. Return execution summary
- *
- * Current Status: SKELETON - Mock execution for testing
  */
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { getAllUsers, User } from '../../lib/auth';
+import { getAllUsers, User, decryptToken } from '../../lib/auth';
+import { Client } from '@notionhq/client';
 
 // Environment variables
 const CRON_SECRET = process.env.CRON_SECRET || '';
+const STOCK_ANALYSES_DB_ID = process.env.STOCK_ANALYSES_DB_ID || '';
 
 // Tier limits for scheduled analyses
 const TIER_LIMITS: Record<string, number> = {
@@ -31,6 +31,13 @@ const TIER_LIMITS: Record<string, number> = {
   Analyst: 200,
   Pro: Infinity,
 };
+
+// Stock page interface
+interface StockPage {
+  id: string;
+  ticker: string;
+  lastAutoAnalysis?: string;
+}
 
 /**
  * Main cron handler
@@ -150,10 +157,127 @@ async function checkNYSEMarketDay(): Promise<boolean> {
 }
 
 /**
- * Run scheduled analyses for a single user (SKELETON - MOCK EXECUTION)
+ * Query stocks with Daily cadence for a specific user
+ */
+async function getStocksForScheduledAnalysis(
+  userAccessToken: string,
+  limit: number
+): Promise<StockPage[]> {
+  if (!STOCK_ANALYSES_DB_ID) {
+    throw new Error('STOCK_ANALYSES_DB_ID not configured');
+  }
+
+  const notion = new Client({ auth: userAccessToken });
+
+  try {
+    const response = await notion.databases.query({
+      database_id: STOCK_ANALYSES_DB_ID,
+      filter: {
+        property: 'Analysis Cadence',
+        select: { equals: 'Daily' },
+      },
+      sorts: [
+        { property: 'Last Auto-Analysis', direction: 'ascending' }, // Oldest first
+      ],
+      page_size: limit,
+    });
+
+    return response.results.map((page: any) => {
+      const props = page.properties;
+      return {
+        id: page.id,
+        ticker: props.Ticker?.title?.[0]?.text?.content || '',
+        lastAutoAnalysis: props['Last Auto-Analysis']?.date?.start,
+      };
+    });
+  } catch (error) {
+    console.error('[CRON] Failed to query stocks:', error);
+    throw error;
+  }
+}
+
+/**
+ * Execute analysis for a single stock
  *
- * Current: Logs what WOULD be analyzed without actually running analyses
- * TODO: Add actual stock query and analysis execution
+ * For v1.0.4, we use a simplified approach: trigger the analysis via
+ * internal function import to avoid HTTP complexity
+ */
+async function analyzeStock(
+  ticker: string,
+  user: User
+): Promise<boolean> {
+  try {
+    // Import the analyze handler
+    const analyzeHandler = (await import('../analyze')).default;
+
+    // Create a mock request object that mimics the analyze API
+    const mockReq = {
+      method: 'POST',
+      body: {
+        ticker,
+        timezone: user.timezone,
+        usePollingWorkflow: true,
+      },
+      headers: {
+        // Pass user email for session lookup
+        'x-cron-user-email': user.email,
+      },
+    } as any as VercelRequest;
+
+    // Create a mock response object to capture the result
+    let responseData: any = null;
+    let statusCode = 200;
+
+    const mockRes = {
+      status: (code: number) => {
+        statusCode = code;
+        return mockRes;
+      },
+      json: (data: any) => {
+        responseData = data;
+      },
+      end: () => {},
+    } as any as VercelResponse;
+
+    // Call the analyze handler
+    await analyzeHandler(mockReq, mockRes);
+
+    // Check if analysis succeeded
+    return statusCode === 200 && responseData?.success === true;
+  } catch (error) {
+    console.error(`[CRON] Failed to analyze ${ticker}:`, error instanceof Error ? error.message : String(error));
+    return false;
+  }
+}
+
+/**
+ * Update Last Auto-Analysis timestamp for a stock
+ */
+async function updateLastAutoAnalysis(
+  userAccessToken: string,
+  pageId: string
+): Promise<void> {
+  const notion = new Client({ auth: userAccessToken });
+
+  try {
+    await notion.pages.update({
+      page_id: pageId,
+      properties: {
+        'Last Auto-Analysis': {
+          date: {
+            start: new Date().toISOString(),
+          },
+        },
+      },
+    });
+  } catch (error) {
+    console.error('[CRON] Failed to update Last Auto-Analysis:', error);
+    throw error;
+  }
+}
+
+/**
+ * Run scheduled analyses for a single user
  */
 async function runScheduledAnalysesForUser(user: User): Promise<{
   userId: string;
@@ -169,20 +293,76 @@ async function runScheduledAnalysesForUser(user: User): Promise<{
 
   console.log(`[CRON] Processing user: ${user.email} (${tier} tier, limit: ${stockLimit})`);
 
-  // MOCK: Simulate finding stocks to analyze
-  // TODO: Replace with actual Notion query
-  const mockStocksCount = Math.min(Math.floor(Math.random() * 5) + 1, stockLimit);
+  try {
+    // Decrypt user's OAuth access token
+    const userAccessToken = await decryptToken(user.accessToken);
 
-  console.log(`[CRON]   → MOCK: Would analyze ${mockStocksCount} stocks`);
-  console.log(`[CRON]   → MOCK: Would update Last Auto-Analysis timestamps`);
+    // Query stocks with Daily cadence
+    const stocks = await getStocksForScheduledAnalysis(userAccessToken, stockLimit);
+    console.log(`[CRON]   → Found ${stocks.length} stocks with Daily cadence`);
 
-  return {
-    userId: user.id,
-    email: user.email,
-    tier,
-    stockLimit,
-    analyzed: mockStocksCount, // MOCK - actual count will be real analyses
-    skipped: 0, // Will be non-zero when hitting tier limits
-    failed: 0  // Will track actual failures
-  };
+    if (stocks.length === 0) {
+      console.log(`[CRON]   → No stocks to analyze`);
+      return {
+        userId: user.id,
+        email: user.email,
+        tier,
+        stockLimit,
+        analyzed: 0,
+        skipped: 0,
+        failed: 0,
+      };
+    }
+
+    // Execute analyses
+    let analyzed = 0;
+    let failed = 0;
+
+    for (const stock of stocks) {
+      if (!stock.ticker) {
+        console.log(`[CRON]   → Skipping stock ${stock.id} (no ticker)`);
+        failed++;
+        continue;
+      }
+
+      console.log(`[CRON]   → Analyzing ${stock.ticker}...`);
+
+      const success = await analyzeStock(stock.ticker, user);
+
+      if (success) {
+        // Update Last Auto-Analysis timestamp
+        await updateLastAutoAnalysis(userAccessToken, stock.id);
+        analyzed++;
+        console.log(`[CRON]   → ✓ ${stock.ticker} analyzed successfully`);
+      } else {
+        failed++;
+        console.log(`[CRON]   → ✗ ${stock.ticker} analysis failed`);
+      }
+    }
+
+    const skipped = Math.max(0, stocks.length - analyzed - failed);
+
+    console.log(`[CRON]   → Summary: ${analyzed} analyzed, ${failed} failed, ${skipped} skipped`);
+
+    return {
+      userId: user.id,
+      email: user.email,
+      tier,
+      stockLimit,
+      analyzed,
+      skipped,
+      failed,
+    };
+  } catch (error) {
+    console.error(`[CRON] Error processing user ${user.email}:`, error);
+    return {
+      userId: user.id,
+      email: user.email,
+      tier,
+      stockLimit,
+      analyzed: 0,
+      skipped: 0,
+      failed: 1,
+    };
+  }
 }
