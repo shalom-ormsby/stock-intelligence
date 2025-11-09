@@ -54,7 +54,6 @@ STOCK_HISTORY_DB_ID=your_history_db_id
 ```
 API_KEY=your_custom_api_key_for_authentication
 NOTION_WEBHOOK_SECRET=your_webhook_secret
-NOTION_USER_ID=your_notion_user_id
 ```
 
 **Note:** If you don't set `API_KEY`, the endpoints will be publicly accessible without authentication.

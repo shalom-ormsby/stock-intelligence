@@ -172,9 +172,6 @@ NOTION_API_KEY=your_notion_integration_token_here
 STOCK_ANALYSES_DB_ID=your_analyses_database_id_here
 STOCK_HISTORY_DB_ID=your_history_database_id_here
 
-# Optional: User ID for notifications
-NOTION_USER_ID=your_notion_user_id_here
-
 # Optional: Webhook secret for production
 NOTION_WEBHOOK_SECRET=generate_random_secret_here
 
@@ -286,7 +283,6 @@ vercel env add FRED_API_KEY
 vercel env add NOTION_API_KEY
 vercel env add STOCK_ANALYSES_DB_ID
 vercel env add STOCK_HISTORY_DB_ID
-vercel env add NOTION_USER_ID
 vercel env add NOTION_WEBHOOK_SECRET
 
 # Or use Vercel dashboard:

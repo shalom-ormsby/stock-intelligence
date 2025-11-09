@@ -140,10 +140,12 @@ export default async function handler(
   let ticker: string | undefined;
   let analysesPageId: string | null = null;
   let rateLimitResult: any = null;
+  let user: any = null; // User data from database
+  let userAccessToken: string | null = null; // User's decrypted OAuth token
 
   try {
     // Get user data and decrypt their OAuth token
-    const user = await getUserByEmail(session.email);
+    user = await getUserByEmail(session.email);
     if (!user) {
       res.status(500).json({
         success: false,
@@ -164,7 +166,7 @@ export default async function handler(
     }
 
     // Decrypt user's OAuth access token
-    const userAccessToken = await decryptToken(user.accessToken);
+    userAccessToken = await decryptToken(user.accessToken);
 
     // Parse request body
     const body: AnalyzeRequest =
@@ -798,14 +800,14 @@ export default async function handler(
       return;
     }
 
-    // Write error to Notion if we have a page ID
-    if (analysesPageId && ticker) {
+    // Write error to Notion if we have a page ID and user credentials
+    if (analysesPageId && ticker && user && userAccessToken) {
       try {
         const notionClient = createNotionClient({
-          apiKey: process.env.NOTION_API_KEY!,
+          apiKey: userAccessToken, // User's OAuth token
           stockAnalysesDbId: process.env.STOCK_ANALYSES_DB_ID!,
           stockHistoryDbId: process.env.STOCK_HISTORY_DB_ID!,
-          userId: process.env.NOTION_USER_ID,
+          userId: user.notionUserId, // User's Notion User ID (dynamic)
         });
 
         const errorNote = formatErrorForNotion(error, ticker);

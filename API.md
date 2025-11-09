@@ -311,7 +311,6 @@ In your Vercel project settings, add the following environment variables:
 **Optional:**
 - `API_KEY` - Enable authentication (leave empty for public access)
 - `NOTION_WEBHOOK_SECRET` - Webhook signature verification
-- `NOTION_USER_ID` - User ID for notifications
 
 ### 3. Test Your Deployment
 

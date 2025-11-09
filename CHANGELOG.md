@@ -1,6 +1,6 @@
 # Changelog
 
-**Last Updated:** November 5, 2025
+**Last Updated:** November 9, 2025
 
 All notable changes to Sage Stocks will be documented in this file.
 
@@ -8,6 +8,139 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+---
+
+## [v1.0.5] - 2025-11-09
+
+### Dynamic User ID Lookup - Multi-User Support
+
+**Status**: ✅ Complete, ready for deployment
+
+**Objective:** Remove hardcoded `NOTION_USER_ID` environment variable and implement dynamic user ID lookup from OAuth sessions to enable true multi-user support.
+
+---
+
+### Why This Change?
+
+**Problem Identified:**
+- All stock analyses were assigned to the developer's Notion user ID (hardcoded in environment variables)
+- Beta testers would see analyses in their workspace but with the developer's name/avatar as Owner
+- Broke the multi-user model completely
+- Critical blocker for Cohort 1 launch
+
+**Impact:**
+- **Critical UX Issue**: Users would see "Shalom created this analysis" instead of their own name
+- **Multi-User Broken**: All users sharing the same Owner ID defeats purpose of OAuth
+- **Confusion**: Beta testers would question why someone else's name appears on their analyses
+
+**Solution:**
+- Extract Notion user ID dynamically from authenticated OAuth session
+- Use per-user credentials throughout the application
+- Remove hardcoded `NOTION_USER_ID` from environment variables
+- OAuth already provides the user ID - no additional API calls needed
+
+---
+
+### Changed
+
+**1. Analysis Error Handler** ([api/analyze.ts:804-810](api/analyze.ts#L804-L810)):
+- **Before:** Used hardcoded `process.env.NOTION_USER_ID` and `process.env.NOTION_API_KEY`
+- **After:** Uses dynamic `user.notionUserId` and `userAccessToken` from authenticated session
+- Added null safety checks to prevent errors if user/token aren't available in catch block
+- Ensures error messages are written to the correct user's Notion pages
+
+**2. Variable Scope** ([api/analyze.ts:143-144](api/analyze.ts#L143-L144)):
+- Moved `user` and `userAccessToken` declarations outside try block
+- Makes variables accessible in catch block for error handling
+- Added proper TypeScript types and null initialization
+
+---
+
+### Removed
+
+**3. Environment Variables:**
+- **Deprecated** `NOTION_USER_ID` in [.env](.env#L21-L24) with migration comment
+- **Removed** from [.env.example](.env.example) (no longer needed for new users)
+- **Removed** from [SETUP.md](SETUP.md) setup instructions
+- **Removed** from [DEPLOYMENT.md](DEPLOYMENT.md) deployment guide
+- **Removed** from [API.md](API.md) API documentation
+
+---
+
+### Technical Details
+
+**OAuth Implementation (Already Working):**
+- OAuth callback (`api/auth/callback.ts`) extracts `userId` from Notion OAuth response
+- Stored as `notionUserId` in Beta Users database (encrypted)
+- Included in Redis session for fast access
+- Main analysis workflow already used `user.notionUserId` correctly
+
+**What Changed:**
+- Only the error handler had a hardcoded reference (oversight from v0.x → v1.0 migration)
+- Fixed by using session-provided `notionUserId` instead of environment variable
+- No additional API calls needed (session already contains the ID)
+
+**Migration Path:**
+- Old `NOTION_USER_ID` environment variable can be safely removed
+- Commented out in `.env` during transition period
+- All functionality now uses per-user OAuth credentials
+- No breaking changes to existing authenticated users
+
+---
+
+### Benefits
+
+**Multi-User Ready:**
+- Each authenticated user's analyses show their Notion user ID as Owner
+- Enables proper notifications in Notion
+- Allows for per-user workspace isolation
+- Ready for Cohort 1 beta testing
+
+**Simplified Configuration:**
+- One less environment variable for new deployments
+- OAuth handles all user identification automatically
+- Self-service signup flow remains unchanged
+
+**Better Error Handling:**
+- Errors written to correct user's pages with their credentials
+- No cross-user contamination
+- Proper attribution for all operations
+
+---
+
+### Testing
+
+**Type Safety:** ✅ TypeScript compilation passes with no errors
+
+**Verification Needed:**
+1. Test with primary account - analyses show correct Owner
+2. Test with beta user account - their analyses show their ID as Owner
+3. Verify error handling writes to correct user's pages
+4. Remove deprecated `NOTION_USER_ID` from production environment variables
+
+---
+
+### Files Modified
+
+**Code:**
+- `api/analyze.ts` - Use dynamic user ID from session
+
+**Configuration:**
+- `.env` - Deprecated `NOTION_USER_ID` with comment
+- `.env.example` - Removed `NOTION_USER_ID`
+
+**Documentation:**
+- `SETUP.md` - Removed from setup instructions
+- `DEPLOYMENT.md` - Removed from deployment guide
+- `API.md` - Removed from API reference
+- `CHANGELOG.md` - This entry
+
+**Unchanged (Already Correct):**
+- `lib/auth.ts` - Session management (already stores `notionUserId`)
+- `api/auth/callback.ts` - OAuth flow (already extracts user ID)
+- `api/analyze.ts:248-254` - Main workflow (already used dynamic ID)
+- `lib/notion-client.ts` - Client design (already accepts dynamic `userId`)
 
 ---
 
