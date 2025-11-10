@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sage Stocks Setup</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    .slide-in {
+      animation: slideIn 0.3s ease-out;
+    }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen flex items-center justify-center p-4">
+  <div class="max-w-2xl w-full">
+    <!-- Main Card -->
+    <div class="bg-white rounded-2xl shadow-xl p-6 sm:p-8 md:p-10">
+      <!-- Header -->
+      <div class="text-center mb-8">
+        <div class="text-5xl mb-3">📊</div>
+        <h1 class="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">Welcome to Sage Stocks!</h1>
+        <p class="text-gray-600 text-base sm:text-lg">Let's find your template databases (takes 30 seconds)</p>
+      </div>
+
+      <!-- Auto-detection Section -->
+      <div id="auto-section">
+        <!-- Reassurance Message -->
+        <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6 rounded">
+          <p class="text-sm text-blue-800">
+            <span class="font-medium">🔒 Safe & Read-Only:</span> We're only reading your workspace to find your databases. No changes will be made until you confirm.
+          </p>
+        </div>
+
+        <button
+          id="auto-detect-btn"
+          class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4 rounded-xl hover:from-blue-700 hover:to-indigo-700 font-medium text-lg shadow-lg hover:shadow-xl transition-all duration-200 min-h-[3rem]"
+        >
+          🔍 Auto-detect my databases
+        </button>
+        <p class="text-sm text-gray-500 mt-3 text-center">We'll search your Notion workspace for Stock Analyses and Stock History</p>
+      </div>
+
+      <!-- Loading State -->
+      <div id="loading" class="hidden text-center py-8">
+        <div class="inline-block">
+          <div class="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto"></div>
+          <p class="text-gray-700 font-medium mt-6 text-lg">Searching your workspace...</p>
+          <p class="text-sm text-gray-500 mt-2">Don't worry, we're only reading — no changes yet</p>
+        </div>
+      </div>
+
+      <!-- Results Section -->
+      <div id="results-section" class="hidden mt-6 slide-in">
+        <!-- Reassurance Before Confirmation -->
+        <div class="bg-green-50 border-l-4 border-green-400 p-4 mb-6 rounded">
+          <p class="text-sm text-green-800">
+            <span class="font-medium">✓ Quick Review:</span> We found your databases below. They'll stay exactly as they are — we're just connecting to them.
+          </p>
+        </div>
+
+        <h2 class="text-xl font-semibold mb-4 text-gray-900">Detection Results</h2>
+
+        <div id="results-list" class="space-y-3 mb-6">
+          <!-- Populated by JS -->
+        </div>
+
+        <button
+          id="confirm-btn"
+          class="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-4 rounded-xl hover:from-green-700 hover:to-emerald-700 font-medium text-lg shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed min-h-[3rem]"
+        >
+          ✓ Confirm and continue
+        </button>
+      </div>
+
+      <!-- Manual Fallback Section -->
+      <div id="manual-section" class="hidden mt-6 slide-in">
+        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded">
+          <p class="font-medium text-yellow-900 mb-1">We couldn't auto-detect all your databases</p>
+          <p class="text-sm text-yellow-800 mb-3">This usually happens if you renamed them. No problem — just paste the URLs below:</p>
+
+          <!-- Expandable Help -->
+          <button
+            id="help-toggle"
+            class="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1 transition-colors"
+          >
+            <span>How do I find my database URLs?</span>
+            <span id="help-arrow" class="transition-transform">▸</span>
+          </button>
+
+          <div id="help-content" class="hidden mt-3 text-sm text-gray-700 bg-white p-3 rounded border border-yellow-200">
+            <ol class="list-decimal list-inside space-y-2">
+              <li>Open your Notion workspace</li>
+              <li>Navigate to the database (Stock Analyses, Stock History, or Sage Stocks page)</li>
+              <li>Copy the URL from your browser's address bar</li>
+              <li>Paste it into the field below — we'll extract the ID automatically</li>
+            </ol>
+            <p class="mt-2 text-xs text-gray-600">
+              💡 Tip: The URL looks like: <code class="bg-gray-100 px-1 rounded">https://notion.so/workspace/DatabaseName-abc123...</code>
+            </p>
+          </div>
+        </div>
+
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium mb-2 text-gray-700">Stock Analyses Database ID or URL</label>
+            <input
+              type="text"
+              id="manual-analyses"
+              placeholder="Paste database URL or ID here"
+              class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-2 text-gray-700">Stock History Database ID or URL</label>
+            <input
+              type="text"
+              id="manual-history"
+              placeholder="Paste database URL or ID here"
+              class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-2 text-gray-700">Sage Stocks Page ID or URL</label>
+            <input
+              type="text"
+              id="manual-page"
+              placeholder="Paste page URL or ID here"
+              class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+            />
+          </div>
+        </div>
+
+        <button
+          id="manual-submit-btn"
+          class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4 rounded-xl hover:from-blue-700 hover:to-indigo-700 font-medium text-lg shadow-lg hover:shadow-xl transition-all duration-200 mt-6 min-h-[3rem]"
+        >
+          Save configuration
+        </button>
+
+        <div id="manual-errors" class="hidden mt-4"></div>
+      </div>
+
+      <!-- Success Screen -->
+      <div id="success-section" class="hidden text-center py-8 slide-in">
+        <div class="text-6xl mb-4">🎉</div>
+        <h2 class="text-2xl sm:text-3xl font-bold mb-3 text-gray-900">You're all set!</h2>
+        <p class="text-gray-600 mb-6 text-base sm:text-lg">We connected to your Stock Analyses and Stock History databases.</p>
+
+        <div class="bg-green-50 border border-green-200 rounded-xl p-4 sm:p-6 text-sm sm:text-base max-w-md mx-auto">
+          <div class="space-y-2 text-left">
+            <p class="text-green-800"><span class="font-medium">✓</span> Read/write access verified</p>
+            <p class="text-green-800"><span class="font-medium">✓</span> Template version initialized (1.0.0)</p>
+            <p class="text-green-800"><span class="font-medium">✓</span> Ready for your first analysis</p>
+          </div>
+        </div>
+
+        <p class="text-sm text-gray-500 mt-6">Redirecting to your dashboard in <span id="countdown">3</span> seconds...</p>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="text-center mt-6 text-sm text-gray-600">
+      <p>Need help? <a href="mailto:support@sagestocks.com" class="text-blue-600 hover:text-blue-700 underline">Contact support</a></p>
+    </div>
+  </div>
+
+  <script src="/js/setup.js"></script>
+</body>
+</html>

@@ -44,6 +44,12 @@ export interface User {
   // v1.0.4: Automation support
   subscriptionTier?: 'Free' | 'Starter' | 'Analyst' | 'Pro';
   timezone?: string; // IANA timezone (e.g., "America/Los_Angeles")
+  // v1.1.6: Template version management
+  stockAnalysesDbId?: string;
+  stockHistoryDbId?: string;
+  sageStocksPageId?: string;
+  templateVersion?: string;
+  upgradeHistory?: string; // JSON string of UpgradeHistory[]
 }
 
 export interface CreateUserData {
@@ -551,6 +557,12 @@ function mapNotionPageToUser(page: any): User {
     // v1.0.4: Automation support
     subscriptionTier: (props['Subscription Tier']?.select?.name || 'Free') as User['subscriptionTier'],
     timezone: props.Timezone?.rich_text?.[0]?.text?.content || undefined,
+    // v1.1.6: Template version management
+    stockAnalysesDbId: props['Stock Analyses DB ID']?.rich_text?.[0]?.text?.content || undefined,
+    stockHistoryDbId: props['Stock History DB ID']?.rich_text?.[0]?.text?.content || undefined,
+    sageStocksPageId: props['Sage Stocks Page ID']?.rich_text?.[0]?.text?.content || undefined,
+    templateVersion: props['Template Version']?.rich_text?.[0]?.text?.content || undefined,
+    upgradeHistory: props['Upgrade History']?.rich_text?.[0]?.text?.content || undefined,
   };
 }
 
