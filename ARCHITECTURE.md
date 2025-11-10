@@ -1,8 +1,8 @@
 # Sage Stocks Architecture
 
-*Last updated: November 9, 2025*
+*Last updated: November 10, 2025*
 
-**Development Version:** v1.1.6 (Complete) - Template Upgrade System
+**Development Version:** v1.0.5 (Complete) - Stock Analysis Orchestrator
 **Template Version:** v0.1.0 (Beta) - Launching with Cohort 1
 **Production URL:** [https://sagestocks.vercel.app](https://sagestocks.vercel.app)
 **Status:** ✅ Live in Production
@@ -978,6 +978,8 @@ stock-intelligence/
 │   └── health.ts             # Health check endpoint (25 LOC)
 │
 ├── lib/                      # Core business logic libraries
+│   ├── orchestrator.ts       # Stock analysis orchestrator (522 LOC) [v1.0.5]
+│   ├── stock-analyzer.ts     # Pure analysis logic (315 LOC) [v1.0.5]
 │   ├── rate-limiter.ts       # Rate limiting + bypass sessions (340 LOC)
 │   ├── scoring.ts            # Score calculation algorithms (850 LOC)
 │   ├── notion-client.ts      # Notion API wrapper (600 LOC)
@@ -1046,6 +1048,25 @@ stock-intelligence/
 **Purpose:** Reusable, testable business logic
 
 **Key Files:**
+
+- `orchestrator.ts` - **Stock Analysis Orchestrator (v1.0.5)** ⭐
+  - Eliminates redundant API calls across multiple users
+  - Deduplication: Analyzes each ticker once, broadcasts to all subscribers
+  - Priority queue: Pro > Analyst > Starter > Free
+  - Rate limiting: Configurable delay between tickers (default 8s)
+  - Fault isolation: One failure doesn't block others
+  - Retry logic: Exponential backoff on Gemini 503 errors
+  - Dry-run mode: Test without API calls
+  - **Impact:** 99.9% cost reduction at scale ($4,745/year → $4.75/year)
+  - See [ORCHESTRATOR.md](ORCHESTRATOR.md) for details
+
+- `stock-analyzer.ts` - **Pure Analysis Logic (v1.0.5)** ⭐
+  - Extracted from `api/analyze.ts` for reusability
+  - `analyzeStockCore()`: Fetches data, calculates scores, generates LLM analysis
+  - `validateAnalysisComplete()`: Ensures all required fields populated
+  - No HTTP/auth concerns - pure business logic
+  - Shared by HTTP endpoint and orchestrator
+
 - `rate-limiter.ts` - Rate limiting engine
   - Redis key management (`rate_limit:{userId}:{date}`)
   - Bypass session management (`bypass_session:{userId}`)
@@ -1127,6 +1148,83 @@ stock-intelligence/
 7. Response
    └─▶ Return JSON with scores + rate limit info
 ```
+
+### Orchestrator Flow (v1.0.5) ⭐
+
+**Purpose:** Eliminate redundant API calls by analyzing each ticker once and broadcasting to all subscribers.
+
+**Trigger:** Daily cron job at 6am PT via Vercel Cron
+
+```
+1. Cron Trigger
+   └─▶ POST /api/cron/scheduled-analyses
+       Headers: { Authorization: Bearer CRON_SECRET }
+
+2. Request Collection (collectStockRequests)
+   ├─▶ Get all beta users from database
+   ├─▶ For each user:
+   │   ├─▶ Decrypt OAuth token
+   │   ├─▶ Query Stock Analyses DB (filter: Analysis Cadence = "Daily")
+   │   └─▶ Extract ticker + subscriber info
+   └─▶ Build deduplicated map: {ticker → [subscriber1, subscriber2, ...]}
+
+3. Priority Queue Building (buildPriorityQueue)
+   ├─▶ For each ticker, find highest subscriber tier:
+   │   Pro (1) > Analyst (2) > Starter (3) > Free (4)
+   ├─▶ Sort queue by priority (ascending)
+   └─▶ Return ordered queue: [{ticker, priority, subscribers}, ...]
+
+4. Queue Processing (processQueue)
+   └─▶ For each ticker in queue:
+       │
+       ├─▶ 4a. Analyze with Retry (analyzeWithRetry)
+       │   ├─▶ Call analyzeStockCore() once
+       │   ├─▶ On Gemini 503: retry with backoff (2s, 4s, 8s)
+       │   └─▶ Return analysis result
+       │
+       ├─▶ 4b. Validate Completeness (validateAnalysisComplete)
+       │   ├─▶ Check success flag
+       │   ├─▶ Check scores > 0
+       │   ├─▶ Check LLM content exists
+       │   └─▶ Proceed only if complete
+       │
+       ├─▶ 4c. Broadcast to Subscribers (broadcastToSubscribers)
+       │   ├─▶ Promise.allSettled([...]) - parallel with fault isolation
+       │   ├─▶ For each subscriber:
+       │   │   ├─▶ broadcastToUser() with retry (5s backoff)
+       │   │   ├─▶ Write to Stock Analyses DB
+       │   │   └─▶ Write to Stock History DB
+       │   └─▶ Log success/failure per user
+       │
+       └─▶ 4d. Rate Limit Delay
+           └─▶ Wait ANALYSIS_DELAY_MS (default: 8000ms)
+               Skip delay after last ticker
+
+5. Metrics Collection
+   ├─▶ totalTickers: Unique stocks analyzed
+   ├─▶ totalSubscribers: Total users subscribed
+   ├─▶ analyzed/failed: Success/failure counts
+   ├─▶ broadcasts: Total/successful/failed
+   ├─▶ apiCallsSaved: (subscribers - 1) × 17 calls per ticker
+   └─▶ durationMs: Total execution time
+
+6. Response
+   └─▶ Return JSON with comprehensive metrics
+```
+
+**Key Benefits:**
+- **Deduplication:** 1 analysis → N subscribers (99.9% API reduction at scale)
+- **Priority-Based:** Premium users' stocks analyzed first
+- **Fault Isolation:** One failure doesn't block others (Promise.allSettled)
+- **Rate Limiting:** Configurable delay prevents API overload
+- **Retry Logic:** Exponential backoff on transient errors
+- **Dry-Run Mode:** Test logic without API calls (ORCHESTRATOR_DRY_RUN=true)
+
+**Configuration:**
+- `ANALYSIS_DELAY_MS`: Delay between tickers (default: 8000ms)
+- `ORCHESTRATOR_DRY_RUN`: Test mode without API calls (default: false)
+
+**See:** [ORCHESTRATOR.md](ORCHESTRATOR.md) for complete documentation
 
 ### Bypass Code Flow
 
