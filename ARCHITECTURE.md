@@ -1,9 +1,15 @@
 # Sage Stocks Architecture
 
-*Last updated: November 3, 2025 at 4:51 PM*
+*Last updated: November 9, 2025*
 
-**Version:** 1.0.2-alpha (Hybrid Approach Phase 1)
-**Status:** In Development (v1.0.2 HTML Analyzer Page)
+**Development Version:** v1.1.6 (Complete) - Template Upgrade System
+**Template Version:** v0.1.0 (Beta) - Launching with Cohort 1
+**Production URL:** [https://sagestocks.vercel.app](https://sagestocks.vercel.app)
+**Status:** ✅ Live in Production
+
+> 📋 **Versioning Note:** This document uses **development versions** (v1.x, v2.x) for technical milestone tracking. See [CHANGELOG.md](CHANGELOG.md) "📋 Versioning Strategy (Dual-Track)" for the mapping to user-facing template versions (v0.1.0 Beta → v1.0.0 Public).
+>
+> **Current Mapping:** Template v0.1.0 (Beta) includes development versions v1.0.0–v1.1.6
 
 ---
 
@@ -27,19 +33,25 @@
 
 ## System Overview
 
-Sage Stocks is a **serverless backend system** that provides automated stock analysis using technical and fundamental data, with LLM-generated analysis narratives. It's designed as a personal decision-support tool currently using Notion for storage (transitioning to PostgreSQL in v2.0).
+Sage Stocks is a **serverless stock analysis platform** that delivers automated technical and fundamental analysis with AI-generated insights. Built as a multi-user SaaS platform with OAuth authentication, it's designed for daily decision-support with Notion as the primary data store.
 
 **Core Capabilities:**
-- Real-time stock analysis (technical + fundamental indicators)
-- Composite scoring algorithm (1.0-5.0 scale, 6 categories)
-- Pattern matching and trend detection
-- LLM-generated 7-section analysis (Google Gemini Flash 2.5)
-- Historical context and delta tracking
-- Rate-limited API access (10 analyses per user per day)
-- Session-based bypass code system
-- Notion database integration (v1.0.2) → PostgreSQL migration (v2.0)
+- **Multi-user OAuth authentication** - Notion OAuth with session-based access control (v1.1.x)
+- **Real-time stock analysis** - Technical + fundamental indicators from FMP and FRED APIs
+- **6-category composite scoring** - Technical (30%), Fundamental (35%), Macro (20%), Risk (15%), Sentiment, Sector
+- **LLM-generated analysis** - 7-section analysis narratives (Google Gemini Flash 2.5, $0.013/analysis)
+- **Historical context tracking** - Delta tracking across previous analyses
+- **Template version management** - User-controlled upgrade system with data preservation (v1.1.6)
+- **Timezone-aware rate limiting** - User-specific quotas with admin bypass (Upstash Redis)
+- **Notion Inbox notifications** - Built-in status updates (v1.0.0)
+- **API cost monitoring** - Real-time dashboard for operational visibility (v1.0.2c)
 
-**Design Philosophy:** *Impeccable but simple.* Built for daily stock analyses ahead of earnings, not enterprise-scale deployment. Hybrid approach: start with Notion (weeks 1-2), migrate to custom frontend + PostgreSQL (months 2-3).
+**Design Philosophy:** *Impeccable but simple.* Built for daily stock analyses ahead of earnings, not enterprise-scale deployment. Notion-first architecture with potential PostgreSQL migration in v2.0 (Q1-Q2 2026).
+
+**⚠️ DEPRECATED COMPONENTS:**
+- **WordPress hosting** (deprecated v1.1.0) - Previously used shalomormsby.com/stock-intelligence, now fully migrated to sagestocks.vercel.app
+- **Alpha Vantage API** (deprecated v0.4.0) - Migrated to FMP for all stock data
+- **Single-user hardcoded approach** (deprecated v1.1.0) - Replaced with OAuth multi-user system
 
 ---
 
@@ -47,9 +59,11 @@ Sage Stocks is a **serverless backend system** that provides automated stock ana
 
 ### Runtime & Platform
 - **Platform:** Vercel Serverless Functions
+- **Production URL:** [sagestocks.vercel.app](https://sagestocks.vercel.app)
 - **Runtime:** Node.js 18+
 - **Language:** TypeScript 5.3+
 - **Build System:** tsc (TypeScript compiler)
+- **Plan:** Vercel Pro ($20/month) - Required for 300-second timeout on analysis endpoint
 
 ### Data Sources
 - **Financial Modeling Prep (FMP)** - Stock data, fundamentals, technical indicators
@@ -57,18 +71,32 @@ Sage Stocks is a **serverless backend system** that provides automated stock ana
 - **Upstash Redis** - Distributed state for rate limiting
 
 ### LLM Integration
-- **Google Gemini Flash 2.5** (Primary) - Analysis generation, $0.013 per analysis, 50% token reduction
-- **LLM Abstraction Layer** - Provider-agnostic interface supporting:
+- **Google Gemini Flash 2.5** (Primary) - Analysis generation, $0.013 per analysis, 50% token reduction vs GPT-4
+- **LLM Abstraction Layer** (v1.0.2) - Provider-agnostic interface supporting:
   - Google Gemini (Flash 2.5, Flash 1.5)
   - OpenAI (GPT-4 Turbo, GPT-3.5 Turbo)
   - Anthropic (Claude 3.5 Sonnet, Claude 3 Haiku)
   - Configurable via `LLM_PROVIDER` environment variable
   - Easy provider switching for cost/performance optimization
 
+### Authentication & User Management
+- **Notion OAuth** (v1.1.1) - Official OAuth 2.0 integration
+- **Session Management** - Encrypted session tokens with secure cookie storage
+- **Beta Users Database** - Notion-based user registry with approval workflow
+- **Role-Based Access** - Admin, approved, pending, denied user states
+- **Template Detection** - Auto-discovery of user's Notion databases (v1.1.6)
+
 ### Integration Layer
-- **Notion API** - Database read/write operations (v1.0.2)
-- **PostgreSQL (Supabase)** - Future database (v2.0 migration)
+- **Notion API** - Primary data store for Stock Analyses, Stock History, Beta Users databases
+- **Upstash Redis** - Rate limiting state and admin bypass sessions (REST API, serverless-friendly)
+- **PostgreSQL (Supabase)** - Planned migration in v2.0 for performance optimization
 - **REST APIs** - All external communication via HTTP
+
+### Rate Limiting & Monitoring
+- **Upstash Redis** - Distributed rate limiting with automatic midnight UTC reset
+- **User Quotas** - 5 analyses per day for beta users, configurable per user
+- **Admin Bypass** - Environment-based admin auto-bypass system
+- **API Cost Dashboard** - Real-time monitoring of 6 API integrations (v1.0.2c)
 
 ### Development Tools
 - **ESLint** - Code linting
@@ -82,18 +110,38 @@ Sage Stocks is a **serverless backend system** that provides automated stock ana
 
 ```
 
-## 1. Trigger & Input
-┌─────────────────┐
-│   Web App UI    │  User enters ticker symbol
-│  (Frontend)     │  Clicks "Analyze"
-└────────┬────────┘
+## 1. User Authentication & Input
+┌─────────────────────────────────┐
+│  sagestocks.vercel.app         │
+│  (Next.js/HTML Frontend)        │
+│                                 │
+│  1. Notion OAuth Login          │
+│  2. Session validation          │
+│  3. User enters ticker symbol   │
+│  4. Clicks "Analyze"            │
+└────────┬────────────────────────┘
          │
          ▼
 
-## 2. API Request
+## 2. API Request with Authentication
 ┌─────────────────────────────────┐
-│  Vercel Serverless Function     │
-│  (60s timeout on Pro plan)      │
+│  POST /api/analyze              │
+│  (300s timeout on Pro plan)     │
+│                                 │
+│  Headers:                       │
+│  - Session token (encrypted)    │
+│  - User ID from session         │
+│                                 │
+│  Body: { ticker, userId }       │
+└────────┬────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────┐
+│  Session Validation             │
+│  - Decrypt session token        │
+│  - Verify Notion OAuth token    │
+│  - Check user approval status   │
+│  - Reject if pending/denied     │
 └────────┬────────────────────────┘
          │
          ▼
@@ -209,29 +257,50 @@ Each analysis page contains:
 
 ## Architecture Diagram (v1.0.2)
 
-**Current architecture with HTML Analyzer Page and LLM integration**
+**Current architecture with OAuth authentication and multi-user support (v1.1.6)**
+
+> ⚠️ **DEPRECATED:** WordPress hosting at shalomormsby.com/stock-intelligence (v1.1.0). All references replaced with sagestocks.vercel.app.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                      WordPress (shalomormsby.com)                 │
+│              sagestocks.vercel.app (Production)                   │
 │                                                                   │
 │  ┌────────────────────────────────────────────────────────────┐ │
-│  │             /stock-intelligence (HTML Page)                 │ │
+│  │                  Frontend Pages (HTML/JS)                   │ │
 │  │  ┌──────────────────────────────────────────────────────┐  │ │
-│  │  │ Password-Protected Analyzer UI                        │  │ │
-│  │  │ • Ticker Input Field                                  │  │ │
-│  │  │ • "Analyze Stock" Button                             │  │ │
-│  │  │ • Real-time Status Display                           │  │ │
-│  │  │ • Usage Counter (X/10 today)                         │  │ │
-│  │  │ • "View Results" Link (on completion)                │  │ │
-│  │  │                                                       │  │ │
-│  │  │ Tailwind CSS + Vanilla JS (no build step)            │  │ │
+│  │  │ / (index.html) - OAuth Login                         │  │ │
+│  │  │ • Notion OAuth "Sign In" button                      │  │ │
+│  │  │ • Approval status display                            │  │ │
+│  │  │ • Redirect to /analyze after approval                │  │ │
+│  │  └──────────────────────────────────────────────────────┘  │ │
+│  │  ┌──────────────────────────────────────────────────────┐  │ │
+│  │  │ /analyze.html - Stock Analyzer                       │  │ │
+│  │  │ • Ticker Input Field                                 │  │ │
+│  │  │ • "Analyze Stock" Button                            │  │ │
+│  │  │ • Real-time Status Display                          │  │ │
+│  │  │ • Usage Counter (X/5 today, user-specific)          │  │ │
+│  │  │ • "View Results" Link (opens Notion page)           │  │ │
+│  │  │ • Tailwind CSS + Vanilla JS (no build step)         │  │ │
+│  │  └──────────────────────────────────────────────────────┘  │ │
+│  │  ┌──────────────────────────────────────────────────────┐  │ │
+│  │  │ /settings.html - User Settings                       │  │ │
+│  │  │ • Bypass code activation                             │  │ │
+│  │  │ • Usage statistics                                   │  │ │
+│  │  │ • Expiration countdown                               │  │ │
+│  │  └──────────────────────────────────────────────────────┘  │ │
+│  │  ┌──────────────────────────────────────────────────────┐  │ │
+│  │  │ /setup.html - Template Setup (v1.1.6)                │  │ │
+│  │  │ • Auto-detect Stock Analyses database                │  │ │
+│  │  │ • Auto-detect Stock History database                 │  │ │
+│  │  │ • Auto-detect Sage Stocks page                       │  │ │
+│  │  │ • Template version tracking                          │  │ │
 │  │  └───────────────────────┬───────────────────────────────┘  │ │
 │  └────────────────────────────┼─────────────────────────────────┘ │
 └─────────────────────────────┼─────────────────────────────────────┘
                               │
                               │ POST /api/analyze
-                              │ { ticker, userId }
+                              │ Headers: Session token
+                              │ Body: { ticker, userId }
                               ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │                       Vercel Serverless (v1.0.2)                  │
@@ -284,24 +353,28 @@ Each analysis page contains:
 └─────────┘ └────────┘ └──────────┘ └────────┘ └──────────┘ └──────────┘
 ```
 
-**v1.0.2 Workflow (HTML Page → Vercel → Notion):**
-1. User visits WordPress page → enters ticker → clicks "Analyze"
-2. HTML page → POST /api/analyze (ticker, userId)
-3. Vercel checks rate limit (admin bypass or 10/day)
-4. Fetches market data (FMP + FRED in parallel)
-5. Calculates 6 category scores + composite
-6. Queries Notion for historical analyses (5 most recent)
-7. Computes deltas and trends
-8. Calls Gemini Flash 2.5 for 7-section analysis (~10-20 sec)
-9. Writes to 3 Notion locations:
-   - Stock Analyses DB (main page update)
-   - Child analysis page (dated, e.g., "AAPL Analysis - Nov 1, 2025")
-   - Stock History DB (archive entry)
-10. Returns pageUrl → HTML displays "View Results" link
-11. User clicks → opens Notion analysis page
+**v1.1.6 Workflow (OAuth → Analyze → Notion):**
+1. User visits [sagestocks.vercel.app](https://sagestocks.vercel.app) → clicks "Sign in with Notion"
+2. Notion OAuth flow → user grants access → redirected to /analyze.html
+3. User enters ticker → clicks "Analyze Stock"
+4. HTML page → POST /api/analyze (with session token in headers)
+5. Vercel validates session → checks user approval status
+6. Checks rate limit (admin auto-bypass or 5/day per user)
+7. Fetches market data (FMP + FRED in parallel)
+8. Calculates 6 category scores + composite (Technical 30%, Fundamental 35%, Macro 20%, Risk 15%)
+9. Queries Notion for historical analyses (5 most recent from user's Stock History DB)
+10. Computes deltas and trends
+11. Calls Gemini Flash 2.5 for 7-section analysis (~10-20 sec)
+12. Writes to 3 Notion locations in user's workspace:
+    - Stock Analyses DB (main page update, triggers Notion Inbox notification)
+    - Child analysis page (dated, e.g., "AAPL Analysis - Nov 1, 2025")
+    - Stock History DB (archive entry with timestamp)
+13. Returns pageUrl → HTML displays "View Results in Notion" link
+14. User clicks → opens their personal Notion analysis page
 
-**Performance:** 23-42 seconds (Notion bottleneck: historical queries + 3 writes)
-**Future:** v2.0 migration to PostgreSQL → 18-25 seconds (10x faster DB ops)
+**Performance:** 25-35 seconds (Notion bottleneck: historical queries + 3 writes, improved with v1.0.5/v1.0.6 chunked streaming optimizations)
+**Target:** 18-25 seconds
+**Future:** v2.0 migration to PostgreSQL → 18-25 seconds (10-15x faster DB ops)
 
 ---
 
@@ -372,26 +445,59 @@ Each analysis page contains:
 
 **Complete end-to-end flow for HTML Analyzer Page with LLM-generated analysis**
 
-### Phase 1: User Authentication & Input
+### Phase 1: OAuth Authentication & Session Setup
+
+> ⚠️ **DEPRECATED:** WordPress password gate replaced with Notion OAuth (v1.1.1). Hardcoded userId replaced with session-based user identification.
 
 ```
 ┌─────────────────────────────────────────┐
-│ User visits shalomormsby.com/           │
-│      stock-intelligence                 │
+│ User visits sagestocks.vercel.app       │
+│ Landing page (index.html)               │
 └──────────────────┬──────────────────────┘
                    │
                    ▼
 ┌─────────────────────────────────────────┐
-│ WordPress Password Gate                 │
-│ (Enter password once per session)       │
+│ Check for Active Session                │
+│ • Cookie: encrypted session token       │
+│ • If valid → redirect to /analyze       │
+│ • If invalid → show "Sign in" button    │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼ (No session)
+┌─────────────────────────────────────────┐
+│ User Clicks "Sign in with Notion"       │
+│ → GET /api/auth/authorize               │
 └──────────────────┬──────────────────────┘
                    │
                    ▼
 ┌─────────────────────────────────────────┐
-│ HTML Analyzer Page Loads                │
+│ Notion OAuth Flow                       │
+│ 1. Redirect to Notion authorization URL │
+│ 2. User grants workspace access         │
+│ 3. Notion redirects back to /callback   │
+│ 4. Exchange code for OAuth token        │
+│ 5. Look up user in Beta Users DB        │
+│ 6. Check approval status                │
+│ 7. Create encrypted session token       │
+│ 8. Set secure cookie                    │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────┐
+│ Redirect Based on Status                │
+│ • Approved → /analyze.html              │
+│ • Pending → index.html (pending msg)    │
+│ • Denied → index.html (denied msg)      │
+│ • New user → Create in DB, set pending  │
+└──────────────────┬──────────────────────┘
+                   │
+                   ▼ (Approved users only)
+┌─────────────────────────────────────────┐
+│ Analyzer Page Loads (analyze.html)      │
 │ • Ticker input field                    │
 │ • "Analyze Stock" button                │
-│ • userId hardcoded: 90089dd2...         │
+│ • userId from session (dynamic)         │
+│ • Usage counter (user-specific quota)   │
 └──────────────────┬──────────────────────┘
                    │
                    ▼
@@ -1067,15 +1173,21 @@ stock-intelligence/
 ## API Endpoints
 
 ### `/api/analyze` (POST)
-**Purpose:** Execute stock analysis and return results
+**Purpose:** Execute stock analysis and return results (requires authentication)
+
+**Authentication:** Session token in cookie (encrypted, from Notion OAuth)
 
 **Request:**
 ```json
 {
   "ticker": "AAPL",
-  "userId": "user-123",
-  "pageId": "notion-page-id-xyz" (optional)
+  "userId": "user-notion-page-id-from-session"
 }
+```
+
+**Headers:**
+```
+Cookie: session=<encrypted-session-token>
 ```
 
 **Response (200):**
@@ -1226,20 +1338,144 @@ GET /api/usage?userId=user-123
 ---
 
 ### `/api/health` (GET)
-**Purpose:** Health check endpoint
+**Purpose:** Health check and API information
 
 **Response (200):**
 ```json
 {
   "status": "ok",
-  "timestamp": "2025-10-31T12:00:00.000Z",
-  "version": "1.0.0-beta.1"
+  "version": "1.0.0-beta.1",
+  "timestamp": "2025-11-09T10:00:00.000Z",
+  "environment": "production",
+  "auth": {
+    "enabled": true,
+    "method": "Notion OAuth (session-based)"
+  },
+  "endpoints": [
+    {
+      "path": "/api/analyze",
+      "method": "POST",
+      "description": "Analyze a stock and sync to Notion",
+      "requiresAuth": true
+    },
+    {
+      "path": "/api/auth/authorize",
+      "method": "GET",
+      "description": "Initiate Notion OAuth flow",
+      "requiresAuth": false
+    }
+  ],
+  "config": {
+    "timeouts": {
+      "analyze": 300,
+      "webhook": 60,
+      "default": 30
+    }
+  }
 }
 ```
 
 **Configuration:**
 - Timeout: 10 seconds
 - No authentication required
+
+---
+
+### `/api/auth/authorize` (GET)
+**Purpose:** Initiate Notion OAuth flow (v1.1.1)
+
+**Response:** HTTP 302 redirect to Notion authorization URL
+
+---
+
+### `/api/auth/callback` (GET)
+**Purpose:** Handle OAuth callback from Notion (v1.1.1)
+
+**Query Parameters:**
+- `code` - OAuth authorization code from Notion
+- `state` - CSRF protection token
+
+**Response:** HTTP 302 redirect to appropriate page based on user status
+
+---
+
+### `/api/auth/session` (GET)
+**Purpose:** Check current session status (v1.1.1)
+
+**Response:**
+```json
+{
+  "authenticated": true,
+  "userId": "notion-page-id",
+  "status": "approved",
+  "email": "user@example.com"
+}
+```
+
+---
+
+### `/api/setup` (GET/POST)
+**Purpose:** Template setup and auto-detection (v1.1.6)
+
+**GET Response:**
+```json
+{
+  "detected": {
+    "stockAnalysesDb": {
+      "id": "db-id",
+      "title": "Stock Analyses",
+      "confidence": 0.95
+    },
+    "stockHistoryDb": {
+      "id": "db-id",
+      "title": "Stock History",
+      "confidence": 0.90
+    },
+    "sageStocksPage": {
+      "id": "page-id",
+      "title": "Sage Stocks",
+      "confidence": 0.85
+    }
+  }
+}
+```
+
+**POST Body:**
+```json
+{
+  "stockAnalysesDbId": "validated-db-id",
+  "stockHistoryDbId": "validated-db-id",
+  "sageStocksPageId": "validated-page-id"
+}
+```
+
+---
+
+### `/api/upgrade` (POST)
+**Purpose:** Template version upgrade (v1.1.6)
+
+**Request:**
+```json
+{
+  "targetVersion": "0.1.0",
+  "confirmDataSafety": true
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "upgradedFrom": "1.0.0",
+  "upgradedTo": "0.1.0",
+  "changesApplied": [
+    "Added Market Intelligence database",
+    "Updated Stock Analyses schema",
+    "Added template version tracking"
+  ],
+  "timestamp": "2025-11-09T10:00:00.000Z"
+}
+```
 
 ---
 
@@ -1677,20 +1913,30 @@ LOG_LEVEL=INFO
 
 ### Scoring Configuration
 
-**File:** `config/scoring-config.ts`
+**File:** `config/scoring-config.ts` and `lib/scoring.ts`
 
-**Weights:**
-- Technical Score: 40%
-- Fundamental Score: 60%
+**Current Composite Score Weights (v1.1.6):**
+- **Technical Score: 30%** - Price action, momentum, volume, RSI, MACD
+- **Fundamental Score: 35%** - Financials, valuation, P/E ratio, EPS, debt/equity
+- **Macro Score: 20%** - Economic conditions, Fed policy, yield curve, VIX
+- **Risk Score: 15%** - Volatility, beta, market cap
 
-**Boundaries:**
-- Strong Buy: 80-100
-- Buy: 70-79
-- Hold: 50-69
-- Sell: 30-49
-- Strong Sell: 0-29
+**Note:** Sentiment and Sector scores are calculated independently but NOT weighted in the composite score (they provide additional context).
 
-**Customizable:** Edit config file and redeploy
+**⚠️ Historical Note:** Earlier versions (v1.0.0-alpha) used different weights. Current production weights are documented in [lib/scoring.ts:73-78](lib/scoring.ts#L73-L78).
+
+**Score Scale:**
+- All individual scores: 1.0-5.0 scale
+- Composite score: Weighted average of Technical + Fundamental + Macro + Risk
+
+**Recommendation Boundaries:**
+- Strong Buy: 4.5-5.0
+- Buy: 3.5-4.4
+- Hold: 2.5-3.4
+- Sell: 1.5-2.4
+- Strong Sell: 1.0-1.4
+
+**Customizable:** Edit `lib/scoring.ts` weights and redeploy
 
 ### Notion Schema
 

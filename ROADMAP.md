@@ -1,6 +1,8 @@
 # Sage Stocks Roadmap
 
-**Last Updated:** November 7, 2025 ⚠️ STRATEGIC PIVOT - See v1.0.4 and v2.0 updates
+**Last Updated:** November 9, 2025 ⚠️ STRATEGIC PIVOT - See v1.0.4 and v2.0 updates
+
+> 📋 **Versioning Note:** This roadmap uses **development versions** (v1.x, v2.x) for internal milestone tracking. See [CHANGELOG.md](CHANGELOG.md) "📋 Versioning Strategy (Dual-Track)" for the mapping between development versions and user-facing template versions (v0.1.0 Beta → v1.0.0 Public).
 
 ---
 
@@ -118,19 +120,21 @@
 
 ## 🚧 Current Sprint
 
-### v1.0.2: HTML Analyzer Page - Hybrid Approach Phase 1 (In Progress)
+### v1.0.2: HTML Analyzer Page - Hybrid Approach Phase 1 (✅ Complete)
 
-*WordPress-hosted HTML page with LLM-generated analysis*
+> ⚠️ **DEPRECATED:** WordPress hosting references. Production is now at [sagestocks.vercel.app](https://sagestocks.vercel.app)
+
+*Standalone HTML page with LLM-generated analysis, initially planned for WordPress, migrated to Vercel standalone*
 
 **Context:** Notion webhook limitations discovered in v1.0.1 led to architectural pivot. Building dedicated HTML analyzer page as transition to full custom frontend.
 
 **Core Changes:**
 
-- ⏳ Build LLM abstraction layer (provider-agnostic interface) (1 hr)
+- ✅ Built LLM abstraction layer (provider-agnostic interface)
   - Interface: `LLMProvider` with OpenAI, Anthropic, Gemini implementations
   - Default: Google Gemini Flash 2.5 ($0.013 per analysis, 50% token reduction)
   - Configurable via `LLM_PROVIDER` environment variable
-- ⏳ Modify `/api/analyze` endpoint for new workflow (1.5 hrs)
+- ✅ Modified `/api/analyze` endpoint for new workflow
   - Query Notion for historical analyses (5 most recent)
   - Compute deltas and trends
   - Build enriched prompt with historical context
@@ -139,29 +143,29 @@
   - Update Stock Analyses database row with latest metrics
   - Archive to Stock History database
   - Return `pageUrl` for new analysis page
-- ⏳ Build `public/analyze.html` analyzer interface (1 hr)
+- ✅ Built `public/analyze.html` analyzer interface
   - Ticker input with validation (1-10 alphanumeric + hyphen)
   - State management (Initial → Processing → Complete/Error)
   - Real-time status feedback
   - "View Results" link to Notion page
-  - Usage counter display (X/10 analyses today)
+  - Usage counter display (X/5 analyses today, user-specific)
   - Tailwind CSS styling (CDN, no build step)
-  - Vanilla JavaScript (WordPress-compatible)
-- ⏳ Add admin bypass via environment variable (15 min)
-  - `RATE_LIMIT_ADMIN_USER_ID=90089dd2-2474-4219-8213-c574934d35df`
-  - Permanent bypass (no session needed)
-- ⏳ Test end-to-end workflow locally (30 min)
-- ⏳ Deploy to Vercel + copy HTML to WordPress (15 min)
+  - Vanilla JavaScript (standalone, no build required)
+- ✅ Added admin bypass via environment variable
+  - `ADMIN_USER_ID` environment variable
+  - Automatic bypass for admin (no session needed)
+- ✅ Tested end-to-end workflow locally
+- ✅ Deployed to Vercel at [sagestocks.vercel.app](https://sagestocks.vercel.app)
 
 **Prerequisites:**
 
 - ✅ Vercel Pro upgrade ($20/month) - **Required for 300-second timeout**
-- ⏳ Google Gemini API setup and key
-- ⏳ WordPress page setup at `shalomormsby.com/stock-intelligence`
+- ✅ Google Gemini API setup and key
+- ⚠️ ~~WordPress page setup~~ (deprecated - using sagestocks.vercel.app)
 
 **Success Criteria:**
 
-- User visits WordPress page → enters ticker → clicks Analyze
+- ✅ User visits [sagestocks.vercel.app](https://sagestocks.vercel.app) → enters ticker → clicks Analyze
 - Analysis completes in <30 seconds (18-25 seconds target)
 - New dated analysis page created in Notion
 - Database row updated with latest metrics
@@ -849,28 +853,33 @@ CREATE TABLE analyses (
 - **Rate Limiting:** Upstash Redis (REST API)
 - **Integration:** Notion API (transitioning to PostgreSQL in v2.0)
 
-**Data Flow (v1.0.2):**
+**Data Flow (v1.1.6 - Current):**
 
-1. User visits `shalomormsby.com/stock-intelligence` (WordPress page)
-2. Enters ticker → clicks "Analyze Stock"
-3. HTML page → POST to `/api/analyze` with ticker + userId
-4. Vercel function:
-   - Checks rate limiting (Redis)
+> ⚠️ **Updated from v1.0.2:** Now includes OAuth authentication and multi-user support
+
+1. User visits [sagestocks.vercel.app](https://sagestocks.vercel.app)
+2. OAuth login with Notion → session validation
+3. Enters ticker → clicks "Analyze Stock"
+4. HTML page → POST to `/api/analyze` with session token + userId
+5. Vercel function:
+   - Validates session and user approval status
+   - Checks rate limiting (Redis, 5 analyses/day per user)
    - Fetches technical + fundamental data (FMP + FRED)
-   - Queries Notion for historical analyses (5 most recent)
-   - Calculates scores + computes deltas/trends
+   - Queries Notion for historical analyses (5 most recent from user's DB)
+   - Calculates scores (Technical 30%, Fundamental 35%, Macro 20%, Risk 15%) + computes deltas/trends
    - Calls Gemini Flash 2.5 for 7-section analysis
-   - Creates dated child analysis page in Notion
-   - Updates Stock Analyses database row
-   - Archives to Stock History database
+   - Creates dated child analysis page in user's Notion
+   - Updates user's Stock Analyses database row
+   - Archives to user's Stock History database
    - Returns `pageUrl` to new analysis page
-5. HTML page displays "View Results" link
-6. User clicks → opens Notion analysis page
+6. HTML page displays "View Results in Notion" link
+7. User clicks → opens their personal Notion analysis page
 
-**Performance (v1.0.2):**
+**Performance (v1.1.6 - Current):**
 
-- 18-25 seconds per analysis (target)
-- Database operations: 8-15 seconds (Notion bottleneck)
+- 25-35 seconds per analysis (actual, with Notion bottleneck)
+- Target: 18-25 seconds
+- Database operations: 10-15 seconds (Notion bottleneck, improved with v1.0.5/v1.0.6 optimizations)
 - LLM generation: 10-20 seconds
 - 300-second function timeout (Vercel Pro required)
 

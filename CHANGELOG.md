@@ -7,6 +7,94 @@ All notable changes to Sage Stocks will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+---
+
+## 📋 Versioning Strategy (Dual-Track)
+
+**Effective Date:** November 9, 2025
+
+We use **dual-track versioning** to separate user-facing releases from internal development milestones.
+
+### Two Version Tracks
+
+**1. Template Version (User-Facing)**
+- What beta testers and customers see in their Notion workspace
+- Starts at **v0.1.0 (Beta)** for Cohort 1 launch
+- Major updates: v0.2.0, v0.3.0 (beta refinements)
+- Graduates to **v1.0.0** when production-ready for public/paid launch
+
+**2. Development Version (Internal)**
+- Engineering milestone tracking in Change Log, Roadmap, Tasks database
+- Current state: v1.1.6 complete, v1.1.x in progress
+- Continues with existing numbering: v1.1.x, v1.2.0, v2.0.0, etc.
+- Used for granular feature tracking and technical milestones
+
+### Version Mapping Table
+
+| Template Version | Dev Versions Included | Target | Audience |
+|-----------------|----------------------|--------|----------|
+| **v0.1.0 (Beta)** | v1.0.0–v1.0.4, v1.1.1–v1.1.6 | Nov 2025 | Cohort 1 (10 users) |
+| **v0.2.0 (Beta)** | v1.1.7–v1.1.10 | Dec 2025 | Cohort 2 (50 users) |
+| **v1.0.0 (Public)** | v2.0.0+ | Q1 2026 | Public launch |
+
+### Why Two Tracks?
+
+✅ **Clear expectations** - Users know they're in beta, invites feedback without feeling broken
+✅ **Flexible bundling** - Can cherry-pick dev features for template releases
+✅ **No breaking changes** - Maintains historical accuracy (commits, dates, docs stay consistent)
+✅ **Marketing milestone** - v1.0.0 becomes a celebration of production-readiness
+
+### How It Works
+
+**Template (Sage Stocks hub page):**
+- Display: "Current version: v0.1.0 (Beta)"
+- Update prompts reference template versions (v0.1.0 → v0.2.0)
+
+**Change Log:**
+- Development versions documented below (v1.x, v2.x)
+- Template release summaries in dedicated section
+- Both tracks maintained independently
+
+**Communication:**
+- When talking to users: Template version (v0.1.0)
+- When planning features: Dev version (v1.1.6)
+
+---
+
+## Template Releases
+
+### [v0.1.0 (Beta)] - Target: November 2025
+
+**Audience:** Cohort 1 (10 beta testers)
+**Status:** 🚧 In preparation
+
+**Included Development Versions:**
+- v1.0.0 through v1.0.4 (Core functionality)
+- v1.1.1 through v1.1.6 (Template upgrade system, multi-user support)
+
+**What's Included:**
+- ✅ Stock analysis with LLM-powered insights
+- ✅ Real-time market data integration (FMP, FRED)
+- ✅ Historical price tracking
+- ✅ OAuth-based multi-user support
+- ✅ Template version management and upgrade system
+- ✅ Timezone-aware rate limiting
+- ✅ API cost monitoring dashboard
+
+**For Beta Testers:**
+- This is an early beta - expect rough edges
+- Your feedback drives our roadmap
+- Data safety guaranteed during upgrades
+- 5 free analyses per day to start
+
+---
+
+## Development Versions
+
+All development versions are documented below with full technical details.
+
+---
+
 ## [Unreleased]
 
 ---
@@ -250,7 +338,9 @@ interface User {
 - Transaction logging
 - Rollback via version revert
 
-**Version Numbering:**
+**Development Version Numbering:**
+> Note: See "📋 Versioning Strategy (Dual-Track)" at the top of this document for the complete versioning system. The semantic versioning below applies to **development versions** only.
+
 - **MAJOR**: Breaking changes (e.g., 2.0.0)
 - **MINOR**: New features, backwards compatible (e.g., 1.1.0)
 - **PATCH**: Bug fixes, content updates (e.g., 1.0.1)
@@ -2270,7 +2360,7 @@ Test optimized output on:
 - Local testing with Gemini Flash 2.5
 - Vercel Pro upgrade (300-second timeout requirement)
 - Production deployment and validation
-- HTML analyzer page (WordPress integration)
+- HTML analyzer page (⚠️ initially planned for WordPress, migrated to sagestocks.vercel.app standalone)
 
 ### Added
 - **LLM Abstraction Layer** ([lib/llm/](lib/llm/), 1,090 LOC):
@@ -2378,7 +2468,7 @@ Test optimized output on:
 
 ### Next Steps (v1.0.3 - Infrastructure Upgrade)
 - Vercel Pro upgrade ($20/month for 300-second timeout)
-- HTML analyzer page deployment (WordPress)
+- HTML analyzer page deployment (⚠️ WordPress deprecated v1.1.0, now at sagestocks.vercel.app)
 - Rate limit adjustment for LLM costs
 
 ---
@@ -3187,12 +3277,12 @@ buy_recommendation = results['recommendation']['buy_now']
 - Multi-API integration: Alpha Vantage + FRED
 - Automated Notion database sync
 - **Comprehensive 6-category scoring system** (1.0-5.0 scale):
-  - Technical Score (25%): RSI, MACD, moving averages
-  - Fundamental Score (30%): P/E, revenue, margins
+  - Technical Score (⚠️ 25% in v0.1.0, updated to 30% in v1.1.0+): RSI, MACD, moving averages
+  - Fundamental Score (⚠️ 30% in v0.1.0, updated to 35% in v1.1.0+): P/E, revenue, margins
   - Macro Score (20%): Interest rates, inflation, GDP
   - Risk Score (15%): Volatility, debt levels
-  - Sentiment Score (5%): Market sentiment indicators
-  - Sector Score (5%): Sector relative strength
+  - Sentiment Score (standalone, not weighted in composite): Market sentiment indicators
+  - Sector Score (standalone, not weighted in composite): Sector relative strength
 - Composite Score: Weighted average recommendation
 - Recommendation Engine: Strong Buy → Strong Sell ratings
 - Google Colab notebook execution environment
