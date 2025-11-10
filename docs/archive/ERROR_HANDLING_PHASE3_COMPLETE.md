@@ -182,7 +182,7 @@ scoreTechnical(tech: TechnicalData): number {
 - Returns neutral score when no data
 - Total possible points: 7
 
-### 8. Updated `scoreSentiment()` Method ✨ **Final update**
+### 8. Updated `scoreSentiment()` Method ⛰️ **Final update**
 
 **Location:** [lib/scoring.ts:545-611](lib/scoring.ts:545-611)
 

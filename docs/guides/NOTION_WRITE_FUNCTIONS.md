@@ -123,7 +123,7 @@ console.log('History page:', result.historyPageId);
 
 ## What Was Added
 
-### 1. `updateContentStatus()` Method ✨ NEW
+### 1. `updateContentStatus()` Method ⛰️ NEW
 **Location:** [lib/notion-client.ts:743-771](lib/notion-client.ts:743-771)
 
 **Purpose:** Update only the Content Status property of a page
@@ -151,7 +151,7 @@ await notionClient.updateContentStatus(
 - Stock Analyses: `"Pending Analysis"` | `"Send to History"` | `"Logged in History"` | `"Analysis Incomplete"` | `"New"` | `"Updated"`
 - Stock History: `"New"` | `"Historical"`
 
-### 2. Enhanced JSDoc Documentation ✨ IMPROVED
+### 2. Enhanced JSDoc Documentation ⛰️ IMPROVED
 
 Added comprehensive JSDoc comments to all public methods:
 
@@ -173,7 +173,7 @@ Added comprehensive JSDoc comments to all public methods:
 - Usage examples
 - Workflow context
 
-### 3. Comprehensive Test Suite ✨ NEW
+### 3. Comprehensive Test Suite ⛰️ NEW
 **Location:** [scripts/test-notion-write.ts](scripts/test-notion-write.ts)
 
 **Test Coverage:**

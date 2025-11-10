@@ -138,7 +138,7 @@ async function handleGet(req: VercelRequest, res: VercelResponse) {
                   ${changelog.changes.map(change => `
                     <div class="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
                       <span class="text-2xl flex-shrink-0">
-                        ${change.type === 'added' ? '✨' : change.type === 'improved' ? '📈' : '🔧'}
+                        ${change.type === 'added' ? '⛰️' : change.type === 'improved' ? '📈' : '🔧'}
                       </span>
                       <div class="flex-1">
                         <div class="font-semibold text-gray-900">${change.item}</div>

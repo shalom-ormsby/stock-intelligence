@@ -145,7 +145,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Features:**
 - Version comparison display (current → latest)
-- Changelog viewer with change type icons (✨ added, 📈 improved, 🔧 fixed)
+- Changelog viewer with change type icons (⛰️ added, 📈 improved, 🔧 fixed)
 - Impact descriptions for each change
 - Estimated upgrade time
 - Safety information ("Your data remains untouched")
