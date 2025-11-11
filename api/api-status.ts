@@ -137,7 +137,7 @@ export default async function handler(
   }
 
   // Check authentication (optional - only if API_KEY env var is set)
-  if (!requireAuth(req, res)) {
+  if (!(await requireAuth(req, res))) {
     return;
   }
 
