@@ -159,7 +159,7 @@ export default async function handler(
 
     const geminiStatus = checkAPIStatus(
       'Google Gemini API',
-      ['GOOGLE_API_KEY', 'LLM_MODEL_NAME'],
+      ['GEMINI_API_KEY', 'LLM_MODEL_NAME'],
       'https://ai.google.dev/docs',
       'https://aistudio.google.com/apikey',
       process.env.LLM_MODEL_NAME || 'Not configured'

@@ -23,7 +23,7 @@ export class LLMFactory {
     switch (type) {
       case 'gemini':
         return new GeminiProvider(
-          process.env.GOOGLE_API_KEY!,
+          process.env.GEMINI_API_KEY!,
           modelName || 'gemini-2.5-flash'
         );
 

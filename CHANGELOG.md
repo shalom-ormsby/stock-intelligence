@@ -2698,7 +2698,7 @@ Test optimized output on:
 - ✅ Cost tracking and performance metadata
 
 **Remaining Work**:
-- Add environment variables (LLM_PROVIDER, LLM_MODEL_NAME, GOOGLE_API_KEY)
+- Add environment variables (LLM_PROVIDER, LLM_MODEL_NAME, GEMINI_API_KEY)
 - Local testing with Gemini Flash 2.5
 - Vercel Pro upgrade (300-second timeout requirement)
 - Production deployment and validation
@@ -2805,7 +2805,7 @@ Test optimized output on:
   ```bash
   LLM_PROVIDER=gemini              # Options: gemini, claude, openai
   LLM_MODEL_NAME=gemini-2.5-flash  # Model identifier
-  GOOGLE_API_KEY=your_key_here     # Provider API key
+  GEMINI_API_KEY=your_key_here     # Provider API key
   ```
 
 ### Next Steps (v1.0.3 - Infrastructure Upgrade)

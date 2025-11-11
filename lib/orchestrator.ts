@@ -471,18 +471,26 @@ async function broadcastError(
     try {
       const notion = new Client({ auth: subscriber.accessToken });
 
-      await notion.pages.update({
-        page_id: subscriber.pageId,
-        properties: {
-          'Content Status': {
-            status: { name: 'Error' },
+      // Try to update Content Status if it exists
+      // Don't fail if the property doesn't exist
+      try {
+        await notion.pages.update({
+          page_id: subscriber.pageId,
+          properties: {
+            'Content Status': {
+              status: { name: 'Error' },
+            },
           },
-        },
-      });
-
-      // TODO: Write error message to page content
-
-      console.log(`[ORCHESTRATOR]      ✓ Error marked for ${subscriber.email}`);
+        });
+        console.log(`[ORCHESTRATOR]      ✓ Error marked for ${subscriber.email}`);
+      } catch (error: any) {
+        // If Content Status property doesn't exist, just log it
+        if (error.code === 'validation_error') {
+          console.log(`[ORCHESTRATOR]      ⚠️  Could not update Content Status for ${subscriber.email} (property may not exist)`);
+        } else {
+          throw error;
+        }
+      }
     } catch (error) {
       console.error(`[ORCHESTRATOR]      ✗ Failed to mark error for ${subscriber.email}:`, error);
     }
