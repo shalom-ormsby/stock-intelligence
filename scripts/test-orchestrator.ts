@@ -10,7 +10,13 @@
 
 // Load environment variables from .env file
 import * as dotenv from 'dotenv';
+import * as path from 'path';
+
+// Load .env file first
 dotenv.config();
+
+// Also try .env.local if it exists (used by Vercel)
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 
 import { getAllUsers } from '../lib/auth';
 import { runOrchestrator } from '../lib/orchestrator';

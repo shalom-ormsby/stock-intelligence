@@ -5,7 +5,13 @@
  */
 
 import * as dotenv from 'dotenv';
+import * as path from 'path';
+
+// Load .env file first
 dotenv.config();
+
+// Also try .env.local if it exists
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 
 console.log('='.repeat(60));
 console.log('Environment Variable Diagnostic');
@@ -18,8 +24,8 @@ const requiredVars = [
   'FRED_API_KEY',
   'GEMINI_API_KEY',
   'NOTION_BETA_USERS_DB_ID',
-  'NOTION_STOCK_ANALYSES_DB_ID',
-  'NOTION_STOCK_HISTORY_DB_ID',
+  'STOCK_ANALYSES_DB_ID',
+  'STOCK_HISTORY_DB_ID',
   'ENCRYPTION_KEY',
   'LLM_PROVIDER',
   'LLM_MODEL_NAME',
