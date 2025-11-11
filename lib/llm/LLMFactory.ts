@@ -24,7 +24,7 @@ export class LLMFactory {
       case 'gemini':
         return new GeminiProvider(
           process.env.GEMINI_API_KEY!,
-          modelName || 'gemini-2.5-flash'
+          modelName || 'gemini-2.0-flash-exp'
         );
 
       case 'claude':
