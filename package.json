@@ -9,6 +9,8 @@
     "test": "jest",
     "test:analyze": "ts-node scripts/test-analyze.ts",
     "test:notion-write": "ts-node scripts/test-notion-write.ts",
+    "test:orchestrator": "ORCHESTRATOR_DRY_RUN=true ts-node scripts/test-orchestrator.ts",
+    "test:orchestrator:real": "ORCHESTRATOR_DRY_RUN=false ts-node scripts/test-orchestrator.ts",
     "poll": "ts-node scripts/poll-notion.ts",
     "lint": "eslint . --ext .ts",
     "type-check": "tsc --noEmit"
