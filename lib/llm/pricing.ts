@@ -29,6 +29,7 @@ export const MODEL_PRICING = {
   // Anthropic Claude models
   'claude-4.1': { input: 3.00, output: 15.00 },
   'claude-4.5-sonnet-20250622': { input: 3.00, output: 15.00 },
+  'claude-sonnet-4-5-20250929': { input: 3.00, output: 15.00 }, // Claude Sonnet 4.5
   'claude-4.1-opus': { input: 15.00, output: 75.00 },
 
   // DeepSeek models (for future)

@@ -655,6 +655,7 @@ export class NotionClient {
         'Next Review Date', // Stock Analyses-specific
         'AI summary', // Stock Analyses-specific
         'Holding Type', // Stock Analyses-specific
+        'Analysis Cadence', // Stock Analyses-specific (orchestrator feature)
       ]);
 
       // Copy properties (excluding Stock Analyses-specific ones)

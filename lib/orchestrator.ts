@@ -460,7 +460,24 @@ async function broadcastToUser(
       };
 
       // Write to Notion (Stock Analyses + Stock History)
-      await notionClient.syncToNotion(analysisData, true);
+      // usePollingWorkflow = false because LLM analysis is already complete
+      await notionClient.syncToNotion(analysisData, false);
+
+      // Set Content Status to "Complete" since analysis is done
+      const notion = new Client({ auth: subscriber.accessToken });
+      try {
+        await notion.pages.update({
+          page_id: subscriber.pageId,
+          properties: {
+            'Content Status': { status: { name: 'Complete' } },
+          },
+        });
+      } catch (error: any) {
+        // Gracefully handle if Content Status property doesn't exist
+        if (error.code !== 'validation_error') {
+          console.warn(`[ORCHESTRATOR]      ⚠️  Could not set Content Status: ${error.message}`);
+        }
+      }
 
       // Update content with LLM analysis
       // TODO: Implement full content write with historical context
