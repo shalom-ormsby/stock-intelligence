@@ -284,7 +284,7 @@ export async function processQueue(
 }
 
 /**
- * Analyze stock with exponential backoff retry on 503 errors
+ * Analyze stock with exponential backoff retry on 503/429 errors
  */
 async function analyzeWithRetry(
   item: QueueItem,
@@ -305,19 +305,25 @@ async function analyzeWithRetry(
       });
 
       // If analysis succeeded or failed with non-retryable error, return
-      if (result.success || !isGemini503Error(result.error)) {
+      if (result.success || !isGeminiRateLimitError(result.error)) {
         return result;
       }
 
-      // Gemini 503 error - retry with backoff
+      // Gemini 503/429 error - retry with backoff
       if (attempt < maxRetries - 1) {
-        const delayMs = backoffDelays[attempt];
+        // Extract retry delay from error message if available
+        const retryAfterSeconds = extractRetryAfter(result.error);
+        const delayMs = retryAfterSeconds
+          ? retryAfterSeconds * 1000
+          : backoffDelays[attempt];
+
+        const errorType = result.error?.includes('429') ? '429 Rate Limit' : '503 Service Unavailable';
         console.warn(
-          `[ORCHESTRATOR]   → Gemini 503 error, retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})...`
+          `[ORCHESTRATOR]   → Gemini ${errorType} error, retrying in ${(delayMs / 1000).toFixed(1)}s (attempt ${attempt + 1}/${maxRetries})...`
         );
         await delay(delayMs);
       } else {
-        console.error(`[ORCHESTRATOR]   → Gemini 503 error, max retries reached`);
+        console.error(`[ORCHESTRATOR]   → Gemini error, max retries reached`);
         return result;
       }
     } catch (error) {
@@ -362,11 +368,30 @@ async function analyzeWithRetry(
 }
 
 /**
- * Check if error is a Gemini 503 (overloaded) error
+ * Check if error is a Gemini rate limit error (503 or 429)
  */
-function isGemini503Error(error: string | undefined): boolean {
+function isGeminiRateLimitError(error: string | undefined): boolean {
   if (!error) return false;
-  return error.includes('503') && error.includes('overloaded');
+  return (error.includes('503') && error.includes('overloaded')) ||
+         (error.includes('429') && error.includes('quota'));
+}
+
+/**
+ * Extract retry delay from Gemini error message
+ * Example: "Please retry in 48.50719905s" → 48.5
+ */
+function extractRetryAfter(error: string | undefined): number | null {
+  if (!error) return null;
+
+  // Match "Please retry in X.XXs" or "Please retry in Xs"
+  const match = error.match(/Please retry in ([\d.]+)s/);
+  if (match && match[1]) {
+    const seconds = parseFloat(match[1]);
+    // Cap at 60 seconds for safety
+    return Math.min(Math.ceil(seconds), 60);
+  }
+
+  return null;
 }
 
 /**
