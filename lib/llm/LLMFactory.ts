@@ -30,7 +30,7 @@ export class LLMFactory {
       case 'claude':
         return new ClaudeProvider(
           process.env.ANTHROPIC_API_KEY!,
-          modelName || 'claude-4.5-sonnet-20250622'
+          modelName || 'claude-sonnet-4-5-20250929'
         );
 
       case 'openai':
