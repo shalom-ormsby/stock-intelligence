@@ -20,6 +20,10 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getAllUsers } from '../../lib/auth';
 import { runOrchestrator } from '../../lib/orchestrator';
 
+// Vercel function configuration
+// Pro plan with Fluid Compute supports up to 800 seconds (~13 min)
+export const maxDuration = 800;
+
 // Environment variables
 const CRON_SECRET = process.env.CRON_SECRET || '';
 
