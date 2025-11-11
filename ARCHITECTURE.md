@@ -1,11 +1,11 @@
 # Sage Stocks Architecture
 
-*Last updated: November 10, 2025*
+*Last updated: November 11, 2025*
 
-**Development Version:** v1.0.5 (Complete) - Stock Analysis Orchestrator
+**Development Version:** v1.0.6 (Complete) - Production Stability & Timeout Fixes
 **Template Version:** v0.1.0 (Beta) - Launching with Cohort 1
 **Production URL:** [https://sagestocks.vercel.app](https://sagestocks.vercel.app)
-**Status:** ✅ Live in Production
+**Status:** ✅ Live in Production - Fully Automated
 
 > 📋 **Versioning Note:** This document uses **development versions** (v1.x, v2.x) for technical milestone tracking. See [CHANGELOG.md](CHANGELOG.md) "📋 Versioning Strategy (Dual-Track)" for the mapping to user-facing template versions (v0.1.0 Beta → v1.0.0 Public).
 >
@@ -1914,12 +1914,26 @@ if (code !== expectedCode) {
 ```json
 {
   "functions": {
-    "api/analyze.ts": { "maxDuration": 300 },  // 5 minutes
-    "api/webhook.ts": { "maxDuration": 60 },    // 1 minute
-    "api/health.ts": { "maxDuration": 10 }      // 10 seconds
-  }
+    "api/analyze.ts": { "maxDuration": 300 },               // 5 minutes
+    "api/webhook.ts": { "maxDuration": 60 },                // 1 minute
+    "api/health.ts": { "maxDuration": 10 },                 // 10 seconds
+    "api/cron/scheduled-analyses.ts": { "maxDuration": 800 } // 13 minutes (Pro plan max with Fluid Compute)
+  },
+  "crons": [
+    {
+      "path": "/api/cron/scheduled-analyses",
+      "schedule": "0 13 * * *"  // 5:00 AM PT (13:00 UTC) daily
+    }
+  ]
 }
 ```
+
+**Timeout Configuration (v1.0.6):**
+- **Pro Plan Limit**: 800 seconds (13 minutes) with Vercel Fluid Compute
+- **Cron Function**: Requires explicit `export const maxDuration = 800` in TypeScript file
+- **Current Usage**: ~780 seconds for 13 stocks (~60s per stock)
+- **Buffer**: 20-second margin for future growth
+- **Node Version**: Pinned to `20.x` (prevents auto-upgrades)
 
 **Build Process:**
 1. TypeScript compilation (`tsc --noEmit` for type checking)

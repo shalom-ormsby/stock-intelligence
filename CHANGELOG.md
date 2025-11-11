@@ -1,6 +1,6 @@
 # Changelog
 
-**Last Updated:** November 10, 2025
+**Last Updated:** November 11, 2025
 
 All notable changes to Sage Stocks will be documented in this file.
 
@@ -96,6 +96,89 @@ All development versions are documented below with full technical details.
 ---
 
 ## [Unreleased]
+
+---
+
+## [v1.0.6] - 2025-11-11
+
+### Production Stability & Timeout Fixes
+
+**Status**: ✅ Complete, deployed to production
+
+**Objective:** Resolve critical deployment failures and function timeouts preventing automated daily analyses from completing successfully.
+
+---
+
+### Issues Fixed
+
+**1. Deployment Failure (Exit Status 128)**
+- **Problem**: Missing `await` on async `requireAuth()` calls in api-status.ts and webhook.ts
+- **Impact**: Vercel health checks failed during deployment with "Cannot set headers after they are sent" error
+- **Root Cause**: Both auth middleware and main handler tried to send response headers simultaneously
+- **Fix**: Added `await` to async auth calls in [api/api-status.ts:140](api/api-status.ts#L140) and [api/webhook.ts:131](api/webhook.ts#L131)
+
+**2. Function Timeout at 300 Seconds**
+- **Problem**: Cron job timed out after 5 minutes, only completing 5 of 13 stock analyses
+- **Root Cause**: Vercel Pro plan limit is 800 seconds (not 900), and config wasn't being recognized
+- **Impact**: Daily automated analyses incomplete, users not receiving timely updates
+- **Fix**:
+  - Reduced `maxDuration` from 900s to 800s (Pro plan maximum with Fluid Compute)
+  - Added explicit `export const maxDuration = 800` in [api/cron/scheduled-analyses.ts:25](api/cron/scheduled-analyses.ts#L25)
+  - Updated [vercel.json:17](vercel.json#L17) to match
+
+**3. Status Field Not Showing "Analyzing"**
+- **Problem**: Users couldn't see when analysis was in progress
+- **Impact**: Poor user experience, no visibility into analysis state
+- **Fix**: Added `setAnalyzingStatus()` function in orchestrator to set Status = "Analyzing" before analysis starts
+
+**4. Deployment Warning Cleanup**
+- **Problem**: Node.js auto-upgrade warnings and ESLint deprecation warnings in build logs
+- **Fix**:
+  - Changed Node version from `>=18.0.0` to `20.x` (prevents auto-upgrades)
+  - Upgraded ESLint from v8.56 to v9.17 (removes deprecation warnings)
+  - Created ESLint v9 flat config
+
+---
+
+### Changes Made
+
+**Modified Files:**
+- `api/api-status.ts` - Added await for requireAuth
+- `api/webhook.ts` - Added await for requireAuth
+- `api/cron/scheduled-analyses.ts` - Added explicit maxDuration export
+- `vercel.json` - Set maxDuration to 800s, changed cron to 5:00 AM PT
+- `lib/orchestrator.ts` - Added setAnalyzingStatus() function
+- `package.json` - Updated Node version and ESLint dependencies
+- `eslint.config.mjs` - Created ESLint v9 flat config (new file)
+
+---
+
+### Testing Results
+
+**Manual Trigger Test (after fixes):**
+- ✅ All 13 stocks analyzed successfully
+- ✅ Completed within 800-second timeout window
+- ✅ Stock Analyses entries created with "Complete" status
+- ✅ Stock History entries created immediately
+- ✅ No deployment errors or warnings
+- ✅ Execution time: ~6-7 minutes for 13 stocks (~60s per stock)
+
+**Production Metrics:**
+- Deployment time: 48 seconds
+- No build warnings (ESLint v9)
+- No Node version warnings
+- Function timeout: 800 seconds (13 minutes)
+- Daily cron schedule: 5:00 AM PT (13:00 UTC)
+
+---
+
+### Impact
+
+- **Reliability**: Automated daily analyses now complete successfully without timing out
+- **User Experience**: Status field now shows "Analyzing" during analysis for better visibility
+- **Clean Logs**: No more deployment warnings cluttering build output
+- **Stability**: Async/await bugs fixed prevents deployment failures
+- **Scale**: 800-second timeout provides sufficient buffer for future growth (currently ~780s needed for 13 stocks)
 
 ---
 

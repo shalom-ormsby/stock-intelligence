@@ -229,6 +229,9 @@ export async function processQueue(
       continue;
     }
 
+    // Set Status to "Analyzing" for all subscribers before analysis starts
+    await setAnalyzingStatus(item.subscribers);
+
     // Step 3a: Analyze stock once
     const analysisResult = await analyzeWithRetry(item);
 
@@ -503,6 +506,33 @@ async function broadcastToUser(
 /**
  * Broadcast error to all subscribers
  */
+/**
+ * Set Status to "Analyzing" for all subscribers before analysis starts
+ */
+async function setAnalyzingStatus(subscribers: Subscriber[]): Promise<void> {
+  const promises = subscribers.map(async subscriber => {
+    try {
+      const notion = new Client({ auth: subscriber.accessToken });
+
+      await notion.pages.update({
+        page_id: subscriber.pageId,
+        properties: {
+          'Status': {
+            status: { name: 'Analyzing' },
+          },
+        },
+      });
+    } catch (error: any) {
+      // Silently fail if Status property doesn't exist
+      if (error.code !== 'validation_error') {
+        console.warn(`[ORCHESTRATOR]      ⚠️  Could not set Analyzing status for ${subscriber.email}`);
+      }
+    }
+  });
+
+  await Promise.allSettled(promises);
+}
+
 async function broadcastError(
   subscribers: Subscriber[],
   _errorMessage: string
