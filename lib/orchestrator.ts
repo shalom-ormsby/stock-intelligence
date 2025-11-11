@@ -463,19 +463,19 @@ async function broadcastToUser(
       // usePollingWorkflow = false because LLM analysis is already complete
       await notionClient.syncToNotion(analysisData, false);
 
-      // Set Content Status to "Complete" since analysis is done
+      // Set Status to "Complete" since analysis is done
       const notion = new Client({ auth: subscriber.accessToken });
       try {
         await notion.pages.update({
           page_id: subscriber.pageId,
           properties: {
-            'Content Status': { status: { name: 'Complete' } },
+            'Status': { status: { name: 'Complete' } },
           },
         });
       } catch (error: any) {
-        // Gracefully handle if Content Status property doesn't exist
+        // Gracefully handle if Status property doesn't exist
         if (error.code !== 'validation_error') {
-          console.warn(`[ORCHESTRATOR]      ⚠️  Could not set Content Status: ${error.message}`);
+          console.warn(`[ORCHESTRATOR]      ⚠️  Could not set Status: ${error.message}`);
         }
       }
 
@@ -513,22 +513,22 @@ async function broadcastError(
     try {
       const notion = new Client({ auth: subscriber.accessToken });
 
-      // Try to update Content Status if it exists
+      // Try to update Status if it exists
       // Don't fail if the property doesn't exist
       try {
         await notion.pages.update({
           page_id: subscriber.pageId,
           properties: {
-            'Content Status': {
+            'Status': {
               status: { name: 'Error' },
             },
           },
         });
         console.log(`[ORCHESTRATOR]      ✓ Error marked for ${subscriber.email}`);
       } catch (error: any) {
-        // If Content Status property doesn't exist, just log it
+        // If Status property doesn't exist, just log it
         if (error.code === 'validation_error') {
-          console.log(`[ORCHESTRATOR]      ⚠️  Could not update Content Status for ${subscriber.email} (property may not exist)`);
+          console.log(`[ORCHESTRATOR]      ⚠️  Could not update Status for ${subscriber.email} (property may not exist)`);
         } else {
           throw error;
         }
