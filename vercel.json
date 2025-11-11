@@ -14,7 +14,7 @@
       "maxDuration": 10
     },
     "api/cron/scheduled-analyses.ts": {
-      "maxDuration": 300
+      "maxDuration": 900
     }
   },
   "crons": [
