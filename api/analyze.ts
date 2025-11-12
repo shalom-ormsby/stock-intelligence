@@ -225,8 +225,10 @@ export default async function handler(
     // Initialize API clients
     const fmpApiKey = process.env.FMP_API_KEY;
     const fredApiKey = process.env.FRED_API_KEY;
-    const stockAnalysesDbId = process.env.STOCK_ANALYSES_DB_ID;
-    const stockHistoryDbId = process.env.STOCK_HISTORY_DB_ID;
+
+    // Use user-specific database IDs from their setup (v1.2.0+)
+    const stockAnalysesDbId = user.stockAnalysesDbId;
+    const stockHistoryDbId = user.stockHistoryDbId;
 
     // Validate environment variables
     if (!fmpApiKey) {
@@ -235,11 +237,13 @@ export default async function handler(
     if (!fredApiKey) {
       throw new Error('FRED_API_KEY environment variable is not set');
     }
+
+    // Validate user-specific database IDs
     if (!stockAnalysesDbId) {
-      throw new Error('STOCK_ANALYSES_DB_ID environment variable is not set');
+      throw new Error('Stock Analyses database not configured. Please complete setup at https://sagestocks.vercel.app/');
     }
     if (!stockHistoryDbId) {
-      throw new Error('STOCK_HISTORY_DB_ID environment variable is not set');
+      throw new Error('Stock History database not configured. Please complete setup at https://sagestocks.vercel.app/');
     }
 
     const fmpClient = createFMPClient(fmpApiKey);

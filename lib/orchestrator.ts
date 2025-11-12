@@ -20,7 +20,6 @@ import { analyzeStockCore, validateAnalysisComplete, AnalysisResult } from './st
 import { createNotionClient, AnalysisData } from './notion-client';
 
 // Environment configuration
-const STOCK_ANALYSES_DB_ID = process.env.STOCK_ANALYSES_DB_ID || '';
 const ANALYSIS_DELAY_MS = parseInt(process.env.ANALYSIS_DELAY_MS || '8000', 10); // Default: 8 seconds
 const DRY_RUN = process.env.ORCHESTRATOR_DRY_RUN === 'true';
 
@@ -43,6 +42,8 @@ export interface Subscriber {
   accessToken: string;
   notionUserId: string;
   timezone: string;
+  stockAnalysesDbId: string;
+  stockHistoryDbId: string;
 }
 
 /**
@@ -86,13 +87,19 @@ export async function collectStockRequests(
 
   for (const user of users) {
     try {
+      // Skip users without configured databases
+      if (!user.stockAnalysesDbId) {
+        console.log(`[ORCHESTRATOR]   → User ${user.email}: No Stock Analyses DB configured, skipping`);
+        continue;
+      }
+
       // Decrypt user's OAuth token
       const userAccessToken = await decryptToken(user.accessToken);
       const notion = new Client({ auth: userAccessToken });
 
-      // Query user's Stock Analyses database
+      // Query user's Stock Analyses database (user-specific DB ID)
       const response = await notion.databases.query({
-        database_id: STOCK_ANALYSES_DB_ID,
+        database_id: user.stockAnalysesDbId,
         filter: {
           property: 'Analysis Cadence',
           select: { equals: 'Daily' },
@@ -128,6 +135,8 @@ export async function collectStockRequests(
           accessToken: userAccessToken,
           notionUserId: user.notionUserId,
           timezone: user.timezone || 'America/Los_Angeles',
+          stockAnalysesDbId: user.stockAnalysesDbId!,
+          stockHistoryDbId: user.stockHistoryDbId || '',
         });
       }
     } catch (error) {
@@ -441,11 +450,11 @@ async function broadcastToUser(
 ): Promise<void> {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      // Create Notion client for this user
+      // Create Notion client for this user (with user-specific database IDs)
       const notionClient = createNotionClient({
         apiKey: subscriber.accessToken,
-        stockAnalysesDbId: process.env.STOCK_ANALYSES_DB_ID!,
-        stockHistoryDbId: process.env.STOCK_HISTORY_DB_ID!,
+        stockAnalysesDbId: subscriber.stockAnalysesDbId,
+        stockHistoryDbId: subscriber.stockHistoryDbId,
         userId: subscriber.notionUserId,
         timezone: subscriber.timezone,
       });
