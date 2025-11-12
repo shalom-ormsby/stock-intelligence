@@ -154,11 +154,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       });
 
       // Check if setup is complete
-      const setupComplete = Boolean(
-        user.stockAnalysesDbId &&
-        user.stockHistoryDbId &&
-        user.sageStocksPageId
-      );
+      // TEMP: Commented out for testing - always go through setup flow
+      // const setupComplete = Boolean(
+      //   user.stockAnalysesDbId &&
+      //   user.stockHistoryDbId &&
+      //   user.sageStocksPageId
+      // );
 
       // Redirect based on setup status
       // TEMP: Commented out auto-redirect for testing - always go through setup flow
