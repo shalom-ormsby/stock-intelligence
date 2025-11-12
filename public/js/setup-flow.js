@@ -906,10 +906,13 @@ async function runFirstAnalysis(ticker) {
   } catch (error) {
     console.error('❌ Analysis failed:', error);
 
+    // Extract error message properly
+    const errorMessage = error.message || (typeof error === 'string' ? error : 'An unexpected error occurred');
+
     statusDiv.innerHTML = `
       <div class="p-4 bg-red-50 border-l-4 border-red-400 rounded">
         <p class="text-red-800 font-medium mb-1">❌ Analysis failed</p>
-        <p class="text-sm text-red-700">${error.message}</p>
+        <p class="text-sm text-red-700">${errorMessage}</p>
         <button
           id="retry-analysis"
           class="mt-3 px-4 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-all"
