@@ -127,7 +127,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       user.status = 'approved'; // Update local copy
     }
 
-    // Step 4: Check approval status
+    // Step 4: Create session for all users (pending, denied, approved)
+    // This allows pending users to check if their status changes without re-authenticating
+    await storeUserSession(res, {
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+      notionUserId: user.notionUserId,
+    });
+
+    log(LogLevel.INFO, 'Session created', {
+      email: userEmail,
+      status: user.status,
+    });
+
+    // Step 5: Redirect based on approval status
     if (user.status === 'pending') {
       log(LogLevel.INFO, 'User pending approval', { email: userEmail });
       res.redirect('/?status=pending');
@@ -140,16 +154,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return;
     }
 
-    // Step 5: User is approved - create session
+    // Step 6: User is approved - proceed with setup
     if (user.status === 'approved') {
-      await storeUserSession(res, {
-        userId: user.id,
-        email: user.email,
-        name: user.name,
-        notionUserId: user.notionUserId,
-      });
-
-      log(LogLevel.INFO, 'Session created for approved user', {
+      log(LogLevel.INFO, 'User approved, proceeding with setup', {
         email: userEmail,
       });
 
