@@ -870,7 +870,11 @@ async function runFirstAnalysis(ticker) {
     const data = await response.json();
 
     if (!response.ok || !data.success) {
-      throw new Error(data.error || 'Analysis failed');
+      // Extract error message properly - handle object errors
+      const errorMsg = typeof data.error === 'string'
+        ? data.error
+        : (data.error?.message || data.message || JSON.stringify(data.error) || 'Analysis failed');
+      throw new Error(errorMsg);
     }
 
     // 🎉 CONFETTI TIME!
