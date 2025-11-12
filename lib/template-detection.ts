@@ -49,6 +49,8 @@ async function searchUserDatabases(notionToken: string): Promise<any[]> {
   let hasMore = true;
   let startCursor: string | undefined = undefined;
 
+  console.log('🔍 [searchUserDatabases] Starting database search...');
+
   while (hasMore) {
     const response = await notion.search({
       filter: { property: 'object', value: 'database' },
@@ -56,10 +58,17 @@ async function searchUserDatabases(notionToken: string): Promise<any[]> {
       page_size: 100,
     });
 
+    console.log(`📊 [searchUserDatabases] Found ${response.results.length} databases in this batch`);
     databases.push(...response.results);
     hasMore = response.has_more;
     startCursor = response.next_cursor || undefined;
   }
+
+  console.log(`✓ [searchUserDatabases] Total databases found: ${databases.length}`);
+  console.log('📋 [searchUserDatabases] Database titles:', databases.map(db => ({
+    id: db.id,
+    title: db.title?.[0]?.plain_text || 'Untitled',
+  })));
 
   return databases;
 }
@@ -74,6 +83,8 @@ async function searchUserPages(notionToken: string): Promise<any[]> {
   let hasMore = true;
   let startCursor: string | undefined = undefined;
 
+  console.log('🔍 [searchUserPages] Starting page search...');
+
   while (hasMore) {
     const response = await notion.search({
       filter: { property: 'object', value: 'page' },
@@ -81,10 +92,22 @@ async function searchUserPages(notionToken: string): Promise<any[]> {
       page_size: 100,
     });
 
+    console.log(`📄 [searchUserPages] Found ${response.results.length} pages in this batch`);
     pages.push(...response.results);
     hasMore = response.has_more;
     startCursor = response.next_cursor || undefined;
   }
+
+  console.log(`✓ [searchUserPages] Total pages found: ${pages.length}`);
+  console.log('📋 [searchUserPages] Page titles:', pages.map(page => {
+    const titleProp = Object.values(page.properties || {}).find(
+      (prop: any) => prop.type === 'title'
+    ) as any;
+    return {
+      id: page.id,
+      title: titleProp?.title?.[0]?.plain_text || 'Untitled',
+    };
+  }));
 
   return pages;
 }
@@ -146,27 +169,51 @@ function calculateMatchScore(db: any, criteria: MatchCriteria): number {
 async function detectStockAnalysesDb(
   notionToken: string
 ): Promise<DatabaseMatch | null> {
+  console.log('🎯 [detectStockAnalysesDb] Starting Stock Analyses detection...');
   const databases = await searchUserDatabases(notionToken);
 
-  const scores = databases.map(db => ({
-    id: db.id,
-    title: db.title?.[0]?.plain_text || 'Untitled',
-    score: calculateMatchScore(db, {
-      titleMatches: ['Stock Analyses', 'Analyses', 'Stock Analysis'],
-      titleWeight: 0.3,
-      requiredProps: ['Ticker', 'Signal', 'Composite Score'],
-      requiredPropsWeight: 0.5,
-      optionalProps: ['Technical Score', 'Fundamental Score', 'Date', 'Price', 'Analysis'],
-      optionalPropsWeight: 0.2,
-      propertyTypes: {
-        'Composite Score': 'number',
-        'Signal': 'select',
-        'Ticker': 'title',
-      },
-    }),
-  }));
+  const criteria = {
+    titleMatches: ['Stock Analyses', 'Analyses', 'Stock Analysis'],
+    titleWeight: 0.3,
+    requiredProps: ['Ticker', 'Signal', 'Composite Score'],
+    requiredPropsWeight: 0.5,
+    optionalProps: ['Technical Score', 'Fundamental Score', 'Date', 'Price', 'Analysis'],
+    optionalPropsWeight: 0.2,
+    propertyTypes: {
+      'Composite Score': 'number',
+      'Signal': 'select',
+      'Ticker': 'title',
+    },
+  };
+
+  const scores = databases.map(db => {
+    const title = db.title?.[0]?.plain_text || 'Untitled';
+    const props = Object.keys(db.properties || {});
+    const score = calculateMatchScore(db, criteria);
+
+    console.log(`  📊 Scoring "${title}":`, {
+      score: score.toFixed(3),
+      properties: props,
+      hasRequiredProps: criteria.requiredProps.every(req =>
+        props.some(p => p.toLowerCase() === req.toLowerCase())
+      ),
+    });
+
+    return {
+      id: db.id,
+      title,
+      score,
+    };
+  });
 
   const best = scores.sort((a, b) => b.score - a.score)[0];
+
+  console.log('🏆 [detectStockAnalysesDb] Best match:', best ? {
+    title: best.title,
+    score: best.score.toFixed(3),
+    threshold: '0.5',
+    passes: best.score >= 0.5,
+  } : 'No matches');
 
   if (!best || best.score < 0.5) return null;
 
@@ -182,26 +229,50 @@ async function detectStockAnalysesDb(
 async function detectStockHistoryDb(
   notionToken: string
 ): Promise<DatabaseMatch | null> {
+  console.log('🎯 [detectStockHistoryDb] Starting Stock History detection...');
   const databases = await searchUserDatabases(notionToken);
 
-  const scores = databases.map(db => ({
-    id: db.id,
-    title: db.title?.[0]?.plain_text || 'Untitled',
-    score: calculateMatchScore(db, {
-      titleMatches: ['Stock History', 'History', 'Price History'],
-      titleWeight: 0.3,
-      requiredProps: ['Ticker', 'Date', 'Close'],
-      requiredPropsWeight: 0.5,
-      optionalProps: ['Open', 'High', 'Low', 'Volume', 'Change'],
-      optionalPropsWeight: 0.2,
-      propertyTypes: {
-        'Close': 'number',
-        'Date': 'date',
-      },
-    }),
-  }));
+  const criteria = {
+    titleMatches: ['Stock History', 'History', 'Price History'],
+    titleWeight: 0.3,
+    requiredProps: ['Ticker', 'Date', 'Close'],
+    requiredPropsWeight: 0.5,
+    optionalProps: ['Open', 'High', 'Low', 'Volume', 'Change'],
+    optionalPropsWeight: 0.2,
+    propertyTypes: {
+      'Close': 'number',
+      'Date': 'date',
+    },
+  };
+
+  const scores = databases.map(db => {
+    const title = db.title?.[0]?.plain_text || 'Untitled';
+    const props = Object.keys(db.properties || {});
+    const score = calculateMatchScore(db, criteria);
+
+    console.log(`  📊 Scoring "${title}":`, {
+      score: score.toFixed(3),
+      properties: props,
+      hasRequiredProps: criteria.requiredProps.every(req =>
+        props.some(p => p.toLowerCase() === req.toLowerCase())
+      ),
+    });
+
+    return {
+      id: db.id,
+      title,
+      score,
+    };
+  });
 
   const best = scores.sort((a, b) => b.score - a.score)[0];
+
+  console.log('🏆 [detectStockHistoryDb] Best match:', best ? {
+    title: best.title,
+    score: best.score.toFixed(3),
+    threshold: '0.5',
+    passes: best.score >= 0.5,
+  } : 'No matches');
 
   if (!best || best.score < 0.5) return null;
 
@@ -217,6 +288,7 @@ async function detectStockHistoryDb(
 async function detectSageStocksPage(
   notionToken: string
 ): Promise<PageMatch | null> {
+  console.log('🎯 [detectSageStocksPage] Starting Sage Stocks page detection...');
   const pages = await searchUserPages(notionToken);
 
   // Find page titled "Sage Stocks" or similar
@@ -236,6 +308,13 @@ async function detectSageStocksPage(
       else if (/sage/i.test(title)) score = 0.6;
       else if (/stocks/i.test(title)) score = 0.4;
 
+      console.log(`  📄 Scoring page "${title}":`, {
+        score: score.toFixed(3),
+        matchesSageStocks: /sage\s*stocks/i.test(title),
+        matchesSage: /sage/i.test(title),
+        matchesStocks: /stocks/i.test(title),
+      });
+
       return {
         id: page.id,
         title,
@@ -247,6 +326,11 @@ async function detectSageStocksPage(
     .filter(match => match.score > 0);
 
   const best = matches.sort((a, b) => b.score - a.score)[0];
+
+  console.log('🏆 [detectSageStocksPage] Best match:', best ? {
+    title: best.title,
+    score: best.score.toFixed(3),
+  } : 'No matches');
 
   return best || null;
 }
