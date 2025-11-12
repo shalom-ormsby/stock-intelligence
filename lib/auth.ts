@@ -20,12 +20,29 @@ import { log, LogLevel } from './logger';
 // Types & Interfaces
 // ============================================================================
 
+export interface SetupProgress {
+  currentStep: 1 | 2 | 3 | 4 | 5 | 6; // Step 6 = complete
+  completedSteps: number[];
+  step1ManualConfirm?: boolean;
+  step3DetectionResults?: {
+    stockAnalysesDb?: { id: string; title: string; confidence: string };
+    stockHistoryDb?: { id: string; title: string; confidence: string };
+    sageStocksPage?: { id: string; title: string; confidence: string };
+  };
+  step4FirstTicker?: string;
+  step5AnalysisUrl?: string;
+  errors?: Array<{ step: number; message: string; code?: string }>;
+  startedAt?: number;
+  completedAt?: number | null;
+}
+
 export interface Session {
   userId: string;
   email: string;
   name: string;
   notionUserId: string;
   createdAt: number;
+  setupProgress?: SetupProgress;
 }
 
 export interface User {
@@ -218,6 +235,150 @@ export async function clearUserSession(
     log(LogLevel.ERROR, 'Failed to clear session', {
       error: error instanceof Error ? error.message : String(error),
     });
+  }
+}
+
+// ============================================================================
+// Setup Progress Management
+// ============================================================================
+
+/**
+ * Initialize setup progress for a new user session
+ */
+export async function initializeSetupProgress(sessionId: string): Promise<void> {
+  try {
+    const response = await fetch(`${REDIS_URL}/get/${sessionId}`, {
+      headers: {
+        Authorization: `Bearer ${REDIS_TOKEN}`,
+      },
+    });
+
+    const data = (await response.json()) as { result: string | null };
+    if (!data.result) {
+      throw new Error('Session not found');
+    }
+
+    const session = JSON.parse(data.result) as Session;
+
+    // Initialize setup progress if not exists
+    if (!session.setupProgress) {
+      session.setupProgress = {
+        currentStep: 1,
+        completedSteps: [],
+        startedAt: Date.now(),
+        completedAt: null,
+      };
+
+      // Update session in Redis
+      await fetch(`${REDIS_URL}/set/${sessionId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${REDIS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(session),
+      });
+
+      log(LogLevel.INFO, 'Setup progress initialized', { userId: session.userId });
+    }
+  } catch (error) {
+    log(LogLevel.ERROR, 'Failed to initialize setup progress', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
+/**
+ * Update setup progress in session
+ */
+export async function updateSetupProgress(
+  req: VercelRequest,
+  updates: Partial<SetupProgress>
+): Promise<SetupProgress> {
+  try {
+    // Extract session ID from cookie
+    const cookies = req.headers.cookie || '';
+    const sessionCookie = cookies
+      .split(';')
+      .find((c) => c.trim().startsWith('si_session='));
+
+    if (!sessionCookie) {
+      throw new Error('No session cookie found');
+    }
+
+    const sessionId = sessionCookie.split('=')[1].trim();
+
+    // Get current session
+    const response = await fetch(`${REDIS_URL}/get/${sessionId}`, {
+      headers: {
+        Authorization: `Bearer ${REDIS_TOKEN}`,
+      },
+    });
+
+    const data = (await response.json()) as { result: string | null };
+    if (!data.result) {
+      throw new Error('Session not found');
+    }
+
+    const session = JSON.parse(data.result) as Session;
+
+    // Update setup progress
+    const currentProgress = session.setupProgress || {
+      currentStep: 1,
+      completedSteps: [],
+      startedAt: Date.now(),
+      completedAt: null,
+    };
+
+    const updatedProgress: SetupProgress = {
+      ...currentProgress,
+      ...updates,
+    };
+
+    session.setupProgress = updatedProgress;
+
+    // Store updated session
+    await fetch(`${REDIS_URL}/set/${sessionId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${REDIS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(session),
+    });
+
+    log(LogLevel.INFO, 'Setup progress updated', {
+      userId: session.userId,
+      currentStep: updatedProgress.currentStep,
+      completedSteps: updatedProgress.completedSteps,
+    });
+
+    return updatedProgress;
+  } catch (error) {
+    log(LogLevel.ERROR, 'Failed to update setup progress', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
+/**
+ * Get setup progress from session
+ */
+export async function getSetupProgress(req: VercelRequest): Promise<SetupProgress | null> {
+  try {
+    const session = await validateSession(req);
+    if (!session) {
+      return null;
+    }
+
+    return session.setupProgress || null;
+  } catch (error) {
+    log(LogLevel.ERROR, 'Failed to get setup progress', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
   }
 }
 

@@ -3,182 +3,137 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sage Stocks - Invest wisely.</title>
+    <title>Get Started - Sage Stocks</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+    <style>
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .slide-in { animation: slideIn 0.3s ease-out; }
+        .spinner { animation: spin 1s linear infinite; }
+        .pulse-slow { animation: pulse 2s ease-in-out infinite; }
+
+        /* Subway map connector line */
+        .subway-connector {
+            position: absolute;
+            left: 19px;
+            top: 40px;
+            bottom: -40px;
+            width: 3px;
+            background: linear-gradient(to bottom, #D1D5DB 0%, #D1D5DB 100%);
+        }
+        .subway-connector.complete {
+            background: linear-gradient(to bottom, #10B981 0%, #10B981 100%);
+        }
+        .subway-connector.partial {
+            background: linear-gradient(to bottom, #10B981 0%, #10B981 var(--progress), #D1D5DB var(--progress), #D1D5DB 100%);
+        }
+
+        /* Step indicator states */
+        .step-indicator {
+            position: relative;
+            z-index: 10;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .step-indicator.pending {
+            background: #F3F4F6;
+            border: 3px solid #D1D5DB;
+            color: #9CA3AF;
+        }
+        .step-indicator.in-progress {
+            background: #EFF6FF;
+            border: 3px solid #3B82F6;
+            color: #3B82F6;
+        }
+        .step-indicator.complete {
+            background: #10B981;
+            border: 3px solid #10B981;
+            color: white;
+        }
+        .step-indicator.error {
+            background: #FEE2E2;
+            border: 3px solid #EF4444;
+            color: #EF4444;
+        }
+
+        /* Progress badge */
+        .progress-badge {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 50;
+            background: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #3B82F6;
+        }
+    </style>
 </head>
 <body class="min-h-screen" style="background-color: #F4F6F3;">
-    <div class="min-h-screen flex items-center justify-center px-4">
-        <div class="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow-lg">
+    <!-- Persistent Progress Badge -->
+    <div id="progress-badge" class="progress-badge hidden">
+        Setup: Step <span id="badge-step">1</span>/6
+    </div>
 
-            <!-- Logo/Icon -->
-            <div class="text-center mb-8">
-                <div class="text-6xl mb-4">⛰️</div>
-                <h1 class="text-3xl font-bold text-gray-900">Sage Stocks</h1>
-                <p class="mt-2 text-gray-600">Invest wisely.</p>
-            </div>
+    <div class="min-h-screen flex items-center justify-center px-4 py-8">
+        <div class="max-w-4xl w-full">
+            <!-- Main Card -->
+            <div class="bg-white rounded-2xl shadow-xl p-6 sm:p-8 md:p-10">
+                <!-- Header -->
+                <div class="text-center mb-8">
+                    <div class="text-5xl mb-3">⛰️</div>
+                    <h1 class="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">Get Started — 5 Minute Setup</h1>
+                    <p class="text-gray-600 text-base sm:text-lg">Duplicate our Notion template, connect your workspace, and analyze your first stock within 5 minutes.</p>
+                </div>
 
-            <!-- Status Messages -->
-            <div id="status-pending" class="hidden mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <div class="flex items-start">
-                    <div class="text-2xl mr-3">⏳</div>
-                    <div>
-                        <p class="text-yellow-800 font-medium">Account Pending Approval</p>
-                        <p class="text-yellow-700 text-sm mt-1">
-                            Your account has been created and is awaiting admin approval.
-                            You'll receive an email when approved (usually within 24 hours).
-                        </p>
+                <!-- Subway Map (Hero Element) -->
+                <div id="subway-map" class="mb-8 p-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl">
+                    <h2 class="text-xl font-bold text-gray-900 mb-6 text-center">Your Setup Progress — Under 5 Minutes to First Analysis</h2>
+
+                    <!-- Desktop: Horizontal Layout -->
+                    <div class="hidden md:flex justify-between items-start gap-4">
+                        <!-- Step indicators will be populated by JS -->
                     </div>
+
+                    <!-- Mobile: Vertical Layout -->
+                    <div class="md:hidden space-y-6">
+                        <!-- Step indicators will be populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Step Content Sections -->
+                <div id="setup-content" class="space-y-8">
+                    <!-- Steps will be dynamically shown/hidden by JS -->
                 </div>
             </div>
 
-            <div id="status-denied" class="hidden mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-                <div class="flex items-start">
-                    <div class="text-2xl mr-3">❌</div>
-                    <div>
-                        <p class="text-red-800 font-medium">Access Denied</p>
-                        <p class="text-red-700 text-sm mt-1">
-                            Your account application has been denied. Please contact support if you believe this is an error.
-                        </p>
-                    </div>
-                </div>
+            <!-- Footer -->
+            <div class="text-center mt-6 text-sm text-gray-600">
+                <p>Need help? <a href="mailto:support@sagestocks.com" class="text-blue-600 hover:text-blue-700 underline">Contact support</a></p>
             </div>
-
-            <div id="error" class="hidden mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-                <div class="flex items-start">
-                    <div class="text-2xl mr-3">⚠️</div>
-                    <div>
-                        <p class="text-red-800 font-medium">Authentication Error</p>
-                        <p class="text-red-700 text-sm mt-1" id="error-message">
-                            An error occurred during sign in. Please try again.
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Step 1: Get Template -->
-            <div class="mb-6 p-6 rounded-lg border" style="background-color: #F4F6F3; border-color: #C7D4C1;">
-                <div class="flex items-start">
-                    <div class="text-2xl mr-3">1️⃣</div>
-                    <div class="flex-1">
-                        <h3 class="font-semibold text-gray-900 mb-2">Get Your Template</h3>
-                        <p class="text-sm text-gray-600 mb-3">
-                            Duplicate the Sage Stocks template to your Notion workspace
-                        </p>
-                        <a
-                            href="https://ormsby.notion.site/Sage-Stocks-28ca1d1b67e080ea8424c9e64f4648a9?source=copy_link"
-                            target="_blank"
-                            class="w-full flex items-center justify-center px-4 py-3 border border-transparent text-base font-medium rounded-md text-white bg-[#5A6F51] hover:bg-[#354030] transition duration-200"
-                        >
-                            Duplicate Template <span class="ml-2">→</span>
-                        </a>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Step 2: Connect Workspace -->
-            <div class="mb-6 p-6 rounded-lg border" style="background-color: #F4F6F3; border-color: #C7D4C1;">
-                <div class="flex items-start">
-                    <div class="text-2xl mr-3">2️⃣</div>
-                    <div class="flex-1">
-                        <h3 class="font-semibold text-gray-900 mb-2">Connect Your Workspace</h3>
-                        <p class="text-sm text-gray-600 mb-3">
-                            Select the Sage Stocks page when prompted
-                        </p>
-                    <button
-                        onclick="window.location.href='/api/auth/authorize'"
-                        class="w-full flex items-center justify-center px-4 py-3 border border-transparent text-base font-medium rounded-md text-white bg-[#5A6F51] hover:bg-[#354030] transition duration-200"
-                    >
-                        <img src="/notion-logo.png" alt="Notion" class="w-5 h-5 mr-2" />
-                        Sign in with Notion
-                    </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Step 3: Start Analyzing -->
-            <div class="mb-6 p-6 rounded-lg border" style="background-color: #F4F6F3; border-color: #C7D4C1;">
-                <div class="flex items-start">
-                    <div class="text-2xl mr-3">3️⃣</div>
-                    <div>
-                        <h3 class="font-semibold text-gray-900 mb-2">Start Analyzing</h3>
-                        <p class="text-sm text-gray-600">
-                            Get admin approval (usually within 24 hours) and you're ready to analyze stocks!
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Divider -->
-            <div class="border-t border-gray-200 my-6"></div>
-
-            <!-- Already Have Template Link -->
-            <div class="text-center text-sm text-gray-600">
-                Already have the template? <button onclick="window.location.href='/api/auth/authorize'" class="text-[##88A47C] hover:underline font-medium">Sign in above</button>
-            </div>
-
-            <!-- Features -->
-            <div class="mt-8 border-t pt-6">
-                <h3 class="font-semibold text-gray-900 mb-3">What you get:</h3>
-                <ul class="text-sm text-gray-600 space-y-2">
-                    <li class="flex items-center">
-                        <svg class="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                        </svg>
-                        AI-powered stock analysis with technical and fundamental data
-                    </li>
-                    <li class="flex items-center">
-                        <svg class="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                        </svg>
-                        Automated analysis saved directly to your Notion workspace
-                    </li>
-                    <li class="flex items-center">
-                        <svg class="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                        </svg>
-                        Historical tracking and trend analysis
-                    </li>
-                    <li class="flex items-center">
-                        <svg class="w-4 h-4 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                        </svg>
-                        10 analyses per day (beta)
-                    </li>
-                </ul>
-            </div>
-
         </div>
     </div>
 
-    <script>
-        // Show status messages based on URL params
-        const params = new URLSearchParams(window.location.search);
-
-        if (params.get('status') === 'pending') {
-            document.getElementById('status-pending').classList.remove('hidden');
-        }
-
-        if (params.get('status') === 'denied') {
-            document.getElementById('status-denied').classList.remove('hidden');
-        }
-
-        const errorParam = params.get('error');
-        if (errorParam) {
-            const errorMessages = {
-                'access_denied': 'You denied access to your Notion workspace. Please try again and grant access.',
-                'missing_code': 'Authorization code missing. Please try signing in again.',
-                'server_config': 'Server configuration error. Please contact support.',
-                'token_exchange_failed': 'Failed to complete authentication. Please try again.',
-                'oauth_failed': 'Authentication failed. Please try again or contact support.',
-                'unknown_status': 'Unexpected error occurred. Please contact support.',
-            };
-
-            const errorDiv = document.getElementById('error');
-            const errorMessage = document.getElementById('error-message');
-
-            errorMessage.textContent = errorMessages[errorParam] || 'An error occurred during sign in. Please try again.';
-            errorDiv.classList.remove('hidden');
-        }
-    </script>
+    <script src="/js/setup-flow.js"></script>
 </body>
 </html>

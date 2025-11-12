@@ -8,7 +8,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { validateSession, getUserByEmail, decryptToken } from '../lib/auth';
+import { validateSession, getUserByEmail, decryptToken, updateSetupProgress } from '../lib/auth';
 import {
   autoDetectTemplate,
   testDatabaseRead,
@@ -150,6 +150,21 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
     });
 
     console.log('✓ Setup complete for user:', session.email);
+
+    // Mark Step 3 as complete in session
+    try {
+      await updateSetupProgress(req, {
+        currentStep: 4, // Move to step 4 (trigger first analysis)
+        completedSteps: [1, 2, 3],
+        step3DetectionResults: {
+          stockAnalysesDb: { id: stockAnalysesDbId, title: 'Stock Analyses', confidence: 'high' },
+          stockHistoryDb: { id: stockHistoryDbId, title: 'Stock History', confidence: 'high' },
+          sageStocksPage: { id: sageStocksPageId, title: 'Sage Stocks', confidence: 'high' },
+        },
+      });
+    } catch (error) {
+      console.warn('⚠️ Failed to update setup progress (non-critical):', error);
+    }
 
     return res.json({
       success: true,

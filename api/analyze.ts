@@ -23,7 +23,7 @@ import { createFMPClient } from '../lib/fmp-client';
 import { createFREDClient } from '../lib/fred-client';
 import { createStockScorer } from '../lib/scoring';
 import { createNotionClient, AnalysisData } from '../lib/notion-client';
-import { requireAuth as requireAuthSession, getUserByEmail, decryptToken, incrementUserAnalyses } from '../lib/auth';
+import { requireAuth as requireAuthSession, getUserByEmail, decryptToken, incrementUserAnalyses, updateSetupProgress, getSetupProgress } from '../lib/auth';
 import { validateStockData, validateTicker } from '../lib/validators';
 import { createTimer, logAnalysisStart, logAnalysisComplete, logAnalysisFailed } from '../lib/logger';
 import { formatErrorResponse, formatErrorForNotion } from '../lib/utils';
@@ -766,6 +766,25 @@ export default async function handler(
       console.error('Failed to increment user analyses:', error);
       // Don't throw - this is non-critical
     });
+
+    // Update setup progress if this is the first analysis (Step 4/5)
+    try {
+      const setupProgress = await getSetupProgress(req);
+
+      if (setupProgress && setupProgress.currentStep <= 4) {
+        // This is their first analysis - mark Step 4 complete and Step 5 in progress
+        await updateSetupProgress(req, {
+          currentStep: 5,
+          completedSteps: [...new Set([...setupProgress.completedSteps, 4])],
+          step4FirstTicker: ticker,
+          step5AnalysisUrl: response.analysesPageId
+            ? `https://notion.so/${response.analysesPageId.replace(/-/g, '')}`
+            : undefined,
+        });
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to update setup progress (non-critical):', error);
+    }
 
     res.status(200).json(response);
   } catch (error) {

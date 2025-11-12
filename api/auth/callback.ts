@@ -153,8 +153,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         email: userEmail,
       });
 
-      // Redirect to analyzer
-      res.redirect('/analyze.html');
+      // Check if setup is complete
+      const setupComplete = Boolean(
+        user.stockAnalysesDbId &&
+        user.stockHistoryDbId &&
+        user.sageStocksPageId
+      );
+
+      // Redirect based on setup status
+      if (setupComplete) {
+        // Setup already complete - go to analyzer
+        res.redirect('/analyze.html');
+      } else {
+        // New user or incomplete setup - go to single-page setup flow
+        res.redirect('/?step=2'); // OAuth just completed, so we're at step 2
+      }
       return;
     }
 
