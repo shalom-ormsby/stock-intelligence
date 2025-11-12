@@ -10,17 +10,17 @@
 const STEPS = [
   {
     number: 1,
-    title: 'Duplicate Template',
-    icon: '📄',
-    duration: '1 min',
-    description: 'Copy to your workspace',
-  },
-  {
-    number: 2,
     title: 'Sign In with Notion',
     icon: '🔗',
     duration: '30s',
     description: 'Authorize Sage Stocks',
+  },
+  {
+    number: 2,
+    title: 'Duplicate Template',
+    icon: '📄',
+    duration: '1 min',
+    description: 'Copy to your workspace',
   },
   {
     number: 3,
@@ -95,20 +95,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // Load setup status from API
+  // Load setup status from API (will return requiresAuth if no session)
   await loadSetupStatus();
 
-  // If OAuth callback just completed, advance to step 2
-  if (stepParam === '2' && currentState.currentStep === 1) {
-    await advanceToStep(2);
+  // If OAuth callback just completed (step=2 means OAuth succeeded, now on duplicate)
+  if (stepParam === '2') {
+    currentState.currentStep = 2;
+    currentState.completedSteps = [1]; // OAuth (step 1) is now complete
+    await advanceToStep(2, { step1Complete: true });
   }
 
   // Render subway map and content
   renderSubwayMap();
   renderStepContent();
 
-  // Auto-trigger Step 3 if we just arrived at Step 2
-  if (currentState.currentStep === 2) {
+  // Auto-trigger Step 3 (verification) if we just completed Step 2 (duplicate)
+  if (currentState.currentStep === 3) {
     setTimeout(() => {
       triggerAutoDetection();
     }, 500);
@@ -332,7 +334,7 @@ function renderStepContent() {
 }
 
 // ============================================================================
-// Step 1: Duplicate Template
+// Step 1: Sign In with Notion (OAuth)
 // ============================================================================
 
 function createStep1Content() {
@@ -341,80 +343,18 @@ function createStep1Content() {
   section.innerHTML = `
     <div class="mb-6 p-6 rounded-lg border bg-blue-50 border-blue-200">
       <div class="flex items-start">
-        <div class="text-3xl mr-4">📄</div>
-        <div class="flex-1">
-          <h3 class="font-bold text-gray-900 text-xl mb-2">Step 1: Duplicate the Notion Template</h3>
-          <p class="text-gray-700 mb-4">
-            Get your own copy of the Sage Stocks template. This includes the Stock Analyses database, Stock History database, and the Sage Stocks page.
-          </p>
-          <a
-            href="${TEMPLATE_URL}"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl mb-4"
-          >
-            📄 Duplicate Template <span class="ml-2">→</span>
-          </a>
-          <p class="text-sm text-gray-600 mb-4">After duplicating, return to this page and click below:</p>
-          <div class="flex items-center gap-3">
-            <input type="checkbox" id="step1-confirm" class="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500" />
-            <label for="step1-confirm" class="text-gray-700 font-medium cursor-pointer">I've duplicated the template</label>
-          </div>
-          <button
-            id="step1-continue"
-            disabled
-            class="mt-4 px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Continue to Sign In
-          </button>
-        </div>
-      </div>
-    </div>
-  `;
-
-  // Setup event listeners after render
-  setTimeout(() => {
-    const checkbox = section.querySelector('#step1-confirm');
-    const button = section.querySelector('#step1-continue');
-
-    if (checkbox && button) {
-      checkbox.addEventListener('change', () => {
-        button.disabled = !checkbox.checked;
-      });
-
-      button.addEventListener('click', async () => {
-        button.disabled = true;
-        button.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Saving...';
-        await advanceToStep(2, { manualConfirm: true });
-      });
-    }
-  }, 0);
-
-  return section;
-}
-
-// ============================================================================
-// Step 2: Sign In with Notion (OAuth)
-// ============================================================================
-
-function createStep2Content() {
-  const section = document.createElement('div');
-  section.className = 'slide-in';
-  section.innerHTML = `
-    <div class="mb-6 p-6 rounded-lg border bg-green-50 border-green-200">
-      <div class="flex items-start">
         <div class="text-3xl mr-4">🔗</div>
         <div class="flex-1">
-          <h3 class="font-bold text-gray-900 text-xl mb-2">Step 2: Connect Your Workspace</h3>
+          <h3 class="font-bold text-gray-900 text-xl mb-2">Step 1: Sign In with Notion</h3>
           <p class="text-gray-700 mb-4">
-            Sign in with Notion to grant Sage Stocks access to read and write to your duplicated template.
+            Let's start by connecting your Notion workspace. This allows Sage Stocks to read and write to your databases.
           </p>
           <p class="text-sm text-gray-600 mb-4">
-            <strong>Important:</strong> When prompted, select the <strong>"Sage Stocks"</strong> page you just duplicated.
+            <strong>Note:</strong> After signing in, you'll be prompted to duplicate our template.
           </p>
           <button
             onclick="window.location.href='/api/auth/authorize'"
-            class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl"
+            class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl"
           >
             <img src="/notion-logo.png" alt="Notion" class="w-5 h-5 mr-2" onerror="this.style.display='none'" />
             Sign in with Notion
@@ -423,6 +363,75 @@ function createStep2Content() {
       </div>
     </div>
   `;
+
+  return section;
+}
+
+// ============================================================================
+// Step 2: Duplicate Template
+// ============================================================================
+
+function createStep2Content() {
+  const section = document.createElement('div');
+  section.className = 'slide-in';
+  section.innerHTML = `
+    <div class="mb-6 p-6 rounded-lg border bg-green-50 border-green-200">
+      <div class="flex items-start">
+        <div class="text-3xl mr-4">📄</div>
+        <div class="flex-1">
+          <h3 class="font-bold text-gray-900 text-xl mb-2">Step 2: Duplicate the Notion Template</h3>
+          <p class="text-gray-700 mb-4">
+            Get your own copy of the Sage Stocks template. This includes the Stock Analyses database, Stock History database, and the Sage Stocks page.
+          </p>
+          <a
+            href="${TEMPLATE_URL}"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl mb-4"
+          >
+            📄 Duplicate Template <span class="ml-2">→</span>
+          </a>
+          <p class="text-sm text-gray-600 mb-4">
+            <strong>Important:</strong> When duplicating, make sure the template goes to your workspace (not a private page).
+          </p>
+          <p class="text-sm text-gray-600 mb-4">After duplicating, return to this page and click below:</p>
+          <div class="flex items-center gap-3">
+            <input type="checkbox" id="step2-confirm" class="w-5 h-5 text-green-600 rounded focus:ring-2 focus:ring-green-500" />
+            <label for="step2-confirm" class="text-gray-700 font-medium cursor-pointer">I've duplicated the template</label>
+          </div>
+          <button
+            id="step2-continue"
+            disabled
+            class="mt-4 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Continue to Verification
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Setup event listeners after render
+  setTimeout(() => {
+    const checkbox = section.querySelector('#step2-confirm');
+    const button = section.querySelector('#step2-continue');
+
+    if (checkbox && button) {
+      checkbox.addEventListener('change', () => {
+        button.disabled = !checkbox.checked;
+      });
+
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        button.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Starting verification...';
+        await advanceToStep(3, { manualConfirm: true });
+        // After advancing to step 3, trigger auto-detection
+        setTimeout(() => {
+          triggerAutoDetection();
+        }, 500);
+      });
+    }
+  }, 0);
 
   return section;
 }
