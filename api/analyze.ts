@@ -824,12 +824,12 @@ export default async function handler(
     }
 
     // Write error to Notion if we have a page ID and user credentials
-    if (analysesPageId && ticker && user && userAccessToken) {
+    if (analysesPageId && ticker && user && userAccessToken && user.stockAnalysesDbId && user.stockHistoryDbId) {
       try {
         const notionClient = createNotionClient({
           apiKey: userAccessToken, // User's OAuth token
-          stockAnalysesDbId: process.env.STOCK_ANALYSES_DB_ID!,
-          stockHistoryDbId: process.env.STOCK_HISTORY_DB_ID!,
+          stockAnalysesDbId: user.stockAnalysesDbId,
+          stockHistoryDbId: user.stockHistoryDbId,
           userId: user.notionUserId, // User's Notion User ID (dynamic)
         });
 
