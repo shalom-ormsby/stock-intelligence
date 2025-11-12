@@ -97,10 +97,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // User object from API will have current approval status
     if (currentState.user && currentState.user.status === 'approved') {
-      // They were approved! Clear the URL param and continue with setup
-      console.log('✅ User approved! Continuing with setup...');
-      window.history.replaceState({}, '', '/');
-      // Continue with normal flow below
+      // They were approved! Redirect to step 2 (duplicate template)
+      console.log('✅ User approved! Redirecting to step 2...');
+      window.location.href = '/?step=2';
+      return;
     } else {
       // Still pending/denied - show status message but ALSO show subway map
       console.log('⏳ User still pending/denied, showing status message');
