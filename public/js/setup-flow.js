@@ -85,18 +85,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     showError(getErrorMessage(errorParam));
   }
 
-  // Handle pending/denied status
-  if (statusParam === 'pending') {
-    showStatusMessage('pending');
-    return;
-  }
-  if (statusParam === 'denied') {
-    showStatusMessage('denied');
-    return;
-  }
-
-  // Load setup status from API (will return requiresAuth if no session)
+  // Load setup status from API first (to check if they've been approved since last visit)
   await loadSetupStatus();
+
+  // If they have a session but status param says pending/denied, check actual status from API
+  if (statusParam === 'pending' || statusParam === 'denied') {
+    // User object from API will have current approval status
+    if (currentState.user && currentState.user.status === 'approved') {
+      // They were approved! Clear the URL param and continue with setup
+      window.history.replaceState({}, '', '/');
+      // Continue with normal flow below
+    } else {
+      // Still pending/denied - show status message but ALSO show subway map
+      renderSubwayMap();
+      showStatusMessage(statusParam);
+      return;
+    }
+  }
 
   // If OAuth callback just completed (step=2 means OAuth succeeded, now on duplicate)
   if (stepParam === '2') {
@@ -1040,7 +1045,7 @@ function showStatusMessage(status) {
     pending: {
       icon: '⏳',
       title: 'Account Pending Approval',
-      message: 'Your account has been created and is awaiting admin approval. You\'ll receive an email when approved (usually within 24 hours).',
+      message: 'Your account has been created and is awaiting admin approval. You\'ll receive an email when approved (usually within 24 hours). Once approved, refresh this page to continue.',
       color: 'yellow'
     },
     denied: {
@@ -1058,9 +1063,17 @@ function showStatusMessage(status) {
     <div class="p-6 bg-${msg.color}-50 border border-${msg.color}-200 rounded-lg">
       <div class="flex items-start gap-4">
         <div class="text-3xl">${msg.icon}</div>
-        <div>
+        <div class="flex-1">
           <p class="text-${msg.color}-800 font-medium text-lg">${msg.title}</p>
           <p class="text-${msg.color}-700 text-sm mt-1">${msg.message}</p>
+          ${status === 'pending' ? `
+            <button
+              onclick="window.location.reload()"
+              class="mt-4 px-4 py-2 bg-${msg.color}-600 text-white font-semibold rounded-lg hover:bg-${msg.color}-700 transition-all"
+            >
+              🔄 Refresh Status
+            </button>
+          ` : ''}
         </div>
       </div>
     </div>
