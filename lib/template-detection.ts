@@ -175,13 +175,13 @@ async function detectStockAnalysesDb(
   const criteria = {
     titleMatches: ['Stock Analyses', 'Analyses', 'Stock Analysis'],
     titleWeight: 0.3,
-    requiredProps: ['Ticker', 'Signal', 'Composite Score'],
+    requiredProps: ['Ticker', 'Composite Score', 'Recommendation'],
     requiredPropsWeight: 0.5,
-    optionalProps: ['Technical Score', 'Fundamental Score', 'Date', 'Price', 'Analysis'],
+    optionalProps: ['Technical Score', 'Fundamental Score', 'Analysis Date', 'Current Price', 'Status'],
     optionalPropsWeight: 0.2,
     propertyTypes: {
       'Composite Score': 'number',
-      'Signal': 'select',
+      'Recommendation': 'select',
       'Ticker': 'title',
     },
   };
@@ -235,13 +235,13 @@ async function detectStockHistoryDb(
   const criteria = {
     titleMatches: ['Stock History', 'History', 'Price History'],
     titleWeight: 0.3,
-    requiredProps: ['Ticker', 'Date', 'Close'],
+    requiredProps: ['Ticker', 'Analysis Date', 'Current Price'],
     requiredPropsWeight: 0.5,
-    optionalProps: ['Open', 'High', 'Low', 'Volume', 'Change'],
+    optionalProps: ['Technical Score', 'Composite Score', 'Volume', 'Recommendation'],
     optionalPropsWeight: 0.2,
     propertyTypes: {
-      'Close': 'number',
-      'Date': 'date',
+      'Current Price': 'number',
+      'Analysis Date': 'date',
     },
   };
 
