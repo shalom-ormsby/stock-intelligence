@@ -1,6 +1,6 @@
 # Changelog
 
-**Last Updated:** November 11, 2025
+**Last Updated:** November 12, 2025
 
 All notable changes to Sage Stocks will be documented in this file.
 
@@ -96,6 +96,137 @@ All development versions are documented below with full technical details.
 ---
 
 ## [Unreleased]
+
+---
+
+## [v1.2.0] - 2025-11-12
+
+### 🎯 Single-Page Subway Map Setup Flow
+
+**Status**: ✅ Complete, deployed to production
+
+**Objective:** Replace multi-page setup flow with single-page subway map experience to dramatically improve onboarding completion rates (target: >85% vs industry 40-60%).
+
+**Implementation Details:** See [SUBWAY_MAP_SETUP.md](SUBWAY_MAP_SETUP.md) for complete specification and architecture.
+
+**Key Features:**
+- ✅ Persistent progress visualization (6-step subway map)
+- ✅ All steps visible at once (clear expectations)
+- ✅ Automatic state persistence across page reloads and app switches
+- ✅ Smart routing (returning users skip straight to analyzer)
+- ✅ Auto-fallback to manual input if auto-detection fails
+- ✅ Confetti celebration on first analysis 🎉
+- ✅ Tab title flashing when user returns to setup page
+- ✅ Visual reminders to keep setup tab open
+
+**Files Changed:**
+- `public/index.html` - Complete rewrite for subway map UI
+- `public/js/setup-flow.js` - New 850+ line JavaScript engine
+- `lib/auth.ts` - Added `SetupProgress` interface and management functions
+- `api/setup/status.ts` - New GET endpoint for setup progress
+- `api/setup/advance.ts` - New POST endpoint to advance steps
+- `api/setup/detect.ts` - New POST endpoint for auto-detection
+- `api/auth/callback.ts` - Updated redirect logic for smart routing
+- `api/setup.ts` - Updated to mark Step 3 complete
+- `api/analyze.ts` - Updated to track Step 4/5 completion
+
+---
+
+### 🐛 CRITICAL Bug Fix: Multi-User Database ID Support
+
+**Issue:** Analysis endpoint and orchestrator used global environment variables for database IDs instead of user-specific IDs, causing complete multi-user failure.
+
+**Root Cause:** After implementing subway map setup (v1.2.0), each user duplicates the template and gets unique database IDs stored in `user.stockAnalysesDbId` and `user.stockHistoryDbId`. However, both `api/analyze.ts` and `lib/orchestrator.ts` still used the old single-user approach with global `process.env.STOCK_ANALYSES_DB_ID`.
+
+**Impact:**
+- ❌ User A's analysis would write to User B's database (or fail completely)
+- ❌ Orchestrator queried wrong databases for each user
+- ❌ Multi-user support completely broken
+- ❌ First user to complete setup flow got 500 error on analysis
+
+**The Bug:**
+```typescript
+// ❌ WRONG - Uses same database for ALL users
+const stockAnalysesDbId = process.env.STOCK_ANALYSES_DB_ID;
+const stockHistoryDbId = process.env.STOCK_HISTORY_DB_ID;
+```
+
+**The Fix:**
+```typescript
+// ✅ CORRECT - Uses each user's specific database
+const stockAnalysesDbId = user.stockAnalysesDbId;
+const stockHistoryDbId = user.stockHistoryDbId;
+
+// Validate user has completed setup
+if (!stockAnalysesDbId) {
+  throw new Error('Stock Analyses database not configured. Please complete setup...');
+}
+```
+
+**Files Changed:**
+
+1. **`api/analyze.ts` (lines 229-247)**
+   - Changed from global env vars to `user.stockAnalysesDbId` and `user.stockHistoryDbId`
+   - Added validation with helpful error message if setup incomplete
+
+2. **`lib/orchestrator.ts`**
+   - Updated `Subscriber` interface to include `stockAnalysesDbId` and `stockHistoryDbId`
+   - Modified `collectStockRequests()` to skip users without configured databases
+   - Changed database query to use `user.stockAnalysesDbId` instead of global constant
+   - Updated `broadcastToUser()` to use subscriber-specific database IDs
+   - Removed global `STOCK_ANALYSES_DB_ID` constant
+
+**Verification:**
+```bash
+# Verify user-specific IDs are used
+grep -r "process.env.STOCK_ANALYSES_DB_ID" api/ lib/
+# Should only appear in webhook.ts (admin operations)
+```
+
+**Documentation:**
+- Added critical warning section to `ARCHITECTURE.md` (lines 2120-2213)
+- Includes testing instructions for multi-user scenarios
+- Explains why this architecture decision aligns with Notion's workspace model
+
+**Result:**
+- ✅ Each user's analyses write to their own databases
+- ✅ Orchestrator queries correct databases per user
+- ✅ Multi-user support fully functional
+- ✅ Clear error messages if user hasn't completed setup
+
+---
+
+### 🔧 Setup Flow Bug Fixes
+
+**Issue:** Multiple issues during user testing of subway map setup flow.
+
+**Fixes:**
+
+1. **Pending users couldn't check approval status**
+   - Problem: OAuth callback didn't create session for pending users, causing 401 errors
+   - Fix: Moved `storeUserSession()` call BEFORE status checks in `api/auth/callback.ts`
+   - Result: Pending users can now use "Refresh Status" button to check approval
+
+2. **Session cookies not persisting in production**
+   - Problem: `Secure` flag wasn't added to cookies because code checked `NODE_ENV === 'production'` (Vercel doesn't set this)
+   - Fix: Changed to check `VERCEL_ENV === undefined` in `lib/auth.ts`
+   - Result: Session cookies now persist correctly across redirects
+
+3. **Approved users redirected to wrong step**
+   - Problem: Frontend used `window.history.replaceState()` which didn't properly redirect
+   - Fix: Changed to `window.location.href = '/?step=2'` in `public/js/setup-flow.js`
+   - Result: Approved users correctly sent to Step 2 (duplicate template)
+
+4. **Error messages showing "[object Object]"**
+   - Problem: API returned error objects without `.message` property
+   - Fix: Added proper error extraction in two places in `public/js/setup-flow.js` (lines 836-841, 873-874)
+   - Result: Users now see actual error messages instead of "[object Object]"
+
+**Files Changed:**
+- `api/auth/callback.ts` - Session creation order
+- `lib/auth.ts` - Secure cookie flag detection
+- `public/js/setup-flow.js` - Redirect logic and error handling
+- `public/index.html` - Tab title flashing UX enhancement
 
 ---
 

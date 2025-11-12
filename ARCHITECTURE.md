@@ -1,8 +1,8 @@
 # Sage Stocks Architecture
 
-*Last updated: November 11, 2025*
+*Last updated: November 12, 2025*
 
-**Development Version:** v1.0.6 (Complete) - Production Stability & Timeout Fixes
+**Development Version:** v1.2.0 (Complete) - Subway Map Setup & Multi-User Database IDs
 **Template Version:** v0.1.0 (Beta) - Launching with Cohort 1
 **Production URL:** [https://sagestocks.vercel.app](https://sagestocks.vercel.app)
 **Status:** ✅ Live in Production - Fully Automated
@@ -2114,6 +2114,102 @@ The backend needs to know **which databases belong to which user** to:
 - ❌ Can't personalize - don't know user's historical data
 
 This setup flow is the **foundation of the entire multi-user SaaS platform**. The auto-detection bug fix in v1.1.7 was critical because it would have forced all Cohort 1 users into manual fallback (30% abandonment rate).
+
+---
+
+### ⚠️ CRITICAL: User-Specific Database IDs (v1.2.0+)
+
+**The Rule:** NEVER use global environment variables for database IDs. ALWAYS use user-specific IDs from the user record.
+
+**Why This Matters:**
+
+In v1.2.0, we implemented the subway map setup flow where each user duplicates the template and gets their own unique database IDs stored in:
+- `user.stockAnalysesDbId` - User's Stock Analyses database
+- `user.stockHistoryDbId` - User's Stock History database
+- `user.sageStocksPageId` - User's Sage Stocks page
+
+**The Bug (Fixed in Production):**
+
+Initially, both `api/analyze.ts` and `lib/orchestrator.ts` used global environment variables:
+
+```typescript
+// ❌ WRONG - Uses same database for ALL users
+const stockAnalysesDbId = process.env.STOCK_ANALYSES_DB_ID;
+const stockHistoryDbId = process.env.STOCK_HISTORY_DB_ID;
+```
+
+This caused:
+- User A's analysis to write to User B's database (or fail completely)
+- Orchestrator to query wrong databases for each user
+- Complete multi-user failure
+
+**The Fix:**
+
+```typescript
+// ✅ CORRECT - Uses each user's specific database
+const stockAnalysesDbId = user.stockAnalysesDbId;
+const stockHistoryDbId = user.stockHistoryDbId;
+
+// Validate user has completed setup
+if (!stockAnalysesDbId) {
+  throw new Error('Stock Analyses database not configured. Please complete setup at https://sagestocks.vercel.app/');
+}
+```
+
+**Files That MUST Use User-Specific IDs:**
+
+1. **[api/analyze.ts](api/analyze.ts#L229-L231)** - Stock analysis endpoint
+   ```typescript
+   const stockAnalysesDbId = user.stockAnalysesDbId;
+   const stockHistoryDbId = user.stockHistoryDbId;
+   ```
+
+2. **[lib/orchestrator.ts](lib/orchestrator.ts#L38-L48)** - Batch processing
+   ```typescript
+   export interface Subscriber {
+     // ... other fields
+     stockAnalysesDbId: string;  // User's specific DB ID
+     stockHistoryDbId: string;   // User's specific DB ID
+   }
+   ```
+   - Passes database IDs when creating subscribers
+   - Uses `subscriber.stockAnalysesDbId` in `broadcastToUser()`
+
+**Files That MAY Use Global Env Vars:**
+
+- **[api/webhook.ts](api/webhook.ts)** - Admin operations only (uses `NOTION_API_KEY`, not OAuth)
+- **Test scripts** - For development/testing purposes
+
+**How to Verify Multi-User Support:**
+
+```bash
+# Check that user-specific IDs are used
+grep -r "process.env.STOCK_ANALYSES_DB_ID" api/ lib/
+# Should only appear in webhook.ts and test files
+
+# Verify user object has database IDs
+grep "stockAnalysesDbId" lib/auth.ts
+# Should see it in User interface and mapNotionPageToUser()
+```
+
+**Testing Multi-User Scenarios:**
+
+1. Create two test accounts with different email addresses
+2. Each duplicates the template (gets unique database IDs)
+3. User A analyzes AAPL → verify it writes to User A's database
+4. User B analyzes AAPL → verify it writes to User B's database (separate instance)
+5. Check that databases don't cross-contaminate
+
+**Why This Architecture Decision:**
+
+We chose user-specific duplicated templates over shared databases because:
+- ✅ **Privacy** - Each user's data stays in their Notion workspace
+- ✅ **Security** - OAuth tokens are scoped per workspace
+- ✅ **Customization** - Users can modify their template without affecting others
+- ✅ **Scalability** - Notion API rate limits are per-workspace, not shared
+- ✅ **Data ownership** - Users own their analysis data
+
+This is fundamentally different from traditional SaaS (shared PostgreSQL), but aligns with Notion's workspace model.
 
 ---
 
