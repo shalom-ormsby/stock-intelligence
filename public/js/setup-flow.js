@@ -90,13 +90,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // If they have a session but status param says pending/denied, check actual status from API
   if (statusParam === 'pending' || statusParam === 'denied') {
+    console.log('🔍 Checking approval status from API...');
+    console.log('   URL param:', statusParam);
+    console.log('   API user status:', currentState.user?.status);
+    console.log('   User object:', currentState.user);
+
     // User object from API will have current approval status
     if (currentState.user && currentState.user.status === 'approved') {
       // They were approved! Clear the URL param and continue with setup
+      console.log('✅ User approved! Continuing with setup...');
       window.history.replaceState({}, '', '/');
       // Continue with normal flow below
     } else {
       // Still pending/denied - show status message but ALSO show subway map
+      console.log('⏳ User still pending/denied, showing status message');
       renderSubwayMap();
       showStatusMessage(statusParam);
       return;
@@ -128,12 +135,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadSetupStatus() {
   try {
+    console.log('📡 Loading setup status from API...');
     const response = await fetch('/api/setup/status');
     const data = await response.json();
+
+    console.log('📡 API response:', response.status, data);
 
     if (!response.ok) {
       if (data.requiresAuth) {
         // No session - show Step 1 & 2 (pre-OAuth)
+        console.log('🔒 No session, starting from Step 1');
         currentState.currentStep = 1;
         currentState.completedSteps = [];
         return;
@@ -146,6 +157,12 @@ async function loadSetupStatus() {
     currentState.user = data.user;
     currentState.currentStep = data.setupProgress?.currentStep || 1;
     currentState.completedSteps = data.setupProgress?.completedSteps || [];
+
+    console.log('✅ Setup status loaded:', {
+      setupComplete: currentState.setupComplete,
+      currentStep: currentState.currentStep,
+      userStatus: currentState.user?.status,
+    });
 
     // If setup is complete, redirect to analyzer
     if (data.setupComplete && currentState.currentStep === 6) {
