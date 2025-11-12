@@ -129,14 +129,15 @@ export async function storeUserSession(
     });
 
     // Set HTTP-only secure cookie
-    const isProduction = process.env.NODE_ENV === 'production';
+    // Always use Secure flag in production (Vercel serves over HTTPS)
+    const isLocalhost = process.env.VERCEL_ENV === undefined;
     const cookieOptions = [
       `si_session=${sessionId}`,
       'Path=/',
       `Max-Age=${SESSION_TTL}`,
       'HttpOnly',
       'SameSite=Lax',
-      ...(isProduction ? ['Secure'] : []),
+      ...(!isLocalhost ? ['Secure'] : []), // Secure flag for HTTPS (Vercel)
     ];
 
     res.setHeader('Set-Cookie', cookieOptions.join('; '));
