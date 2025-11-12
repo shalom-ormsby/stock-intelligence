@@ -1371,6 +1371,199 @@ POST /api/bypass
 
 ---
 
+### `/api/setup` (GET/POST)
+**Purpose:** First-time user onboarding - auto-detect or manually configure user's Notion databases
+
+**Why This Exists:** When users duplicate the Sage Stocks template, Notion creates brand new database IDs unique to their workspace. The backend needs to discover and store these IDs to know where to write analysis results for each user. This is the foundation of the multi-user SaaS architecture.
+
+#### GET - Auto-Detection
+**Authentication:** Session token in cookie (encrypted, from Notion OAuth)
+
+**Request:**
+```bash
+GET /api/setup
+```
+
+**Response (200 - Not Yet Setup):**
+```json
+{
+  "alreadySetup": false,
+  "detection": {
+    "stockAnalysesDb": {
+      "id": "abc123...",
+      "title": "Stock Analyses",
+      "score": 0.85,
+      "confidence": "high"
+    },
+    "stockHistoryDb": {
+      "id": "def456...",
+      "title": "Stock History",
+      "score": 0.87,
+      "confidence": "high"
+    },
+    "sageStocksPage": {
+      "id": "ghi789...",
+      "title": "Sage Stocks",
+      "url": "https://notion.so/...",
+      "score": 1.0,
+      "confidence": "high"
+    }
+  },
+  "needsManual": false
+}
+```
+
+**Response (200 - Already Setup):**
+```json
+{
+  "alreadySetup": true,
+  "redirect": "/analyze"
+}
+```
+
+**Response (200 - Partial Detection, Manual Fallback Needed):**
+```json
+{
+  "alreadySetup": false,
+  "detection": {
+    "stockAnalysesDb": { /* found */ },
+    "stockHistoryDb": null,  // Not found
+    "sageStocksPage": { /* found */ }
+  },
+  "needsManual": true
+}
+```
+
+**How Auto-Detection Works:**
+
+1. **Search User's Workspace** (via their OAuth token)
+   - Queries all databases using Notion search API
+   - Queries all pages using Notion search API
+   - Returns 100+ databases/pages typically
+
+2. **Scoring Algorithm** (`lib/template-detection.ts`)
+   - **Title Matching** (30% weight): "Stock Analyses", "Stock History", etc.
+   - **Required Properties** (50% weight): Must have all required props (e.g., Ticker, Composite Score, Recommendation)
+   - **Optional Properties** (20% weight): Bonus points for having optional props
+   - **Property Types**: Small bonus for correct types (number, select, date, etc.)
+
+3. **Confidence Levels**
+   - **High** (>0.8): Title + all required props + most optional props match
+   - **Medium** (0.6-0.8): Title or props match, but not perfect
+   - **Low** (0.5-0.6): Minimal match, might be wrong database
+   - **Failed** (<0.5): Rejected, not shown to user
+
+4. **Threshold**: Databases must score ≥0.5 to be considered a match
+
+**Criteria for Stock Analyses:**
+```typescript
+{
+  titleMatches: ['Stock Analyses', 'Analyses', 'Stock Analysis'],
+  requiredProps: ['Ticker', 'Composite Score', 'Recommendation'],
+  optionalProps: ['Technical Score', 'Fundamental Score', 'Analysis Date', 'Current Price', 'Status']
+}
+```
+
+**Criteria for Stock History:**
+```typescript
+{
+  titleMatches: ['Stock History', 'History', 'Price History'],
+  requiredProps: ['Ticker', 'Analysis Date', 'Current Price'],
+  optionalProps: ['Technical Score', 'Composite Score', 'Volume', 'Recommendation']
+}
+```
+
+#### POST - Confirm Setup (Auto or Manual)
+**Purpose:** Save detected or manually-provided database IDs to Beta Users database
+
+**Request:**
+```json
+{
+  "stockAnalysesDbId": "abc123...",
+  "stockHistoryDbId": "def456...",
+  "sageStocksPageId": "ghi789..."
+}
+```
+
+**Validation:** Backend verifies:
+1. ✅ Can read from Stock Analyses database (via user's OAuth token)
+2. ✅ Can write to Stock Analyses database (test query)
+3. ✅ Can read from Stock History database
+4. ✅ Can read from Sage Stocks page
+5. ❌ Returns detailed errors if any validation fails
+
+**Response (200 - Success):**
+```json
+{
+  "success": true,
+  "redirect": "/analyze",
+  "message": "Setup completed successfully!"
+}
+```
+
+**Response (400 - Validation Failed):**
+```json
+{
+  "success": false,
+  "errors": [
+    {
+      "field": "stockAnalysesDbId",
+      "message": "Cannot access Stock Analyses database. Make sure your Notion integration has access to this database.",
+      "helpUrl": "https://docs.notion.com/reference/intro#integrations"
+    }
+  ]
+}
+```
+
+**What Gets Stored in Beta Users Database:**
+```typescript
+{
+  "Stock Analyses DB ID": "abc123...",
+  "Stock History DB ID": "def456...",
+  "Sage Stocks Page ID": "ghi789...",
+  "Template Version": "1.0.0",
+  "Setup Completed At": "2025-11-11T20:00:00.000Z"
+}
+```
+
+**Configuration:**
+- Timeout: 60 seconds (default)
+- Auto-detection searches up to 1000 databases/pages (10 batches of 100)
+
+---
+
+### `/api/debug-reset-setup` (POST)
+**Purpose:** [DEBUG ONLY] Clear user's stored database IDs to enable re-testing of setup flow
+
+**Authentication:** Session token in cookie (encrypted, from Notion OAuth)
+
+**Request:**
+```bash
+POST /api/debug-reset-setup
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Setup reset successfully - you can now test auto-detection again"
+}
+```
+
+**What It Clears:**
+- Stock Analyses DB ID → empty
+- Stock History DB ID → empty
+- Sage Stocks Page ID → empty
+- Template Version → empty
+- Setup Completed At → null
+
+**Note:** This is a temporary debugging endpoint added in v1.1.7. Can be removed after Cohort 1 is stable.
+
+**Configuration:**
+- Timeout: 60 seconds (default)
+
+---
+
 ### `/api/usage` (GET)
 **Purpose:** Check current usage without consuming quota
 
@@ -1836,16 +2029,106 @@ if (code !== expectedCode) {
 
 ## Security Model
 
+### Multi-User SaaS Architecture (v1.1.x)
+
+**The Database ID Mapping Problem:**
+
+When a user duplicates the Sage Stocks template, Notion creates **completely new database IDs** unique to their workspace:
+
+```
+Template Creator:
+  Stock Analyses DB = abc123...
+  Stock History DB = def456...
+
+User A (after duplication):
+  Stock Analyses DB = xyz789...  (different!)
+  Stock History DB = uvw012...  (different!)
+
+User B (after duplication):
+  Stock Analyses DB = lmn345...  (different!)
+  Stock History DB = opq678...  (different!)
+```
+
+**Why Setup & Detection Are Critical:**
+
+The backend needs to know **which databases belong to which user** to:
+
+1. **Write analysis results to the correct user's database**
+   - User A requests NVDA analysis → writes to `xyz789...` (User A's Stock Analyses)
+   - User B requests NVDA analysis → writes to `lmn345...` (User B's Stock Analyses)
+   - Prevents data leakage between users
+
+2. **Query historical data from the correct user's database**
+   - "User A's previous analyses" → queries `xyz789...`
+   - "User B's previous analyses" → queries `lmn345...`
+
+3. **Enforce per-user quotas and tracking**
+   - User A: 3/5 analyses used today
+   - User B: 1/5 analyses used today
+   - Tracked in Beta Users database by user ID
+
+4. **Personalize features based on user's data**
+   - "You've analyzed 47 stocks this month" (counts pages in user's Stock Analyses DB)
+   - "Your portfolio is heavy on tech sector" (reads user's holdings)
+
+**The Setup Flow (First-Time Onboarding):**
+
+1. **User duplicates template** → Gets their own databases with unique IDs
+2. **User logs in via Notion OAuth** → System gets their email and OAuth token
+3. **Auto-detection runs** (`/api/setup` GET):
+   - Searches user's workspace for databases (using their OAuth token)
+   - Scores each database against expected schema
+   - Finds "Stock Analyses" and "Stock History" with high confidence
+4. **User confirms or manually corrects** → IDs validated and stored
+5. **Backend stores mapping in Beta Users database:**
+   ```
+   Email: user@example.com
+   Stock Analyses DB ID: xyz789...
+   Stock History DB ID: uvw012...
+   ```
+
+**Every Future Request Uses This Mapping:**
+
+```typescript
+// User requests NVDA analysis
+1. validateSession(req) → email = "user@example.com"
+2. getUserByEmail(email) → row from Beta Users DB
+3. stockAnalysesDbId = row.stockAnalysesDbId // "xyz789..."
+4. Run analysis, write to xyz789... using user's OAuth token
+5. Only their workspace is affected
+```
+
+**Security Benefits:**
+
+- ✅ Each user's OAuth token can only access **their** workspace
+- ✅ Backend never mixes data between users (scoped by database ID)
+- ✅ User data never leaves their Notion workspace
+- ✅ No shared databases = no data leakage risk
+- ✅ Admin integration (NOTION_API_KEY) only accesses Beta Users DB (metadata only)
+
+**What Breaks Without Setup:**
+
+- ❌ Can't run analyses - don't know where to write results
+- ❌ Can't support multiple users - would overwrite each other's data
+- ❌ Can't track usage - don't know which user made which request
+- ❌ Can't personalize - don't know user's historical data
+
+This setup flow is the **foundation of the entire multi-user SaaS platform**. The auto-detection bug fix in v1.1.7 was critical because it would have forced all Cohort 1 users into manual fallback (30% abandonment rate).
+
+---
+
 ### Authentication
-**Current:** API key-based (lightweight)
-- Notion webhook sends API key in header
-- Environment variable: `API_KEY`
-- Validated in `lib/auth.ts`
+**Current:** Notion OAuth 2.0 (v1.1.1+)
+- Official Notion OAuth integration
+- Session token stored in encrypted cookie
+- Token validated on every request
+- User approval status checked (approved/pending/denied)
 
 **User Identification:**
-- `userId` extracted from request
-- Notion page properties or query params
-- Used for rate limiting and tracking
+- Email from Notion OAuth
+- Notion User ID from OAuth response
+- Beta Users database lookup by email
+- Database IDs retrieved from Beta Users record
 
 ### Authorization
 **Rate Limiting:** Primary access control mechanism
