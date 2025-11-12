@@ -405,6 +405,11 @@ function createStep2Content() {
           <p class="text-gray-700 mb-4">
             Get your own copy of the Sage Stocks template. This includes the Stock Analyses database, Stock History database, and the Sage Stocks page.
           </p>
+          <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p class="text-sm text-blue-800 font-medium">
+              💡 <strong>Keep this tab open!</strong> After duplicating the template, return here to continue setup (takes 2 more minutes).
+            </p>
+          </div>
           <a
             href="${TEMPLATE_URL}"
             target="_blank"
@@ -416,7 +421,7 @@ function createStep2Content() {
           <p class="text-sm text-gray-600 mb-4">
             <strong>Important:</strong> When duplicating, make sure the template goes to your workspace (not a private page).
           </p>
-          <p class="text-sm text-gray-600 mb-4">After duplicating, return to this page and click below:</p>
+          <p class="text-sm text-gray-600 mb-4">After duplicating, return to this page and confirm below:</p>
           <div class="flex items-center gap-3">
             <input type="checkbox" id="step2-confirm" class="w-5 h-5 text-green-600 rounded focus:ring-2 focus:ring-green-500" />
             <label for="step2-confirm" class="text-gray-700 font-medium cursor-pointer">I've duplicated the template</label>

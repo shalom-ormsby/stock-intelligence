@@ -95,6 +95,38 @@
         Setup: Step <span id="badge-step">1</span>/6
     </div>
 
+    <!-- Page Visibility Handler (calls user back when they return) -->
+    <script>
+        // Flash the page title when user returns to remind them to complete setup
+        let originalTitle = document.title;
+        let titleFlashInterval = null;
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                // User switched tabs - no action needed
+            } else {
+                // User returned! Flash the title to grab attention
+                const currentStep = new URLSearchParams(window.location.search).get('step');
+                if (currentStep === '2') {
+                    // Only flash on Step 2 (duplicate template step)
+                    let flash = false;
+                    titleFlashInterval = setInterval(() => {
+                        document.title = flash ? '👋 Welcome back! Complete setup →' : originalTitle;
+                        flash = !flash;
+                    }, 1000);
+
+                    // Stop flashing after 5 seconds
+                    setTimeout(() => {
+                        if (titleFlashInterval) {
+                            clearInterval(titleFlashInterval);
+                            document.title = originalTitle;
+                        }
+                    }, 5000);
+                }
+            }
+        });
+    </script>
+
     <div class="min-h-screen flex items-center justify-center px-4 py-8">
         <div class="max-w-4xl w-full">
             <!-- Main Card -->
