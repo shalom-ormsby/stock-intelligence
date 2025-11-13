@@ -32,6 +32,8 @@ import { RateLimiter } from '../lib/rate-limiter';
 import { LLMFactory } from '../lib/llm/LLMFactory';
 import { AnalysisContext } from '../lib/llm/types';
 import { validateTimezone, getTimezoneFromEnv, getSecondsUntilMidnight } from '../lib/timezone';
+import { assertDatabasesValid } from '../lib/database-validator';
+import { reportAPIError } from '../lib/bug-reporter';
 
 interface AnalyzeRequest {
   ticker: string;
@@ -244,6 +246,31 @@ export default async function handler(
     }
     if (!stockHistoryDbId) {
       throw new Error('Stock History database not configured. Please complete setup at https://sagestocks.vercel.app/');
+    }
+
+    // CRITICAL: Validate database access before starting analysis (v1.2.1)
+    // This catches database ID mismatches and reports them to Bug Reports database
+    console.log('🔍 Validating database configuration...');
+    try {
+      await assertDatabasesValid(userAccessToken, {
+        stockAnalysesDbId,
+        stockHistoryDbId,
+        sageStocksPageId: user.sageStocksPageId || '',
+        userEmail: session.email,
+        userId: user.id,
+      });
+      console.log('✅ Database validation passed');
+    } catch (validationError: any) {
+      console.error('❌ Database validation failed:', validationError.message);
+
+      // Report to Bug Reports database
+      await reportAPIError(
+        validationError,
+        '/api/analyze',
+        session.email
+      );
+
+      throw validationError; // Re-throw to trigger error response
     }
 
     const fmpClient = createFMPClient(fmpApiKey);
@@ -801,6 +828,19 @@ export default async function handler(
     const errorCode = getErrorCode(error);
     if (ticker) {
       logAnalysisFailed(ticker, errorCode, { duration }, error as Error);
+    }
+
+    // Report critical errors to Bug Reports database (v1.2.1)
+    // Skip rate limit errors (user error, not system error)
+    if (!(error instanceof RateLimitError) && user && ticker) {
+      reportAPIError(
+        error as Error,
+        '/api/analyze',
+        user.email
+      ).catch((reportError) => {
+        console.error('Failed to report bug:', reportError);
+        // Don't block error response
+      });
     }
 
     // Special handling for rate limit errors (timezone-aware in v1.0.3)

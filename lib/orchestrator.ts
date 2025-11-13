@@ -18,6 +18,7 @@ import { Client } from '@notionhq/client';
 import { User, decryptToken } from './auth';
 import { analyzeStockCore, validateAnalysisComplete, AnalysisResult } from './stock-analyzer';
 import { createNotionClient, AnalysisData } from './notion-client';
+import { reportScheduledTaskError } from './bug-reporter';
 
 // Environment configuration
 const ANALYSIS_DELAY_MS = parseInt(process.env.ANALYSIS_DELAY_MS || '8000', 10); // Default: 8 seconds
@@ -340,6 +341,20 @@ async function analyzeWithRetry(
       }
     } catch (error) {
       console.error(`[ORCHESTRATOR]   → Analysis threw exception:`, error);
+
+      // Report to Bug Reports database
+      reportScheduledTaskError(
+        error as Error,
+        'orchestrator-analyze',
+        {
+          ticker: item.ticker,
+          subscribersCount: item.subscribers.length,
+          priorityTier: item.subscribers[0]?.tier,
+        }
+      ).catch((reportError) => {
+        console.error('[ORCHESTRATOR]   → Failed to report bug:', reportError);
+      });
+
       return {
         success: false,
         ticker: item.ticker,
