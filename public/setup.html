@@ -104,14 +104,27 @@
             z-index: 2;
         }
 
+        /* Progress line container - holds both background and fill */
+        .progress-line-container {
+            position: absolute;
+            top: 30px;
+            left: 0;
+            right: 0;
+            height: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 0;
+            pointer-events: none;
+        }
+
         /* Progress line - continuous background line */
         .progress-line-bg {
             position: absolute;
             height: 3px;
             background: rgba(255, 255, 255, 0.1);
-            top: 30px;
-            left: 30px;
-            right: 30px;
+            left: calc(100% / 12);
+            right: calc(100% / 12);
             z-index: 0;
         }
 
@@ -120,8 +133,7 @@
             position: absolute;
             height: 3px;
             background: #4d9cff;
-            top: 30px;
-            left: 30px;
+            left: calc(100% / 12);
             z-index: 1;
             transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
         }

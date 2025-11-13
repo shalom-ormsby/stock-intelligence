@@ -217,11 +217,14 @@ function renderSubwayMap() {
   fillLine.id = 'progress-fill';
   horizontalContainer.appendChild(fillLine);
 
-  // Calculate progress percentage (fill up to but not including current step)
+  // Calculate progress (fill up to but not including current step)
+  // Line runs from center of first circle (8.33%) to center of last circle (91.67%)
+  // That's 83.33% of total width, divided into 5 segments
   const completedCount = currentState.completedSteps.length;
   const totalSteps = STEPS.length;
-  const progressPercent = (completedCount / (totalSteps - 1)) * 100;
-  fillLine.style.width = `calc(${progressPercent}% - 30px)`;
+  const lineSpan = (10 / 12) * 100; // 83.33%
+  const progressPercent = (completedCount / (totalSteps - 1)) * lineSpan;
+  fillLine.style.width = `${progressPercent}%`;
 
   // Render horizontal (desktop)
   STEPS.forEach((step, index) => {
@@ -375,10 +378,11 @@ function animateStepCompletion(stepNumber) {
   if (fillLine) {
     const completedCount = currentState.completedSteps.length;
     const totalSteps = STEPS.length;
-    const progressPercent = (completedCount / (totalSteps - 1)) * 100;
+    const lineSpan = (10 / 12) * 100; // 83.33%
+    const progressPercent = (completedCount / (totalSteps - 1)) * lineSpan;
 
     gsap.to(fillLine, {
-      width: `calc(${progressPercent}% - 30px)`,
+      width: `${progressPercent}%`,
       duration: 0.6,
       ease: 'power2.out',
     });
@@ -455,13 +459,13 @@ function createStep1Content() {
       <p class="text-gray-400 mb-6 max-w-md mx-auto">
         Connect your Notion workspace to get started. This allows Sage Stocks to read and write to your databases.
       </p>
-      <button
-        onclick="window.location.href='/api/auth/authorize'"
+      <a
+        href="/api/auth/authorize"
         class="btn-primary px-8 py-4 rounded-xl font-semibold text-lg inline-flex items-center gap-2"
       >
         <span>Sign in with Notion</span>
         <span>→</span>
-      </button>
+      </a>
     </div>
   `;
   return section;
