@@ -1,179 +1,227 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sage Stocks Setup</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    @keyframes slideIn {
-      from {
-        opacity: 0;
-        transform: translateY(10px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-    .slide-in {
-      animation: slideIn 0.3s ease-out;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup - Sage Stocks</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+        * {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        body {
+            background-color: #252528;
+            color: #fbfbfb;
+        }
+
+        /* Glass morphism card */
+        .glass-card {
+            background: rgba(62, 62, 65, 0.4);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .glass-card-light {
+            background: rgba(62, 62, 65, 0.2);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* Subway map pulse animation (like current location marker) */
+        @keyframes location-pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(77, 156, 255, 0.7);
+            }
+            50% {
+                box-shadow: 0 0 0 15px rgba(77, 156, 255, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(77, 156, 255, 0);
+            }
+        }
+
+        @keyframes inner-pulse {
+            0%, 100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            50% {
+                transform: scale(0.9);
+                opacity: 0.8;
+            }
+        }
+
+        .step-indicator {
+            position: relative;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.25rem;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .step-indicator.pending {
+            background: rgba(62, 62, 65, 0.6);
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            color: rgba(251, 251, 251, 0.3);
+        }
+
+        .step-indicator.in-progress {
+            background: #4d9cff;
+            border: 3px solid #4d9cff;
+            color: #252528;
+            animation: location-pulse 2s ease-out infinite;
+        }
+
+        .step-indicator.in-progress::before {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: rgba(77, 156, 255, 0.3);
+            animation: inner-pulse 1.5s ease-in-out infinite;
+        }
+
+        .step-indicator.complete {
+            background: #00d66c;
+            border: 3px solid #00d66c;
+            color: #252528;
+        }
+
+        /* Connector line for horizontal layout */
+        .subway-connector-h {
+            position: absolute;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.1);
+            top: 50%;
+            transform: translateY(-50%);
+            transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .subway-connector-h.complete {
+            background: #00d66c;
+        }
+
+        /* Connector line for vertical layout */
+        .subway-connector-v {
+            position: absolute;
+            width: 3px;
+            background: rgba(255, 255, 255, 0.1);
+            left: 30px;
+            top: 60px;
+            height: calc(100% - 60px);
+            transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .subway-connector-v.complete {
+            background: #00d66c;
+        }
+
+        /* Gradient text */
+        .gradient-text {
+            background: linear-gradient(135deg, #4d9cff 0%, #b57dff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Spinner */
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .spinner {
+            animation: spin 1s linear infinite;
+            border: 3px solid rgba(255, 255, 255, 0.2);
+            border-top-color: #4d9cff;
+            border-radius: 50%;
+        }
+
+        /* Button styles */
+        .btn-primary {
+            background: linear-gradient(135deg, #4d9cff 0%, #b57dff 100%);
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(77, 156, 255, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #00d66c 0%, #5dffac 100%);
+        }
+
+        .btn-success:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 214, 108, 0.4);
+        }
+
+        /* Hide scrollbar but keep functionality */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(62, 62, 65, 0.2);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+    </style>
 </head>
-<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen flex items-center justify-center p-4">
-  <div class="max-w-2xl w-full">
-    <!-- Main Card -->
-    <div class="bg-white rounded-2xl shadow-xl p-6 sm:p-8 md:p-10">
-      <!-- Header -->
-      <div class="text-center mb-8">
-        <div class="text-5xl mb-3">📊</div>
-        <h1 class="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">Welcome to Sage Stocks!</h1>
-        <p class="text-gray-600 text-base sm:text-lg">Let's find your template databases (takes 30 seconds)</p>
-      </div>
-
-      <!-- Auto-detection Section -->
-      <div id="auto-section">
-        <!-- Reassurance Message -->
-        <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6 rounded">
-          <p class="text-sm text-blue-800">
-            <span class="font-medium">🔒 Safe & Read-Only:</span> We're only reading your workspace to find your databases. No changes will be made until you confirm.
-          </p>
+<body class="min-h-screen px-4 py-8">
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <div class="text-center mb-12">
+            <div class="text-6xl mb-4">⛰️</div>
+            <h1 class="text-5xl font-bold mb-4">
+                <span class="gradient-text">Sage Stocks Setup</span>
+            </h1>
+            <p class="text-lg text-gray-400">Complete your 5-minute setup and start analyzing stocks</p>
         </div>
 
-        <button
-          id="auto-detect-btn"
-          class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4 rounded-xl hover:from-blue-700 hover:to-indigo-700 font-medium text-lg shadow-lg hover:shadow-xl transition-all duration-200 min-h-[3rem]"
-        >
-          🔍 Auto-detect my databases
-        </button>
-        <p class="text-sm text-gray-500 mt-3 text-center">We'll search your Notion workspace for Stock Analyses and Stock History</p>
-      </div>
+        <!-- Subway Map (Hero) -->
+        <div id="subway-map" class="glass-card rounded-3xl p-8 mb-8">
+            <h2 class="text-2xl font-bold text-center mb-12">Setup Progress</h2>
 
-      <!-- Loading State -->
-      <div id="loading" class="hidden text-center py-8">
-        <div class="inline-block">
-          <div class="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto"></div>
-          <p class="text-gray-700 font-medium mt-6 text-lg">Searching your workspace...</p>
-          <p class="text-sm text-gray-500 mt-2">Don't worry, we're only reading — no changes yet</p>
-        </div>
-      </div>
+            <!-- Desktop: Horizontal Layout -->
+            <div class="hidden lg:block">
+                <div id="steps-horizontal" class="relative flex justify-between items-center px-8">
+                    <!-- Steps will be rendered here by JS -->
+                </div>
+            </div>
 
-      <!-- Results Section -->
-      <div id="results-section" class="hidden mt-6 slide-in">
-        <!-- Reassurance Before Confirmation -->
-        <div class="bg-green-50 border-l-4 border-green-400 p-4 mb-6 rounded">
-          <p class="text-sm text-green-800">
-            <span class="font-medium">✓ Quick Review:</span> We found your databases below. They'll stay exactly as they are — we're just connecting to them.
-          </p>
+            <!-- Mobile/Tablet: Vertical Layout -->
+            <div class="lg:hidden">
+                <div id="steps-vertical" class="space-y-8">
+                    <!-- Steps will be rendered here by JS -->
+                </div>
+            </div>
         </div>
 
-        <h2 class="text-xl font-semibold mb-4 text-gray-900">Detection Results</h2>
-
-        <div id="results-list" class="space-y-3 mb-6">
-          <!-- Populated by JS -->
+        <!-- Step Content -->
+        <div id="setup-content" class="glass-card rounded-3xl p-8">
+            <!-- Dynamic content will be rendered here -->
         </div>
-
-        <button
-          id="confirm-btn"
-          class="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-4 rounded-xl hover:from-green-700 hover:to-emerald-700 font-medium text-lg shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed min-h-[3rem]"
-        >
-          ✓ Confirm and continue
-        </button>
-      </div>
-
-      <!-- Manual Fallback Section -->
-      <div id="manual-section" class="hidden mt-6 slide-in">
-        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded">
-          <p class="font-medium text-yellow-900 mb-1">We couldn't auto-detect all your databases</p>
-          <p class="text-sm text-yellow-800 mb-3">This usually happens if you renamed them. No problem — just paste the URLs below:</p>
-
-          <!-- Expandable Help -->
-          <button
-            id="help-toggle"
-            class="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1 transition-colors"
-          >
-            <span>How do I find my database URLs?</span>
-            <span id="help-arrow" class="transition-transform">▸</span>
-          </button>
-
-          <div id="help-content" class="hidden mt-3 text-sm text-gray-700 bg-white p-3 rounded border border-yellow-200">
-            <ol class="list-decimal list-inside space-y-2">
-              <li>Open your Notion workspace</li>
-              <li>Navigate to the database (Stock Analyses, Stock History, or Sage Stocks page)</li>
-              <li>Copy the URL from your browser's address bar</li>
-              <li>Paste it into the field below — we'll extract the ID automatically</li>
-            </ol>
-            <p class="mt-2 text-xs text-gray-600">
-              💡 Tip: The URL looks like: <code class="bg-gray-100 px-1 rounded">https://notion.so/workspace/DatabaseName-abc123...</code>
-            </p>
-          </div>
-        </div>
-
-        <div class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium mb-2 text-gray-700">Stock Analyses Database ID or URL</label>
-            <input
-              type="text"
-              id="manual-analyses"
-              placeholder="Paste database URL or ID here"
-              class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-            />
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-2 text-gray-700">Stock History Database ID or URL</label>
-            <input
-              type="text"
-              id="manual-history"
-              placeholder="Paste database URL or ID here"
-              class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-            />
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-2 text-gray-700">Sage Stocks Page ID or URL</label>
-            <input
-              type="text"
-              id="manual-page"
-              placeholder="Paste page URL or ID here"
-              class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-            />
-          </div>
-        </div>
-
-        <button
-          id="manual-submit-btn"
-          class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4 rounded-xl hover:from-blue-700 hover:to-indigo-700 font-medium text-lg shadow-lg hover:shadow-xl transition-all duration-200 mt-6 min-h-[3rem]"
-        >
-          Save configuration
-        </button>
-
-        <div id="manual-errors" class="hidden mt-4"></div>
-      </div>
-
-      <!-- Success Screen -->
-      <div id="success-section" class="hidden text-center py-8 slide-in">
-        <div class="text-6xl mb-4">🎉</div>
-        <h2 class="text-2xl sm:text-3xl font-bold mb-3 text-gray-900">You're all set!</h2>
-        <p class="text-gray-600 mb-6 text-base sm:text-lg">We connected to your Stock Analyses and Stock History databases.</p>
-
-        <div class="bg-green-50 border border-green-200 rounded-xl p-4 sm:p-6 text-sm sm:text-base max-w-md mx-auto">
-          <div class="space-y-2 text-left">
-            <p class="text-green-800"><span class="font-medium">✓</span> Read/write access verified</p>
-            <p class="text-green-800"><span class="font-medium">✓</span> Template version initialized (1.0.0)</p>
-            <p class="text-green-800"><span class="font-medium">✓</span> Ready for your first analysis</p>
-          </div>
-        </div>
-
-        <p class="text-sm text-gray-500 mt-6">Redirecting to your dashboard in <span id="countdown">3</span> seconds...</p>
-      </div>
     </div>
 
-    <!-- Footer -->
-    <div class="text-center mt-6 text-sm text-gray-600">
-      <p>Need help? <a href="mailto:support@sagestocks.com" class="text-blue-600 hover:text-blue-700 underline">Contact support</a></p>
-    </div>
-  </div>
-
-  <script src="/js/setup.js"></script>
+    <script src="/js/setup-animated.js"></script>
 </body>
 </html>
