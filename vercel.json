@@ -20,7 +20,7 @@
   "crons": [
     {
       "path": "/api/cron/scheduled-analyses",
-      "schedule": "0 13 * * *"
+      "schedule": "10 20 * * *"
     }
   ],
   "buildCommand": "npm run type-check",
