@@ -206,11 +206,27 @@ function renderSubwayMap() {
   horizontalContainer.innerHTML = '';
   verticalContainer.innerHTML = '';
 
+  // Add continuous background line for horizontal layout
+  const bgLine = document.createElement('div');
+  bgLine.className = 'progress-line-bg';
+  horizontalContainer.appendChild(bgLine);
+
+  // Add filled progress line for horizontal layout
+  const fillLine = document.createElement('div');
+  fillLine.className = 'progress-line-fill';
+  fillLine.id = 'progress-fill';
+  horizontalContainer.appendChild(fillLine);
+
+  // Calculate progress percentage (fill up to but not including current step)
+  const completedCount = currentState.completedSteps.length;
+  const totalSteps = STEPS.length;
+  const progressPercent = (completedCount / (totalSteps - 1)) * 100;
+  fillLine.style.width = `calc(${progressPercent}% - 30px)`;
+
   // Render horizontal (desktop)
   STEPS.forEach((step, index) => {
     const state = getStepState(step.number);
-    const isLast = index === STEPS.length - 1;
-    horizontalContainer.appendChild(createStepIndicatorHorizontal(step, state, isLast, index));
+    horizontalContainer.appendChild(createStepIndicatorHorizontal(step, state, index));
   });
 
   // Render vertical (mobile/tablet)
@@ -229,7 +245,7 @@ function renderSubwayMap() {
   });
 }
 
-function createStepIndicatorHorizontal(step, state, isLast, index) {
+function createStepIndicatorHorizontal(step, state, index) {
   const container = document.createElement('div');
   container.className = 'flex-1 text-center relative';
 
@@ -256,15 +272,6 @@ function createStepIndicatorHorizontal(step, state, isLast, index) {
   const duration = document.createElement('div');
   duration.className = 'text-xs text-gray-500 mt-1';
   duration.textContent = step.duration ? `⏱️ ${step.duration}` : '';
-
-  // Add connector line (except for last step)
-  if (!isLast) {
-    const connector = document.createElement('div');
-    connector.className = `subway-connector-h ${state === 'complete' ? 'complete' : ''}`;
-    connector.style.left = '50%';
-    connector.style.right = `-${100 / STEPS.length}%`;
-    container.appendChild(connector);
-  }
 
   container.appendChild(indicator);
   container.appendChild(title);
@@ -363,8 +370,22 @@ function animateStepCompletion(stepNumber) {
   indicator.classList.add('complete');
   indicator.innerHTML = '<span style="position:relative;z-index:1;">✓</span>';
 
-  // Animate connector line
-  const connectors = document.querySelectorAll('.subway-connector-h, .subway-connector-v');
+  // Animate progress line fill
+  const fillLine = document.getElementById('progress-fill');
+  if (fillLine) {
+    const completedCount = currentState.completedSteps.length;
+    const totalSteps = STEPS.length;
+    const progressPercent = (completedCount / (totalSteps - 1)) * 100;
+
+    gsap.to(fillLine, {
+      width: `calc(${progressPercent}% - 30px)`,
+      duration: 0.6,
+      ease: 'power2.out',
+    });
+  }
+
+  // Animate vertical connector lines
+  const connectors = document.querySelectorAll('.subway-connector-v');
   connectors.forEach((connector, index) => {
     if (index < stepNumber - 1) {
       connector.classList.add('complete');
