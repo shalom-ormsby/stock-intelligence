@@ -198,24 +198,26 @@ async function advanceToStep(step, data = null) {
 
 function renderSubwayMap() {
   const horizontalContainer = document.getElementById('steps-horizontal');
+  const progressLinesContainer = document.getElementById('progress-lines');
   const verticalContainer = document.getElementById('steps-vertical');
 
-  if (!horizontalContainer || !verticalContainer) return;
+  if (!horizontalContainer || !progressLinesContainer || !verticalContainer) return;
 
   // Clear existing content
   horizontalContainer.innerHTML = '';
+  progressLinesContainer.innerHTML = '';
   verticalContainer.innerHTML = '';
 
   // Add continuous background line for horizontal layout
   const bgLine = document.createElement('div');
   bgLine.className = 'progress-line-bg';
-  horizontalContainer.appendChild(bgLine);
+  progressLinesContainer.appendChild(bgLine);
 
   // Add filled progress line for horizontal layout
   const fillLine = document.createElement('div');
   fillLine.className = 'progress-line-fill';
   fillLine.id = 'progress-fill';
-  horizontalContainer.appendChild(fillLine);
+  progressLinesContainer.appendChild(fillLine);
 
   // Calculate progress (fill up to but not including current step)
   // Line runs from center of first circle (8.33%) to center of last circle (91.67%)
@@ -226,7 +228,7 @@ function renderSubwayMap() {
   const progressPercent = (completedCount / (totalSteps - 1)) * lineSpan;
   fillLine.style.width = `${progressPercent}%`;
 
-  // Render horizontal (desktop)
+  // Render horizontal (desktop) - all 6 steps
   STEPS.forEach((step, index) => {
     const state = getStepState(step.number);
     horizontalContainer.appendChild(createStepIndicatorHorizontal(step, state, index));

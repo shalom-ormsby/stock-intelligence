@@ -104,20 +104,6 @@
             z-index: 2;
         }
 
-        /* Progress line container - holds both background and fill */
-        .progress-line-container {
-            position: absolute;
-            top: 30px;
-            left: 0;
-            right: 0;
-            height: 3px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 0;
-            pointer-events: none;
-        }
-
         /* Progress line - continuous background line */
         .progress-line-bg {
             position: absolute;
@@ -125,7 +111,7 @@
             background: rgba(255, 255, 255, 0.1);
             left: calc(100% / 12);
             right: calc(100% / 12);
-            z-index: 0;
+            top: 0;
         }
 
         /* Progress line - filled portion */
@@ -134,7 +120,8 @@
             height: 3px;
             background: #4d9cff;
             left: calc(100% / 12);
-            z-index: 1;
+            top: 0;
+            width: 0;
             transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
@@ -227,8 +214,15 @@
 
             <!-- Desktop: Horizontal Layout -->
             <div class="hidden lg:block">
-                <div id="steps-horizontal" class="relative flex justify-between items-center px-8">
-                    <!-- Steps will be rendered here by JS -->
+                <div class="relative px-8" style="min-height: 150px;">
+                    <!-- Progress lines (background layer) -->
+                    <div id="progress-lines" class="absolute inset-x-8" style="top: 30px; height: 3px; z-index: 0;">
+                        <!-- Lines will be added here by JS -->
+                    </div>
+                    <!-- Step indicators (foreground layer) -->
+                    <div id="steps-horizontal" class="relative flex justify-between items-start" style="z-index: 2;">
+                        <!-- Steps will be rendered here by JS -->
+                    </div>
                 </div>
             </div>
 
