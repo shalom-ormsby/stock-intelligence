@@ -151,7 +151,7 @@ Status: Unlimited analyses until midnight UTC
 
 ### Option 1: Top-Level Page (Recommended)
 ```
-📊 Stock Intelligence/
+📊 Sage Stocks/
   ├── 📈 Stock Analyses
   ├── 📚 Stock History
   ├── ⚙️ User Settings  ← Add here
@@ -160,7 +160,7 @@ Status: Unlimited analyses until midnight UTC
 
 ### Option 2: Settings Subfolder
 ```
-📊 Stock Intelligence/
+📊 Sage Stocks/
   ├── 📈 Stock Analyses
   ├── 📚 Stock History
   ├── ⚙️ Settings/
@@ -172,7 +172,7 @@ Status: Unlimited analyses until midnight UTC
 ### Option 3: Personal Dashboard
 ```
 🏠 My Dashboard/
-  ├── 📊 Stock Intelligence/
+  ├── 📊 Sage Stocks/
   │   └── (analysis databases)
   └── ⚙️ User Settings  ← Add here (personal)
 ```

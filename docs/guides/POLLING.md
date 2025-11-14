@@ -2,7 +2,7 @@
 
 *Last updated: November 3, 2025 at 9:09 AM*
 
-User-triggered analysis workflow for Stock Intelligence v1.0.
+User-triggered analysis workflow for Sage Stocks v1.0.
 
 ## Overview
 
@@ -170,7 +170,7 @@ The system respects Notion's rate limit of **3 requests per second**:
 
 ```
 =============================================================
-Stock Intelligence Notion Poller v1.0
+Sage Stocks Notion Poller v1.0
 =============================================================
 API Base URL: http://localhost:3000
 API Key: [SET]

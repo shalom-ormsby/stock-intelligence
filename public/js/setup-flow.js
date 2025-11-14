@@ -52,7 +52,7 @@ const STEPS = [
   },
 ];
 
-const TEMPLATE_URL = 'https://ormsby.notion.site/Sage-Stocks-28ca1d1b67e080ea8424c9e64f4648a9?source=copy_link';
+const TEMPLATE_URL = 'https://www.notion.so/Sage-Stocks-2a9a1d1b67e0818b8e9fe451466994fc';
 
 // ============================================================================
 // Global State

@@ -23,7 +23,7 @@
 import { formatResetTime, validateTimezone, getTimezoneFromEnv, type SupportedTimezone } from './timezone';
 
 /**
- * Base error class for all Stock Intelligence errors
+ * Base error class for all Sage Stocks errors
  *
  * Provides standardized error structure with:
  * - Developer message (for logs)

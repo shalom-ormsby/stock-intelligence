@@ -52,7 +52,7 @@ Complete setup guide for beta testers and contributors.
 
 1. Go to https://www.notion.so/my-integrations
 2. Click "+ New integration"
-3. Name: "Stock Intelligence v1.0"
+3. Name: "Sage Stocks v1.0"
 4. Associated workspace: Select your workspace
 5. Copy the "Internal Integration Token"
 
@@ -94,7 +94,7 @@ You need 4 databases (2 required, 2 optional):
    - (+ 30 more properties - see schema file for complete list)
 
 3. Share with your integration:
-   - Click "..." → Add connections → Select "Stock Intelligence v1.0"
+   - Click "..." → Add connections → Select "Sage Stocks v1.0"
 
 4. Copy database ID:
    - Open database as full page

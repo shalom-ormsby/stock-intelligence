@@ -1,4 +1,4 @@
-# Rate Limiting Setup Guide - Stock Intelligence v1.0
+# Rate Limiting Setup Guide - Sage Stocks v1.0
 
 *Last updated: November 3, 2025 at 9:09 AM*
 

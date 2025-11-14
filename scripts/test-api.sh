@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Stock Intelligence v1.0 - API Testing Script
+# Sage Stocks v1.0 - API Testing Script
 # Tests public API endpoints for accessibility and functionality
 #
 # Usage:
@@ -22,7 +22,7 @@ BASE_URL="${1:-http://localhost:3000}"
 API_KEY="${2:-}"
 
 echo "=========================================="
-echo "Stock Intelligence v1.0 - API Tests"
+echo "Sage Stocks v1.0 - API Tests"
 echo "=========================================="
 echo "Base URL: $BASE_URL"
 echo "API Key: ${API_KEY:+[SET]}${API_KEY:-[NOT SET]}"

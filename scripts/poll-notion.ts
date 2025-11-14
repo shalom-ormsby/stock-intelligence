@@ -149,7 +149,7 @@ async function pollLoop(): Promise<void> {
   }
 
   console.log('\n' + '='.repeat(60));
-  console.log('Stock Intelligence Notion Poller v1.0');
+  console.log('Sage Stocks Notion Poller v1.0');
   console.log('='.repeat(60));
   console.log(`API Base URL: ${apiBaseUrl}`);
   console.log(`API Key: ${apiKey ? '[SET]' : '[NOT SET]'}`);

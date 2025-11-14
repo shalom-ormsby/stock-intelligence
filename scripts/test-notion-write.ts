@@ -333,7 +333,7 @@ async function testEndToEndWorkflow(
 async function main(): Promise<void> {
   console.log('\n' + '='.repeat(60));
   console.log('Notion Write Functions Test Suite');
-  console.log('Stock Intelligence v1.0');
+  console.log('Sage Stocks v1.0');
   console.log('='.repeat(60));
 
   // Validate environment variables
