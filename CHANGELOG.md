@@ -1,6 +1,6 @@
 # Changelog
 
-**Last Updated:** November 12, 2025
+**Last Updated:** November 14, 2025
 
 All notable changes to Sage Stocks will be documented in this file.
 
@@ -96,6 +96,294 @@ All development versions are documented below with full technical details.
 ---
 
 ## [Unreleased]
+
+---
+
+## [v1.2.2] - 2025-11-14
+
+### 🐛 Bug Fix: Duplicate Template Prevention
+
+**Issue:** Beta testers were getting **2 copies** of the Sage Stocks template in their workspace after completing setup.
+
+**Root Cause:** After fixing the OAuth template bug in v1.2.1, the OAuth flow now includes `template_id` parameter, which causes Notion to show a "Use a template provided by the developer" option during sign-in. Users would:
+1. **Duplicate during OAuth (Step 1)** - Click "Use a template" → Template copy #1 created
+2. **Duplicate manually (Step 2)** - Click "Duplicate Template" button → Template copy #2 created
+
+**Impact:**
+- 2 identical copies of Sage Stocks in user's workspace
+- Confusing UX - which copy should they use?
+- Unnecessary clutter in user's Notion workspace
+- Step 3 auto-detection still worked (picked first copy found), but messy
+
+**The Fix: Smart Step 2 Auto-Detection**
+
+Step 2 now intelligently detects if the template was already duplicated during OAuth:
+
+**New Flow:**
+1. Step 2 loads → Shows "Checking..." spinner
+2. Makes quick API call to `/api/setup/detect` to check if Sage Stocks page exists
+3. **If template exists** → Shows "✅ Template Already Duplicated!" message with "Continue" button
+4. **If template doesn't exist** → Shows normal manual duplication UI with warning about not duplicating twice
+
+**Updated UI States:**
+
+**State 1: Checking (on load)**
+```
+Checking if you already duplicated the template during sign-in...
+[spinner animation]
+```
+
+**State 2: Already Done (template exists)**
+```
+✅ Template Already Duplicated!
+We detected that you already duplicated the Sage Stocks template during sign-in.
+No need to duplicate again!
+
+[Continue to Verification →]
+```
+
+**State 3: Manual Duplication (template not found)**
+```
+Get your own copy of the Sage Stocks template...
+
+⚠️ Did you duplicate during sign-in?
+If you already duplicated the template when you signed in with Notion,
+check the box below to skip this step.
+
+[Duplicate Template] button
+
+☐ I've duplicated the template (or already duplicated during sign-in)
+[Continue to Verification] (disabled until checked)
+```
+
+**Files Changed:**
+
+1. **`public/js/setup-flow.js` (lines 396-549)**
+   - Updated `createStep2Content()` to show 3 UI states: checking, already done, manual
+   - Added auto-detection API call when Step 2 loads
+   - Shows "already duplicated" message if template detected
+   - Falls back to manual duplication UI if template not found
+   - Added warning in manual UI about not duplicating twice
+
+**Error Handling:**
+- If API call fails → Falls back to manual duplication UI (safe fallback)
+- If detection is ambiguous → Manual UI with clear instructions
+- Console logging for debugging: `console.log('✅ Template already detected')`
+
+**User Experience Improvements:**
+1. **Prevents duplicate confusion** - Clear message if template already exists
+2. **Smart detection** - No need for user to remember if they duplicated
+3. **Graceful fallback** - If detection fails, manual UI still works
+4. **Clear warnings** - Manual UI warns about not duplicating twice
+
+**Result:**
+- ✅ Users only get 1 copy of the template
+- ✅ Smart auto-detection prevents duplicate clicks
+- ✅ Clear messaging for both scenarios
+- ✅ Graceful fallback if detection fails
+- ✅ Console logging for debugging
+
+**Testing:**
+```javascript
+// Test Case 1: User duplicated during OAuth
+// Expected: Step 2 shows "✅ Template Already Duplicated!" message
+
+// Test Case 2: User skipped template during OAuth
+// Expected: Step 2 shows manual duplication UI with warnings
+
+// Test Case 3: API call fails
+// Expected: Step 2 falls back to manual duplication UI
+```
+
+**Note:** This fix builds on top of v1.2.1's OAuth template fix. The `template_id` parameter is still included in OAuth (correct), but now Step 2 handles the case where users duplicate during OAuth.
+
+---
+
+## [v1.2.1] - 2025-11-14
+
+### 🐛 CRITICAL Bug Fix: OAuth Template Duplication Failure
+
+**Issue:** Beta testers could not complete OAuth setup because Notion displayed error: "The page template is no longer public. Contact the developer for more help."
+
+**Root Cause:** The OAuth authorization flow was missing the `template_id` parameter, causing Notion to fall back to the template configured in the OAuth integration settings. That template URL pointed to an old, deleted template copy (`0bdecf2c3e934a16ae6e3caa37ddfcda`) instead of the current public template (`ce9b3a07e96a41c3ac1cc2a99f92bd90`).
+
+**Impact:**
+- ❌ **Setup completely broken** - No beta users could complete onboarding
+- ❌ **Blocks Cohort 1 launch** - Cannot onboard any users until fixed
+- ⚠️ **Privacy concern** - When template duplication failed, backend may have attempted to create pages in admin workspace instead of user workspace
+- ❌ **Poor user experience** - Error message blamed developer, not clear what user should do
+
+**Investigation:**
+1. Beta tester (Stephanie) sent screenshot showing Notion error during OAuth flow
+2. Discovered unexpected duplicate "Sage Stocks" page created in admin workspace (not created manually)
+3. Timeline correlation: Duplicate appeared same day beta tester attempted OAuth setup
+4. Searched codebase for template IDs - found NEITHER old nor new template ID in code
+5. **Discovery**: OAuth flow in `api/auth/authorize.ts` built authorization URL WITHOUT `template_id` parameter
+6. Secondary issue: "Duplicate Template" button in setup flow pointed to old deleted template URL
+
+**The OAuth Flow Bug:**
+
+OAuth authorization was constructed without template specification:
+```typescript
+// ❌ BEFORE (v1.2.0) - No template_id parameter
+const authUrl = new URL('https://api.notion.com/v1/oauth/authorize');
+authUrl.searchParams.set('client_id', clientId);
+authUrl.searchParams.set('redirect_uri', redirectUri);
+authUrl.searchParams.set('response_type', 'code');
+authUrl.searchParams.set('owner', 'user');
+// Missing: authUrl.searchParams.set('template_id', ???);
+
+// Result: Notion falls back to template URL in OAuth integration settings
+// That URL pointed to deleted template → "template is no longer public" error
+```
+
+**The Fix (Two Parts):**
+
+**Part 1: Add template_id to OAuth URL**
+```typescript
+// ✅ AFTER (v1.2.1) - Explicitly pass template_id
+const templateId = process.env.SAGE_STOCKS_TEMPLATE_ID;
+
+if (templateId) {
+  authUrl.searchParams.set('template_id', templateId);
+  log(LogLevel.INFO, 'OAuth flow includes template_id', { templateId });
+} else {
+  log(LogLevel.WARN, 'OAuth flow without template_id - falling back to integration settings');
+}
+```
+
+**Part 2: Fix "Duplicate Template" button URL**
+```javascript
+// ❌ BEFORE - Pointed to old deleted copy
+const TEMPLATE_URL = 'https://ormsby.notion.site/Sage-Stocks-28ca1d1b67e080ea8424c9e64f4648a9?source=copy_link';
+
+// ✅ AFTER - Points to current public template
+const TEMPLATE_URL = 'https://www.notion.so/Sage-Stocks-2a9a1d1b67e0818b8e9fe451466994fc';
+```
+
+**Files Changed:**
+
+1. **`api/auth/authorize.ts` (lines 13-50)**
+   - Added `SAGE_STOCKS_TEMPLATE_ID` environment variable
+   - Added `template_id` parameter to OAuth authorization URL
+   - Added logging for debugging template ID usage
+   - Template ID format: 32-char hex without dashes (e.g., `ce9b3a07e96a41c3ac1cc2a99f92bd90`)
+
+2. **`public/js/setup-flow.js` (line 55)**
+   - Updated `TEMPLATE_URL` constant from old deleted copy to current public template
+   - Old: `28ca1d1b67e080ea8424c9e64f4648a9` (deleted)
+   - New: `2a9a1d1b67e0818b8e9fe451466994fc` (current, public, under "Product Templates (Public)")
+
+3. **Environment Variables**
+   - Added `SAGE_STOCKS_TEMPLATE_ID=ce9b3a07e96a41c3ac1cc2a99f92bd90` to:
+     - `.env` (local development)
+     - `.env.local` (local development)
+     - `.env.example` (template for new developers)
+     - Vercel environment variables (production)
+
+**Deployment Checklist:**
+- ✅ Add `SAGE_STOCKS_TEMPLATE_ID` to Vercel environment variables
+- ✅ Verify template ID matches current public template
+- ⚠️ Optional: Update template URL in Notion OAuth integration settings (provides fallback if env var missing)
+- ✅ Test OAuth flow with incognito window
+- ✅ Verify template duplication creates pages in USER workspace, not admin workspace
+
+**Verification Commands:**
+```bash
+# Verify no old template ID references remain
+grep -rn "28ca1d1b67e080ea8424c9e64f4648a9" .
+grep -rn "0bdecf2c3e934a16ae6e3caa37ddfcba" .
+# Both should return 0 results ✅
+
+# Verify new template ID is used
+grep -rn "ce9b3a07e96a41c3ac1cc2a99f92bd90" .
+# Should show: .env, .env.local, .env.example ✅
+
+# Verify OAuth flow includes template_id
+vercel logs --prod | grep "OAuth flow includes template_id"
+# Should show log entry with templateId ✅
+```
+
+**Multi-User Isolation Audit:**
+
+As part of this fix, verified that the v1.2.0 multi-user credential fix is still working correctly:
+
+✅ **User operations use user tokens:**
+- `api/analyze.ts:282` - Creates pages using `userAccessToken` (user's OAuth token)
+- All database queries use user-specific `stockAnalysesDbId` and `stockHistoryDbId`
+
+✅ **Admin operations use admin token (CORRECT):**
+- `lib/auth.ts:92` - Beta Users database access
+- `api/setup.ts:140` - Update user record in Beta Users DB
+- `api/webhook.ts:196` - Admin webhook operations
+- `lib/bug-reporter.ts:16` - Bug reporting to admin DB
+
+✅ **Verification command passed:**
+```bash
+grep -rn "process.env.NOTION_API_KEY" api/ lib/
+# Result: Only admin operations use admin token ✅
+```
+
+**Related Documentation:**
+- Original bug report referenced v1.2.0 multi-user isolation fix
+- System Architecture doc (ARCHITECTURE.md) contains warnings about multi-user credentials
+- This fix prevents template duplication from violating multi-user isolation
+
+**Result:**
+- ✅ Beta testers can complete OAuth without "template is no longer public" error
+- ✅ Template duplication creates pages in USER workspace (not admin's)
+- ✅ Multiple users can complete setup independently with zero cross-contamination
+- ✅ OAuth flow explicitly specifies which template to show
+- ✅ Fallback to Notion integration settings if env var missing (logged as warning)
+- ✅ Clear error messages in logs for debugging
+
+**Lessons Learned:**
+1. **Always pass template_id in OAuth URL** - Don't rely on integration settings alone
+2. **Template URLs must be version-controlled** - Store in environment variables, not just in Notion UI
+3. **Test OAuth flow in incognito** - Catches issues that authenticated sessions might hide
+4. **Monitor for unexpected page creation** - Duplicate pages in admin workspace are red flags
+5. **Document template maintenance** - Add notes in ARCHITECTURE.md about updating template URLs
+
+---
+
+### 🎨 Branding Consistency: "Stock Intelligence" → "Sage Stocks"
+
+**Issue:** Codebase contained outdated references to "Stock Intelligence" from earlier development phases.
+
+**Changes:** Updated all user-facing and developer-facing references to use "Sage Stocks" consistently.
+
+**Files Updated:**
+1. `public/settings.html` - Header navigation (1 occurrence)
+2. `scripts/test-api.sh` - Script header and banner (2 occurrences)
+3. `scripts/test-notion-write.ts` - Console output (1 occurrence)
+4. `scripts/poll-notion.ts` - Console output (1 occurrence)
+5. `SETUP.md` - Integration setup instructions (2 occurrences)
+6. `.env.v1.example` - File header (1 occurrence)
+7. `docs/guides/RATE_LIMITING_SETUP.md` - Title (1 occurrence)
+8. `docs/guides/POLLING.md` - Description and console output (2 occurrences)
+9. `docs/guides/NOTION_DATABASE_TEMPLATE.md` - Folder structure examples (3 occurrences)
+10. `lib/errors.ts` - Error class documentation (1 occurrence)
+
+**Files Intentionally NOT Updated (Historical Records):**
+- `CHANGELOG.md` - Historical records of what the product was called at each version
+- `LICENSE` - Legal document referring to specific version (v0.2.7)
+- `docs/archive/*` - Archived historical documentation
+- `docs/legacy/*` - Legacy version documentation
+
+**Verification:**
+```bash
+# Verify all active code uses "Sage Stocks"
+grep -rn "Stock Intelligence" . --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" --include="*.html" --include="*.md" | grep -v "node_modules" | grep -v ".git" | grep -v "CHANGELOG.md" | grep -v "LICENSE" | grep -v "docs/archive" | grep -v "docs/legacy"
+# Result: Only archive/legacy files contain old branding ✅
+```
+
+**Result:**
+- ✅ All user-facing UI shows "Sage Stocks" branding
+- ✅ All developer scripts and tools use "Sage Stocks" naming
+- ✅ All active documentation references "Sage Stocks"
+- ✅ Historical records preserved for audit trail
+
+**Note:** Integration name in Notion UI ("Stock Intelligence" vs "Sage Stocks") does NOT affect functionality - only CLIENT_ID and CLIENT_SECRET matter. The integration can be renamed in Notion's UI without impacting code.
 
 ---
 

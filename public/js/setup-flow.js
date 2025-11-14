@@ -402,61 +402,146 @@ function createStep2Content() {
         <div class="text-3xl mr-4">📄</div>
         <div class="flex-1">
           <h3 class="font-bold text-gray-900 text-xl mb-2">Step 2: Duplicate the Notion Template</h3>
-          <p class="text-gray-700 mb-4">
-            Get your own copy of the Sage Stocks template. This includes the Stock Analyses database, Stock History database, and the Sage Stocks page.
-          </p>
-          <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <p class="text-sm text-blue-800 font-medium">
-              💡 <strong>Keep this tab open!</strong> After duplicating the template, return here to continue setup (takes 2 more minutes).
+
+          <div id="step2-checking" class="text-center py-4">
+            <div class="inline-block spinner mx-auto mb-3" style="width: 32px; height: 32px; border: 3px solid #10B981; border-top-color: transparent; border-radius: 50%;"></div>
+            <p class="text-gray-700 font-medium">Checking if you already duplicated the template during sign-in...</p>
+          </div>
+
+          <div id="step2-already-done" class="hidden">
+            <div class="p-4 bg-green-100 border-2 border-green-300 rounded-lg mb-4">
+              <p class="text-green-800 font-medium mb-2">✅ Template Already Duplicated!</p>
+              <p class="text-sm text-green-700">We detected that you already duplicated the Sage Stocks template during sign-in. No need to duplicate again!</p>
+            </div>
+            <button
+              id="step2-skip"
+              class="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl"
+            >
+              Continue to Verification →
+            </button>
+          </div>
+
+          <div id="step2-manual" class="hidden">
+            <p class="text-gray-700 mb-4">
+              Get your own copy of the Sage Stocks template. This includes the Stock Analyses database, Stock History database, and the Sage Stocks page.
             </p>
+            <div class="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p class="text-sm text-yellow-800 font-medium">
+                ⚠️ <strong>Did you duplicate during sign-in?</strong> If you already duplicated the template when you signed in with Notion, click "I already duplicated" below to skip this step.
+              </p>
+            </div>
+            <a
+              href="${TEMPLATE_URL}"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl mb-4"
+            >
+              📄 Duplicate Template <span class="ml-2">→</span>
+            </a>
+            <p class="text-sm text-gray-600 mb-4">
+              <strong>Important:</strong> When duplicating, make sure the template goes to your workspace (not a private page).
+            </p>
+            <p class="text-sm text-gray-600 mb-4">After duplicating (or if you already did), confirm below:</p>
+            <div class="flex items-center gap-3 mb-4">
+              <input type="checkbox" id="step2-confirm" class="w-5 h-5 text-green-600 rounded focus:ring-2 focus:ring-green-500" />
+              <label for="step2-confirm" class="text-gray-700 font-medium cursor-pointer">I've duplicated the template (or already duplicated during sign-in)</label>
+            </div>
+            <button
+              id="step2-continue"
+              disabled
+              class="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Continue to Verification
+            </button>
           </div>
-          <a
-            href="${TEMPLATE_URL}"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl mb-4"
-          >
-            📄 Duplicate Template <span class="ml-2">→</span>
-          </a>
-          <p class="text-sm text-gray-600 mb-4">
-            <strong>Important:</strong> When duplicating, make sure the template goes to your workspace (not a private page).
-          </p>
-          <p class="text-sm text-gray-600 mb-4">After duplicating, return to this page and confirm below:</p>
-          <div class="flex items-center gap-3">
-            <input type="checkbox" id="step2-confirm" class="w-5 h-5 text-green-600 rounded focus:ring-2 focus:ring-green-500" />
-            <label for="step2-confirm" class="text-gray-700 font-medium cursor-pointer">I've duplicated the template</label>
-          </div>
-          <button
-            id="step2-continue"
-            disabled
-            class="mt-4 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Continue to Verification
-          </button>
         </div>
       </div>
     </div>
   `;
 
   // Setup event listeners after render
-  setTimeout(() => {
-    const checkbox = section.querySelector('#step2-confirm');
-    const button = section.querySelector('#step2-continue');
+  setTimeout(async () => {
+    // Check if template already exists (quick check via auto-detection)
+    const checkingDiv = section.querySelector('#step2-checking');
+    const alreadyDoneDiv = section.querySelector('#step2-already-done');
+    const manualDiv = section.querySelector('#step2-manual');
+    const skipButton = section.querySelector('#step2-skip');
 
-    if (checkbox && button) {
-      checkbox.addEventListener('change', () => {
-        button.disabled = !checkbox.checked;
+    try {
+      // Quick API call to check if Sage Stocks page exists
+      const response = await fetch('/api/setup/detect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
       });
 
-      button.addEventListener('click', async () => {
-        button.disabled = true;
-        button.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Starting verification...';
-        await advanceToStep(3, { manualConfirm: true });
-        // After advancing to step 3, trigger auto-detection
-        setTimeout(() => {
-          triggerAutoDetection();
-        }, 500);
-      });
+      const data = await response.json();
+
+      if (response.ok && data.detection && data.detection.sageStocksPage) {
+        // Template already exists! Show "already done" UI
+        console.log('✅ Template already detected, skipping manual duplication');
+        checkingDiv.classList.add('hidden');
+        alreadyDoneDiv.classList.remove('hidden');
+
+        // Setup skip button
+        if (skipButton) {
+          skipButton.addEventListener('click', async () => {
+            skipButton.disabled = true;
+            skipButton.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Continuing...';
+            await advanceToStep(3, { templateAlreadyDuplicated: true });
+            setTimeout(() => {
+              triggerAutoDetection();
+            }, 500);
+          });
+        }
+      } else {
+        // Template not found, show manual duplication UI
+        console.log('⚠️ Template not yet detected, showing manual duplication option');
+        checkingDiv.classList.add('hidden');
+        manualDiv.classList.remove('hidden');
+
+        // Setup manual duplication flow
+        const checkbox = section.querySelector('#step2-confirm');
+        const button = section.querySelector('#step2-continue');
+
+        if (checkbox && button) {
+          checkbox.addEventListener('change', () => {
+            button.disabled = !checkbox.checked;
+          });
+
+          button.addEventListener('click', async () => {
+            button.disabled = true;
+            button.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Starting verification...';
+            await advanceToStep(3, { manualConfirm: true });
+            setTimeout(() => {
+              triggerAutoDetection();
+            }, 500);
+          });
+        }
+      }
+    } catch (error) {
+      // If check fails, fall back to manual duplication UI
+      console.warn('⚠️ Failed to check for existing template, showing manual UI:', error);
+      checkingDiv.classList.add('hidden');
+      manualDiv.classList.remove('hidden');
+
+      // Setup manual duplication flow (fallback)
+      const checkbox = section.querySelector('#step2-confirm');
+      const button = section.querySelector('#step2-continue');
+
+      if (checkbox && button) {
+        checkbox.addEventListener('change', () => {
+          button.disabled = !checkbox.checked;
+        });
+
+        button.addEventListener('click', async () => {
+          button.disabled = true;
+          button.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Starting verification...';
+          await advanceToStep(3, { manualConfirm: true });
+          setTimeout(() => {
+            triggerAutoDetection();
+          }, 500);
+        });
+      }
     }
   }, 0);
 
