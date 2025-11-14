@@ -642,6 +642,58 @@ export async function updateUserStatus(
 }
 
 /**
+ * Update user's database IDs after template detection (v1.2.4)
+ */
+export async function updateUserDatabaseIds(
+  userId: string,
+  databaseIds: {
+    sageStocksPageId?: string;
+    stockAnalysesDbId?: string;
+    stockHistoryDbId?: string;
+  }
+): Promise<void> {
+  try {
+    const properties: Record<string, any> = {};
+
+    if (databaseIds.sageStocksPageId) {
+      properties['Sage Stocks Page ID'] = {
+        rich_text: [{ text: { content: databaseIds.sageStocksPageId } }],
+      };
+    }
+
+    if (databaseIds.stockAnalysesDbId) {
+      properties['Stock Analyses DB ID'] = {
+        rich_text: [{ text: { content: databaseIds.stockAnalysesDbId } }],
+      };
+    }
+
+    if (databaseIds.stockHistoryDbId) {
+      properties['Stock History DB ID'] = {
+        rich_text: [{ text: { content: databaseIds.stockHistoryDbId } }],
+      };
+    }
+
+    await notion.pages.update({
+      page_id: userId,
+      properties,
+    });
+
+    log(LogLevel.INFO, 'User database IDs updated', {
+      userId,
+      hasSageStocksPage: !!databaseIds.sageStocksPageId,
+      hasStockAnalyses: !!databaseIds.stockAnalysesDbId,
+      hasStockHistory: !!databaseIds.stockHistoryDbId,
+    });
+  } catch (error) {
+    log(LogLevel.ERROR, 'Failed to update user database IDs', {
+      userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw new Error('Failed to update database IDs');
+  }
+}
+
+/**
  * Get all users (for admin dashboard)
  */
 export async function getAllUsers(): Promise<User[]> {

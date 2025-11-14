@@ -51,6 +51,7 @@ interface AnalyzeResponse {
   analysesPageId: string | null;
   historyPageId: string | null;
   childAnalysisPageId?: string | null;
+  sageStocksPageId?: string | null; // v1.2.4: User's Sage Stocks workspace page
   scores?: {
     composite: number;
     technical: number;
@@ -737,6 +738,7 @@ export default async function handler(
       analysesPageId,
       historyPageId: archivedPageId,
       childAnalysisPageId,
+      sageStocksPageId: user.sageStocksPageId || null, // v1.2.4: User's Sage Stocks workspace page
       scores: {
         composite: scores.composite,
         technical: scores.technical,

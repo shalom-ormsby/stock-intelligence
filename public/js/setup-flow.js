@@ -10,45 +10,24 @@
 const STEPS = [
   {
     number: 1,
-    title: 'Sign In with Notion',
+    title: 'Connect Notion',
     icon: '🔗',
-    duration: '30s',
-    description: 'Authorize Sage Stocks',
+    duration: '1 min',
+    description: 'Sign in with Notion',
   },
   {
     number: 2,
-    title: 'Duplicate Template',
+    title: 'Setup Workspace',
     icon: '📄',
-    duration: '1 min',
-    description: 'Copy to your workspace',
+    duration: '3-5 min',
+    description: 'Creating your databases',
   },
   {
     number: 3,
-    title: 'Setup Verification',
-    icon: '✓',
-    duration: '30s',
-    description: 'Auto-detecting databases',
-  },
-  {
-    number: 4,
     title: 'Run First Analysis',
     icon: '📊',
-    duration: '15s',
-    description: 'Enter ticker & analyze',
-  },
-  {
-    number: 5,
-    title: 'View Results',
-    icon: '👁️',
-    duration: '2:15',
-    description: 'Open in Notion',
-  },
-  {
-    number: 6,
-    title: 'Complete!',
-    icon: '🎉',
-    duration: '',
-    description: 'You\'re all set',
+    duration: '1 min',
+    description: 'Analyze a stock',
   },
 ];
 
@@ -341,16 +320,26 @@ function renderStepContent() {
       container.appendChild(createStep2Content());
       break;
     case 3:
-      container.appendChild(createStep3Content());
+      // Step 3 is "Run First Analysis" - redirect to analyze page
+      // Setup is complete at this point (workspace created, databases detected & saved)
+      console.log('✅ Setup complete! Redirecting to analyze page...');
+
+      // Mark step 3 as complete before redirecting
+      if (!currentState.completedSteps.includes(3)) {
+        currentState.completedSteps.push(3);
+      }
+      currentState.setupComplete = true;
+
+      // Redirect to analyze page
+      window.location.href = '/analyze.html';
       break;
     case 4:
-      container.appendChild(createStep4Content());
-      break;
     case 5:
-      container.appendChild(createStep5Content());
-      break;
     case 6:
-      container.appendChild(createStep6Content());
+      // Legacy steps from old 6-step flow - should not be reached
+      // If somehow reached, redirect to analyze page
+      console.warn(`Legacy step ${currentState.currentStep} reached, redirecting to analyze...`);
+      window.location.href = '/analyze.html';
       break;
   }
 }
@@ -367,12 +356,13 @@ function createStep1Content() {
       <div class="flex items-start">
         <div class="text-3xl mr-4">🔗</div>
         <div class="flex-1">
-          <h3 class="font-bold text-gray-900 text-xl mb-2">Step 1: Sign In with Notion</h3>
+          <h3 class="font-bold text-gray-900 text-xl mb-2">Step 1 of 3: Connect Your Notion Account</h3>
           <p class="text-gray-700 mb-4">
-            Let's start by connecting your Notion workspace. This allows Sage Stocks to read and write to your databases.
+            We'll automatically create your stock analysis workspace in Notion.<br>
+            <strong>This process takes about 5 minutes.</strong>
           </p>
           <p class="text-sm text-gray-600 mb-4">
-            <strong>Note:</strong> After signing in, you'll be prompted to duplicate our template.
+            By signing in, you authorize Sage Stocks to create and access your workspace databases.
           </p>
           <button
             onclick="window.location.href='/api/auth/authorize'"
@@ -401,62 +391,106 @@ function createStep2Content() {
       <div class="flex items-start">
         <div class="text-3xl mr-4">📄</div>
         <div class="flex-1">
-          <h3 class="font-bold text-gray-900 text-xl mb-2">Step 2: Template Duplication</h3>
+          <h3 class="font-bold text-gray-900 text-xl mb-2">Step 2 of 3: Setting Up Your Workspace</h3>
 
-          <div id="step2-checking" class="text-center py-4">
-            <div class="inline-block spinner mx-auto mb-3" style="width: 32px; height: 32px; border: 3px solid #10B981; border-top-color: transparent; border-radius: 50%;"></div>
-            <p id="step2-status" class="text-gray-700 font-medium mb-2">Looking for your Sage Stocks template...</p>
-            <p id="step2-elapsed" class="text-sm text-gray-500"></p>
-            <div class="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <!-- Setting Up State -->
+          <div id="step2-setting-up">
+            <p class="text-gray-700 mb-4">
+              We're creating your Sage Stocks workspace in Notion...<br>
+              <strong>This usually takes 3-5 minutes.</strong> Please don't close this page.
+            </p>
+
+            <div class="mb-4 p-4 bg-white border border-gray-200 rounded-lg">
+              <div class="flex items-center justify-between mb-3">
+                <span class="text-sm font-medium text-gray-700">⏱️ Time elapsed:</span>
+                <span id="step2-elapsed" class="text-sm font-bold text-blue-600">0:00</span>
+              </div>
+              <div class="text-sm text-gray-600 mb-3">
+                <strong id="step2-milestone">Starting setup...</strong>
+              </div>
+
+              <!-- Progress Checklist -->
+              <div class="space-y-2">
+                <div class="flex items-center text-sm" id="progress-connect">
+                  <span class="mr-2">🔄</span>
+                  <span class="text-gray-600">Connected to your Notion account</span>
+                </div>
+                <div class="flex items-center text-sm" id="progress-structure">
+                  <span class="mr-2">⏳</span>
+                  <span class="text-gray-500">Creating workspace structure...</span>
+                </div>
+                <div class="flex items-center text-sm" id="progress-databases">
+                  <span class="mr-2">⏳</span>
+                  <span class="text-gray-500">Setting up databases...</span>
+                </div>
+                <div class="flex items-center text-sm" id="progress-finalize">
+                  <span class="mr-2">⏳</span>
+                  <span class="text-gray-500">Finalizing setup...</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <p class="text-sm text-blue-800">
-                💡 <strong>Note:</strong> The template should duplicate automatically during sign-in. This usually takes 10-30 seconds.
+                💡 <strong>Tip:</strong> This process happens automatically. Your workspace is being created in the background.
               </p>
             </div>
           </div>
 
-          <div id="step2-found" class="hidden">
+          <!-- Success State -->
+          <div id="step2-success" class="hidden">
             <div class="p-4 bg-green-100 border-2 border-green-300 rounded-lg mb-4">
-              <p class="text-green-800 font-medium mb-2">✅ Template Found!</p>
-              <p class="text-sm text-green-700">Your Sage Stocks template is ready in your Notion workspace.</p>
+              <p class="text-green-800 font-medium mb-2">✅ Workspace Ready!</p>
+              <p class="text-sm text-green-700 mb-3">Your Sage Stocks workspace has been created in Notion.</p>
+
+              <div class="space-y-1 text-sm">
+                <div class="flex items-center text-green-700">
+                  <span class="mr-2">✅</span>
+                  <span>Connected to your Notion account</span>
+                </div>
+                <div class="flex items-center text-green-700">
+                  <span class="mr-2">✅</span>
+                  <span>Created workspace structure</span>
+                </div>
+                <div class="flex items-center text-green-700">
+                  <span class="mr-2">✅</span>
+                  <span>Set up databases</span>
+                </div>
+                <div class="flex items-center text-green-700">
+                  <span class="mr-2">✅</span>
+                  <span>Configuration saved</span>
+                </div>
+              </div>
+
+              <p class="text-sm text-green-600 mt-3">
+                Setup completed in <strong id="step2-completion-time">0:00</strong>
+              </p>
             </div>
             <button
-              id="step2-continue-found"
+              id="step2-continue"
               class="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl"
             >
-              Continue to Verification →
+              Continue to Run Your First Analysis →
             </button>
           </div>
 
-          <div id="step2-not-found" class="hidden">
-            <div class="p-4 bg-yellow-100 border-2 border-yellow-300 rounded-lg mb-4">
-              <p class="text-yellow-800 font-medium mb-2">⚠️ Template Not Found Yet</p>
-              <p class="text-sm text-yellow-700 mb-2">We couldn't find the Sage Stocks template in your workspace. This could mean:</p>
-              <ul class="text-sm text-yellow-700 ml-6 list-disc">
-                <li>The automatic duplication is still in progress (keep waiting)</li>
-                <li>You need to duplicate it manually using the button below</li>
-              </ul>
+          <!-- Error State (only after 10 minutes) -->
+          <div id="step2-error" class="hidden">
+            <div class="p-4 bg-red-100 border-2 border-red-300 rounded-lg mb-4">
+              <p class="text-red-800 font-medium mb-2">⚠️ Setup Taking Longer Than Expected</p>
+              <p class="text-sm text-red-700 mb-3">
+                We've been waiting for <strong id="step2-error-time">10:00</strong> but haven't detected your workspace yet.
+              </p>
+              <p class="text-sm text-red-700">
+                This is very unusual. Please contact support and we'll help you manually complete the setup.
+              </p>
             </div>
-            <p class="text-gray-700 mb-4">
-              Click the button below to open the template and duplicate it to your Notion workspace:
-            </p>
             <a
-              href="${TEMPLATE_URL}"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl mb-4"
-              onclick="window.step2ManualClick = true;"
+              href="mailto:support@sagestocks.com?subject=Setup%20Timeout%20Issue"
+              class="inline-block px-6 py-3 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-all"
             >
-              📄 Open Template to Duplicate <span class="ml-2">→</span>
+              Contact Support
             </a>
-            <p class="text-sm text-gray-600 mb-4">
-              <strong>After duplicating:</strong> Come back to this page and click "Check Again" below. We'll automatically detect it.
-            </p>
-            <button
-              id="step2-recheck"
-              class="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-all"
-            >
-              🔄 Check Again
-            </button>
           </div>
         </div>
       </div>
@@ -465,15 +499,45 @@ function createStep2Content() {
 
   // Setup event listeners after render
   setTimeout(async () => {
-    const checkingDiv = section.querySelector('#step2-checking');
-    const foundDiv = section.querySelector('#step2-found');
-    const notFoundDiv = section.querySelector('#step2-not-found');
-    const statusText = section.querySelector('#step2-status');
+    const settingUpDiv = section.querySelector('#step2-setting-up');
+    const successDiv = section.querySelector('#step2-success');
+    const errorDiv = section.querySelector('#step2-error');
     const elapsedText = section.querySelector('#step2-elapsed');
+    const milestoneText = section.querySelector('#step2-milestone');
+    const progressConnect = section.querySelector('#progress-connect');
+    const progressStructure = section.querySelector('#progress-structure');
+    const progressDatabases = section.querySelector('#progress-databases');
+    const progressFinalize = section.querySelector('#progress-finalize');
 
     let checkCount = 0;
     let startTime = Date.now();
     let isChecking = true;
+
+    // Update progress item (icon + text)
+    function updateProgress(element, state, text) {
+      const icon = element.querySelector('span:first-child');
+      const label = element.querySelector('span:last-child');
+      if (state === 'complete') {
+        icon.textContent = '✅';
+        label.className = 'text-green-700';
+        label.textContent = text;
+      } else if (state === 'active') {
+        icon.textContent = '🔄';
+        label.className = 'text-gray-700';
+        label.textContent = text;
+      } else {
+        icon.textContent = '⏳';
+        label.className = 'text-gray-500';
+        label.textContent = text;
+      }
+    }
+
+    // Format elapsed time as MM:SS
+    function formatTime(seconds) {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
 
     async function checkForTemplate() {
       if (!isChecking) return;
@@ -485,9 +549,43 @@ function createStep2Content() {
 
         // Update elapsed time display
         if (elapsedText) {
-          elapsedText.textContent = `Checking... (${elapsed}s elapsed)`;
+          elapsedText.textContent = formatTime(elapsed);
         }
 
+        // Update milestone message based on elapsed time
+        if (milestoneText) {
+          if (elapsed < 5) {
+            milestoneText.textContent = 'Starting setup...';
+            updateProgress(progressConnect, 'active', 'Connecting to your Notion account...');
+          } else if (elapsed < 60) {
+            milestoneText.textContent = 'Connected! Creating workspace...';
+            updateProgress(progressConnect, 'complete', 'Connected to your Notion account');
+            updateProgress(progressStructure, 'active', 'Creating workspace structure...');
+          } else if (elapsed < 120) {
+            milestoneText.textContent = 'Still setting up...';
+            updateProgress(progressConnect, 'complete', 'Connected to your Notion account');
+            updateProgress(progressStructure, 'complete', 'Created workspace structure (1:00)');
+            updateProgress(progressDatabases, 'active', 'Setting up databases...');
+          } else if (elapsed < 180) {
+            milestoneText.textContent = 'Making progress...';
+            updateProgress(progressConnect, 'complete', 'Connected to your Notion account');
+            updateProgress(progressStructure, 'complete', 'Created workspace structure (1:00)');
+            updateProgress(progressDatabases, 'active', `Setting up databases... (${formatTime(elapsed - 60)})`);
+          } else if (elapsed < 240) {
+            milestoneText.textContent = 'Almost there...';
+            updateProgress(progressConnect, 'complete', 'Connected to your Notion account');
+            updateProgress(progressStructure, 'complete', 'Created workspace structure (1:00)');
+            updateProgress(progressDatabases, 'active', `Setting up databases... (${formatTime(elapsed - 60)})`);
+          } else {
+            milestoneText.textContent = 'Finalizing...';
+            updateProgress(progressConnect, 'complete', 'Connected to your Notion account');
+            updateProgress(progressStructure, 'complete', 'Created workspace structure (1:00)');
+            updateProgress(progressDatabases, 'complete', `Set up databases (${formatTime(elapsed - 60)})`);
+            updateProgress(progressFinalize, 'active', 'Finalizing setup...');
+          }
+        }
+
+        // Check for template
         const response = await fetch('/api/setup/detect', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -499,76 +597,63 @@ function createStep2Content() {
           // Template found! Show success UI
           isChecking = false;
           console.log('✅ Template detected!', data.detection);
-          checkingDiv.classList.add('hidden');
-          foundDiv.classList.remove('hidden');
 
-          // Setup continue button
-          const continueButton = section.querySelector('#step2-continue-found');
+          // Update completion time
+          const completionTimeEl = section.querySelector('#step2-completion-time');
+          if (completionTimeEl) {
+            completionTimeEl.textContent = formatTime(elapsed);
+          }
+
+          settingUpDiv.classList.add('hidden');
+          successDiv.classList.remove('hidden');
+
+          // Setup continue button - skip verification, go straight to analysis
+          const continueButton = section.querySelector('#step2-continue');
           if (continueButton) {
             continueButton.addEventListener('click', async () => {
               continueButton.disabled = true;
               continueButton.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Continuing...';
-              await advanceToStep(3, { templateFound: true });
-              setTimeout(() => {
-                triggerAutoDetection();
-              }, 500);
+
+              // Mark step 2 as complete
+              currentState.completedSteps.push(2);
+              renderSubwayMap();
+
+              // Skip verification (old step 3) and go straight to analysis (new step 3)
+              currentState.currentStep = 3;
+              await advanceToStep(3, { skipVerification: true });
             });
           }
           return;
         }
 
-        // Template not found yet
-        // Show "not found" UI after 45 seconds, but keep checking
-        if (elapsed >= 45 && checkingDiv && !checkingDiv.classList.contains('hidden')) {
-          console.log('⏰ 45 seconds elapsed, showing manual option while continuing to check...');
-          checkingDiv.classList.add('hidden');
-          notFoundDiv.classList.remove('hidden');
+        // Show error state after 10 minutes (600 seconds)
+        if (elapsed >= 600) {
+          isChecking = false;
+          console.error('⚠️ Setup timeout after 10 minutes');
 
-          // Setup "Check Again" button
-          const recheckButton = section.querySelector('#step2-recheck');
-          if (recheckButton) {
-            recheckButton.addEventListener('click', () => {
-              recheckButton.disabled = true;
-              recheckButton.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Checking...';
-
-              // Immediately trigger another check
-              setTimeout(() => {
-                notFoundDiv.classList.add('hidden');
-                checkingDiv.classList.remove('hidden');
-                checkForTemplate();
-              }, 100);
-            });
+          const errorTimeEl = section.querySelector('#step2-error-time');
+          if (errorTimeEl) {
+            errorTimeEl.textContent = formatTime(elapsed);
           }
+
+          settingUpDiv.classList.add('hidden');
+          errorDiv.classList.remove('hidden');
+          return;
         }
 
-        // Schedule next check
-        // More aggressive polling: every 3 seconds for first minute, then every 5 seconds
-        const delay = elapsed < 60 ? 3000 : 5000;
-        console.log(`⏳ Template not found yet, checking again in ${delay / 1000}s...`);
-        setTimeout(() => checkForTemplate(), delay);
+        // Schedule next check (every 3 seconds)
+        setTimeout(() => checkForTemplate(), 3000);
 
       } catch (error) {
         console.error('❌ Error checking for template:', error);
 
-        // Show error state after 45 seconds
         const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        if (elapsed >= 45) {
-          isChecking = false;
-          checkingDiv.classList.add('hidden');
-          notFoundDiv.classList.remove('hidden');
 
-          // Setup "Check Again" button with retry logic
-          const recheckButton = section.querySelector('#step2-recheck');
-          if (recheckButton) {
-            recheckButton.addEventListener('click', () => {
-              isChecking = true;
-              startTime = Date.now();
-              checkCount = 0;
-              notFoundDiv.classList.add('hidden');
-              checkingDiv.classList.remove('hidden');
-              checkForTemplate();
-            });
-          }
+        // Show error state after 10 minutes even on error
+        if (elapsed >= 600) {
+          isChecking = false;
+          settingUpDiv.classList.add('hidden');
+          errorDiv.classList.remove('hidden');
         } else {
           // Retry on error
           setTimeout(() => checkForTemplate(), 3000);

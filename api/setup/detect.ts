@@ -8,7 +8,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { validateSession, getUserByEmail, decryptToken, updateSetupProgress } from '../../lib/auth';
+import { validateSession, getUserByEmail, decryptToken, updateSetupProgress, updateUserDatabaseIds } from '../../lib/auth';
 import { autoDetectTemplate } from '../../lib/template-detection';
 import { log, LogLevel } from '../../lib/logger';
 
@@ -59,6 +59,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       sageStocksPage: detection.sageStocksPage ? 'Found' : 'Not found',
       needsManual: detection.needsManual,
     });
+
+    // v1.2.4: Auto-save database IDs when template is found
+    if (!detection.needsManual && detection.sageStocksPage) {
+      try {
+        await updateUserDatabaseIds(user.id, {
+          sageStocksPageId: detection.sageStocksPage.id,
+          stockAnalysesDbId: detection.stockAnalysesDb?.id,
+          stockHistoryDbId: detection.stockHistoryDb?.id,
+        });
+        log(LogLevel.INFO, 'Auto-saved database IDs to user record', { userId: user.id });
+      } catch (saveError) {
+        log(LogLevel.ERROR, 'Failed to auto-save database IDs (non-critical)', {
+          userId: user.id,
+          error: saveError instanceof Error ? saveError.message : String(saveError),
+        });
+        // Don't fail the request if saving fails
+      }
+    }
 
     // Update setup progress in session
     try {
