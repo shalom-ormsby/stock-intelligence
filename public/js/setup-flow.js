@@ -461,88 +461,124 @@ function createStep2Content() {
 
   // Setup event listeners after render
   setTimeout(async () => {
-    // Check if template already exists (quick check via auto-detection)
+    // OAuth with template_id ALWAYS duplicates the template in background
+    // We need to wait for it to appear, with retries
     const checkingDiv = section.querySelector('#step2-checking');
     const alreadyDoneDiv = section.querySelector('#step2-already-done');
     const manualDiv = section.querySelector('#step2-manual');
     const skipButton = section.querySelector('#step2-skip');
 
-    try {
-      // Quick API call to check if Sage Stocks page exists
-      const response = await fetch('/api/setup/detect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
+    const MAX_RETRIES = 12; // 12 retries = 60 seconds total
+    const RETRY_DELAY = 5000; // 5 seconds between retries
+    let retryCount = 0;
 
-      const data = await response.json();
+    async function checkForTemplate() {
+      try {
+        console.log(`🔍 Checking for template (attempt ${retryCount + 1}/${MAX_RETRIES})...`);
 
-      if (response.ok && data.detection && data.detection.sageStocksPage) {
-        // Template already exists! Show "already done" UI
-        console.log('✅ Template already detected, skipping manual duplication');
-        checkingDiv.classList.add('hidden');
-        alreadyDoneDiv.classList.remove('hidden');
-
-        // Setup skip button
-        if (skipButton) {
-          skipButton.addEventListener('click', async () => {
-            skipButton.disabled = true;
-            skipButton.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Continuing...';
-            await advanceToStep(3, { templateAlreadyDuplicated: true });
-            setTimeout(() => {
-              triggerAutoDetection();
-            }, 500);
-          });
-        }
-      } else {
-        // Template not found, show manual duplication UI
-        console.log('⚠️ Template not yet detected, showing manual duplication option');
-        checkingDiv.classList.add('hidden');
-        manualDiv.classList.remove('hidden');
-
-        // Setup manual duplication flow
-        const checkbox = section.querySelector('#step2-confirm');
-        const button = section.querySelector('#step2-continue');
-
-        if (checkbox && button) {
-          checkbox.addEventListener('change', () => {
-            button.disabled = !checkbox.checked;
-          });
-
-          button.addEventListener('click', async () => {
-            button.disabled = true;
-            button.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Starting verification...';
-            await advanceToStep(3, { manualConfirm: true });
-            setTimeout(() => {
-              triggerAutoDetection();
-            }, 500);
-          });
-        }
-      }
-    } catch (error) {
-      // If check fails, fall back to manual duplication UI
-      console.warn('⚠️ Failed to check for existing template, showing manual UI:', error);
-      checkingDiv.classList.add('hidden');
-      manualDiv.classList.remove('hidden');
-
-      // Setup manual duplication flow (fallback)
-      const checkbox = section.querySelector('#step2-confirm');
-      const button = section.querySelector('#step2-continue');
-
-      if (checkbox && button) {
-        checkbox.addEventListener('change', () => {
-          button.disabled = !checkbox.checked;
+        const response = await fetch('/api/setup/detect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
         });
 
-        button.addEventListener('click', async () => {
-          button.disabled = true;
-          button.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Starting verification...';
-          await advanceToStep(3, { manualConfirm: true });
-          setTimeout(() => {
-            triggerAutoDetection();
-          }, 500);
-        });
+        const data = await response.json();
+
+        if (response.ok && data.detection && data.detection.sageStocksPage) {
+          // Template found! Show success UI
+          console.log('✅ Template detected! OAuth duplication complete.');
+          checkingDiv.classList.add('hidden');
+          alreadyDoneDiv.classList.remove('hidden');
+
+          // Setup continue button
+          if (skipButton) {
+            skipButton.addEventListener('click', async () => {
+              skipButton.disabled = true;
+              skipButton.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Continuing...';
+              await advanceToStep(3, { templateAlreadyDuplicated: true });
+              setTimeout(() => {
+                triggerAutoDetection();
+              }, 500);
+            });
+          }
+          return true; // Success
+        } else {
+          // Template not found yet
+          retryCount++;
+
+          if (retryCount < MAX_RETRIES) {
+            // Update checking message with retry count
+            const checkingMessage = checkingDiv.querySelector('p');
+            if (checkingMessage) {
+              checkingMessage.textContent = `Waiting for template duplication to complete... (${retryCount * 5}s elapsed)`;
+            }
+
+            // Retry after delay
+            console.log(`⏳ Template not found yet, retrying in ${RETRY_DELAY / 1000}s...`);
+            setTimeout(() => checkForTemplate(), RETRY_DELAY);
+          } else {
+            // Max retries reached - show manual fallback
+            console.warn('⚠️ Max retries reached, template not detected. Showing manual UI.');
+            checkingDiv.classList.add('hidden');
+            manualDiv.classList.remove('hidden');
+
+            // Setup manual duplication flow (last resort)
+            const checkbox = section.querySelector('#step2-confirm');
+            const button = section.querySelector('#step2-continue');
+
+            if (checkbox && button) {
+              checkbox.addEventListener('change', () => {
+                button.disabled = !checkbox.checked;
+              });
+
+              button.addEventListener('click', async () => {
+                button.disabled = true;
+                button.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Starting verification...';
+                await advanceToStep(3, { manualConfirm: true });
+                setTimeout(() => {
+                  triggerAutoDetection();
+                }, 500);
+              });
+            }
+          }
+          return false; // Not found yet
+        }
+      } catch (error) {
+        console.error('❌ Error checking for template:', error);
+        retryCount++;
+
+        if (retryCount < MAX_RETRIES) {
+          // Retry on error
+          setTimeout(() => checkForTemplate(), RETRY_DELAY);
+        } else {
+          // Max retries reached - show manual fallback
+          console.warn('⚠️ Detection failed after max retries. Showing manual UI.');
+          checkingDiv.classList.add('hidden');
+          manualDiv.classList.remove('hidden');
+
+          // Setup manual duplication flow (error fallback)
+          const checkbox = section.querySelector('#step2-confirm');
+          const button = section.querySelector('#step2-continue');
+
+          if (checkbox && button) {
+            checkbox.addEventListener('change', () => {
+              button.disabled = !checkbox.checked;
+            });
+
+            button.addEventListener('click', async () => {
+              button.disabled = true;
+              button.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Starting verification...';
+              await advanceToStep(3, { manualConfirm: true });
+              setTimeout(() => {
+                triggerAutoDetection();
+              }, 500);
+            });
+          }
+        }
       }
     }
+
+    // Start checking for template
+    checkForTemplate();
   }, 0);
 
   return section;
