@@ -320,26 +320,15 @@ function renderStepContent() {
       container.appendChild(createStep2Content());
       break;
     case 3:
-      // Step 3 is "Run First Analysis" - redirect to analyze page
-      // Setup is complete at this point (workspace created, databases detected & saved)
-      console.log('✅ Setup complete! Redirecting to analyze page...');
-
-      // Mark step 3 as complete before redirecting
-      if (!currentState.completedSteps.includes(3)) {
-        currentState.completedSteps.push(3);
-      }
-      currentState.setupComplete = true;
-
-      // Redirect to analyze page
-      window.location.href = '/analyze.html';
+      // Step 3: Run first analysis on the setup page
+      container.appendChild(createStep3Content());
       break;
     case 4:
     case 5:
     case 6:
       // Legacy steps from old 6-step flow - should not be reached
-      // If somehow reached, redirect to analyze page
-      console.warn(`Legacy step ${currentState.currentStep} reached, redirecting to analyze...`);
-      window.location.href = '/analyze.html';
+      console.warn(`Legacy step ${currentState.currentStep} reached, showing step 3...`);
+      container.appendChild(createStep3Content());
       break;
   }
 }
@@ -669,326 +658,10 @@ function createStep2Content() {
 }
 
 // ============================================================================
-// Step 3: Setup Verification (Auto-Detection)
+// Step 3: Run First Analysis
 // ============================================================================
 
 function createStep3Content() {
-  const section = document.createElement('div');
-  section.className = 'slide-in';
-  section.innerHTML = `
-    <div id="step3-container" class="mb-6 p-6 rounded-lg border bg-yellow-50 border-yellow-200">
-      <div class="flex items-start">
-        <div class="text-3xl mr-4">🔍</div>
-        <div class="flex-1">
-          <h3 class="font-bold text-gray-900 text-xl mb-2">Step 3: Verifying Your Setup</h3>
-          <div id="step3-loading" class="text-center py-8">
-            <div class="inline-block spinner mx-auto" style="width: 48px; height: 48px; border: 4px solid #F59E0B; border-top-color: transparent; border-radius: 50%;"></div>
-            <p class="text-gray-700 font-medium mt-4">Searching your workspace for databases...</p>
-            <p class="text-sm text-gray-600 mt-2">This takes about 30 seconds. Don't worry, we're only reading — no changes yet.</p>
-          </div>
-          <div id="step3-results" class="hidden">
-            <!-- Results will be populated here -->
-          </div>
-          <div id="step3-manual" class="hidden">
-            <!-- Manual input fallback will be shown here -->
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-
-  return section;
-}
-
-async function triggerAutoDetection() {
-  console.log('🔍 Starting auto-detection...');
-
-  try {
-    const response = await fetch('/api/setup/detect', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || 'Auto-detection failed');
-    }
-
-    console.log('✓ Auto-detection complete:', data);
-
-    if (data.alreadySetup) {
-      // Already setup, advance to step 4
-      await advanceToStep(4);
-      return;
-    }
-
-    if (data.detection.needsManual) {
-      // Partial detection - show manual fallback
-      showManualFallback(data.detection);
-    } else {
-      // Success - show results for confirmation
-      showDetectionResults(data.detection);
-    }
-  } catch (error) {
-    console.error('❌ Auto-detection failed:', error);
-    showError(`Auto-detection failed: ${error.message}. Please enter your database IDs manually.`);
-    showManualFallback(null);
-  }
-}
-
-function showDetectionResults(detection) {
-  const loading = document.getElementById('step3-loading');
-  const results = document.getElementById('step3-results');
-
-  if (!loading || !results) return;
-
-  loading.classList.add('hidden');
-  results.classList.remove('hidden');
-
-  results.innerHTML = `
-    <div class="space-y-3 mb-6">
-      <div class="p-4 bg-green-50 border-2 border-green-200 rounded-lg">
-        <div class="flex items-center gap-3">
-          <span class="text-green-600 text-2xl">✓</span>
-          <div class="flex-1">
-            <div class="font-medium text-gray-900">Stock Analyses Database</div>
-            <div class="text-sm text-gray-600">${detection.stockAnalysesDb.title}</div>
-          </div>
-          <span class="text-xs px-3 py-1 bg-green-100 text-green-800 rounded-full font-medium">${detection.stockAnalysesDb.confidence}</span>
-        </div>
-      </div>
-      <div class="p-4 bg-green-50 border-2 border-green-200 rounded-lg">
-        <div class="flex items-center gap-3">
-          <span class="text-green-600 text-2xl">✓</span>
-          <div class="flex-1">
-            <div class="font-medium text-gray-900">Stock History Database</div>
-            <div class="text-sm text-gray-600">${detection.stockHistoryDb.title}</div>
-          </div>
-          <span class="text-xs px-3 py-1 bg-green-100 text-green-800 rounded-full font-medium">${detection.stockHistoryDb.confidence}</span>
-        </div>
-      </div>
-      <div class="p-4 bg-green-50 border-2 border-green-200 rounded-lg">
-        <div class="flex items-center gap-3">
-          <span class="text-green-600 text-2xl">✓</span>
-          <div class="flex-1">
-            <div class="font-medium text-gray-900">Sage Stocks Page</div>
-            <div class="text-sm text-gray-600">${detection.sageStocksPage.title}</div>
-          </div>
-          <span class="text-xs px-3 py-1 bg-green-100 text-green-800 rounded-full font-medium">${detection.sageStocksPage.confidence}</span>
-        </div>
-      </div>
-    </div>
-    <button
-      id="step3-confirm"
-      class="w-full px-6 py-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl"
-    >
-      ✓ Confirm and Continue
-    </button>
-  `;
-
-  // Setup confirm button
-  const confirmBtn = results.querySelector('#step3-confirm');
-  if (confirmBtn) {
-    confirmBtn.addEventListener('click', async () => {
-      confirmBtn.disabled = true;
-      confirmBtn.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Saving...';
-
-      try {
-        const response = await fetch('/api/setup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            stockAnalysesDbId: detection.stockAnalysesDb.id,
-            stockHistoryDbId: detection.stockHistoryDb.id,
-            sageStocksPageId: detection.sageStocksPage.id,
-          }),
-        });
-
-        const data = await response.json();
-
-        if (!response.ok || !data.success) {
-          throw new Error(data.error || 'Setup failed');
-        }
-
-        // Success! Advance to step 4
-        await advanceToStep(4);
-      } catch (error) {
-        confirmBtn.disabled = false;
-        confirmBtn.innerHTML = '✓ Confirm and Continue';
-        showError(`Failed to save setup: ${error.message}`);
-      }
-    });
-  }
-}
-
-function showManualFallback(partialDetection) {
-  const loading = document.getElementById('step3-loading');
-  const manual = document.getElementById('step3-manual');
-
-  if (!loading || !manual) return;
-
-  loading.classList.add('hidden');
-  manual.classList.remove('hidden');
-
-  manual.innerHTML = `
-    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded">
-      <p class="font-medium text-yellow-900 mb-1">We couldn't auto-detect all your databases</p>
-      <p class="text-sm text-yellow-800">This usually happens if you renamed them. No problem — just paste the URLs below:</p>
-    </div>
-    <div class="space-y-4 mb-6">
-      <div>
-        <label class="block text-sm font-medium mb-2 text-gray-700">Stock Analyses Database ID or URL</label>
-        <input
-          type="text"
-          id="manual-analyses"
-          placeholder="Paste database URL or ID here"
-          value="${partialDetection?.stockAnalysesDb?.id || ''}"
-          class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-        />
-      </div>
-      <div>
-        <label class="block text-sm font-medium mb-2 text-gray-700">Stock History Database ID or URL</label>
-        <input
-          type="text"
-          id="manual-history"
-          placeholder="Paste database URL or ID here"
-          value="${partialDetection?.stockHistoryDb?.id || ''}"
-          class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-        />
-      </div>
-      <div>
-        <label class="block text-sm font-medium mb-2 text-gray-700">Sage Stocks Page ID or URL</label>
-        <input
-          type="text"
-          id="manual-page"
-          placeholder="Paste page URL or ID here"
-          value="${partialDetection?.sageStocksPage?.id || ''}"
-          class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-        />
-      </div>
-    </div>
-    <button
-      id="manual-submit"
-      class="w-full px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl"
-    >
-      Save Configuration
-    </button>
-    <div id="manual-errors" class="hidden mt-4"></div>
-  `;
-
-  // Setup manual submit
-  const submitBtn = manual.querySelector('#manual-submit');
-  if (submitBtn) {
-    submitBtn.addEventListener('click', async () => {
-      const analysesInput = document.getElementById('manual-analyses');
-      const historyInput = document.getElementById('manual-history');
-      const pageInput = document.getElementById('manual-page');
-
-      const stockAnalysesDbId = extractNotionId(analysesInput.value);
-      const stockHistoryDbId = extractNotionId(historyInput.value);
-      const sageStocksPageId = extractNotionId(pageInput.value);
-
-      if (!stockAnalysesDbId || !stockHistoryDbId || !sageStocksPageId) {
-        showManualError('Please fill in all fields');
-        return;
-      }
-
-      submitBtn.disabled = true;
-      submitBtn.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Validating...';
-
-      try {
-        const response = await fetch('/api/setup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            stockAnalysesDbId,
-            stockHistoryDbId,
-            sageStocksPageId,
-          }),
-        });
-
-        const data = await response.json();
-
-        if (!response.ok || !data.success) {
-          if (data.errors) {
-            showManualErrors(data.errors);
-          } else {
-            throw new Error(data.error || 'Validation failed');
-          }
-          submitBtn.disabled = false;
-          submitBtn.innerHTML = 'Save Configuration';
-          return;
-        }
-
-        // Success! Advance to step 4
-        await advanceToStep(4);
-      } catch (error) {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = 'Save Configuration';
-        showManualError(`Failed to save setup: ${error.message}`);
-      }
-    });
-  }
-}
-
-function extractNotionId(urlOrId) {
-  if (!urlOrId) return '';
-  urlOrId = urlOrId.trim();
-
-  // If it's already a 32-char ID, return it
-  const idPattern = /^[a-f0-9]{32}$/i;
-  if (idPattern.test(urlOrId.replace(/-/g, ''))) {
-    return urlOrId.replace(/-/g, '');
-  }
-
-  // Extract from URL
-  const urlMatch = urlOrId.match(/[a-f0-9]{32}/i);
-  if (urlMatch) {
-    return urlMatch[0];
-  }
-
-  const urlWithDashesMatch = urlOrId.match(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i);
-  if (urlWithDashesMatch) {
-    return urlWithDashesMatch[0].replace(/-/g, '');
-  }
-
-  return urlOrId;
-}
-
-function showManualError(message) {
-  showManualErrors([{ field: 'Error', message }]);
-}
-
-function showManualErrors(errors) {
-  const errorsDiv = document.getElementById('manual-errors');
-  if (!errorsDiv) return;
-
-  errorsDiv.innerHTML = `
-    <div class="bg-red-50 border-l-4 border-red-400 p-4 rounded">
-      <p class="font-medium text-red-800 mb-2">Validation errors:</p>
-      <ul class="text-sm text-red-700 space-y-2">
-        ${errors.map(error => `
-          <li class="flex items-start gap-2">
-            <span class="flex-shrink-0">•</span>
-            <div>
-              <strong>${error.field}:</strong> ${error.message}
-              ${error.helpUrl ? `<br><a href="${error.helpUrl}" target="_blank" class="text-blue-600 hover:text-blue-700 underline text-xs">Learn more →</a>` : ''}
-            </div>
-          </li>
-        `).join('')}
-      </ul>
-    </div>
-  `;
-
-  errorsDiv.classList.remove('hidden');
-}
-
-// ============================================================================
-// Step 4: Run First Analysis
-// ============================================================================
-
-function createStep4Content() {
   const section = document.createElement('div');
   section.className = 'slide-in';
   section.innerHTML = `
@@ -996,9 +669,9 @@ function createStep4Content() {
       <div class="flex items-start">
         <div class="text-3xl mr-4">📊</div>
         <div class="flex-1">
-          <h3 class="font-bold text-gray-900 text-xl mb-2">Step 4: Run Your First Analysis</h3>
+          <h3 class="font-bold text-gray-900 text-xl mb-2">Step 3 of 3: Run Your First Analysis</h3>
           <p class="text-gray-700 mb-4">
-            Let's analyze your first stock! Enter any ticker symbol (like AAPL, TSLA, or GOOGL) and we'll generate a comprehensive analysis in your Notion workspace.
+            Your workspace is ready! Enter any ticker symbol (like AAPL, TSLA, or GOOGL) and we'll generate a comprehensive analysis in your Notion workspace.
           </p>
           <div class="mb-4">
             <label class="block text-sm font-medium mb-2 text-gray-700">Enter Ticker Symbol</label>
@@ -1007,7 +680,7 @@ function createStep4Content() {
               id="ticker-input"
               placeholder="e.g., AAPL"
               class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all uppercase"
-              maxlength="5"
+              maxlength="10"
             />
           </div>
           <button
@@ -1066,10 +739,16 @@ async function runFirstAnalysis(ticker) {
   `;
 
   try {
+    // Detect user's timezone automatically
+    const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
     const response = await fetch('/api/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ticker }),
+      body: JSON.stringify({
+        ticker,
+        timezone: userTimezone,
+      }),
     });
 
     const data = await response.json();
@@ -1089,28 +768,57 @@ async function runFirstAnalysis(ticker) {
       origin: { y: 0.6 }
     });
 
+    // Mark step 3 as complete and setup as complete
+    if (!currentState.completedSteps.includes(3)) {
+      currentState.completedSteps.push(3);
+      renderSubwayMap();
+    }
+    currentState.setupComplete = true;
+
+    // Build Notion URLs
+    const analysisUrl = data.analysesPageId ? `https://notion.so/${data.analysesPageId.replace(/-/g, '')}` : null;
+    const workspaceUrl = data.sageStocksPageId ? `https://notion.so/${data.sageStocksPageId.replace(/-/g, '')}` : null;
+
     statusDiv.innerHTML = `
-      <div class="p-4 bg-green-50 border-l-4 border-green-400 rounded">
-        <p class="text-green-800 font-medium mb-2">🎉 Analysis complete for ${ticker}!</p>
-        <p class="text-sm text-green-700 mb-3">Your analysis is ready in Notion. Click below to view it:</p>
-        <button
-          id="view-analysis"
-          class="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl"
-        >
-          👁️ View Analysis in Notion
-        </button>
+      <div class="p-6 bg-green-50 border-2 border-green-300 rounded-lg">
+        <p class="text-green-800 font-bold text-lg mb-3">🎉 Setup Complete!</p>
+        <p class="text-sm text-green-700 mb-4">
+          Your first analysis for <strong>${ticker}</strong> is ready in Notion. You can now access your workspace anytime.
+        </p>
+
+        <div class="flex flex-col sm:flex-row gap-3 mb-4">
+          ${analysisUrl ? `
+            <a
+              href="${analysisUrl}"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-block bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200 text-center"
+            >
+              📄 View This Analysis →
+            </a>
+          ` : ''}
+          ${workspaceUrl ? `
+            <a
+              href="${workspaceUrl}"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200 text-center"
+            >
+              📊 View Sage Stocks Workspace →
+            </a>
+          ` : ''}
+        </div>
+
+        <div class="text-sm text-gray-700 bg-white p-4 rounded-lg border border-green-200">
+          <p class="font-medium mb-2">What's next?</p>
+          <ul class="ml-4 list-disc space-y-1">
+            <li>Access your Stock Analyses and History databases</li>
+            <li>View AI-generated insights and recommendations</li>
+            <li>Run more analyses from the <a href="/analyze.html" class="text-blue-600 hover:underline">analyzer page</a></li>
+          </ul>
+        </div>
       </div>
     `;
-
-    // Setup view button
-    const viewBtn = statusDiv.querySelector('#view-analysis');
-    if (viewBtn && data.analysesPageId) {
-      const notionUrl = `https://notion.so/${data.analysesPageId.replace(/-/g, '')}`;
-      viewBtn.addEventListener('click', () => {
-        window.open(notionUrl, '_blank');
-        advanceToStep(5, { ticker, analysisUrl: notionUrl });
-      });
-    }
 
   } catch (error) {
     console.error('❌ Analysis failed:', error);
