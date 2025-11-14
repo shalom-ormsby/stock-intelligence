@@ -133,6 +133,7 @@ const DEFAULT_RETRY_OPTIONS: RetryOptions = {
  * Retryable errors:
  * - APITimeoutError - API took too long, might work next time
  * - NotionAPIError with 429, 500, 502, 503, 504 - transient server errors
+ * - Notion service_unavailable errors - Notion API is temporarily down
  * - Network errors (ECONNRESET, ETIMEDOUT, ENOTFOUND)
  *
  * Non-retryable errors:
@@ -159,6 +160,16 @@ function isRetryableError(error: any): boolean {
   if (error instanceof NotionAPIError) {
     const retryableStatuses = [429, 500, 502, 503, 504];
     return retryableStatuses.includes(error.statusCode);
+  }
+
+  // Retry Notion service unavailable errors (from Notion SDK)
+  const errorMessage = error?.message || String(error);
+  if (
+    errorMessage.includes('NOTION_SERVICE_UNAVAILABLE') ||
+    errorMessage.includes('service_unavailable') ||
+    errorMessage.includes('NOTION_RATE_LIMITED')
+  ) {
+    return true;
   }
 
   // Retry network errors

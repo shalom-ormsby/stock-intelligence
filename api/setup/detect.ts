@@ -11,6 +11,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { validateSession, getUserByEmail, decryptToken, updateSetupProgress, updateUserDatabaseIds } from '../../lib/auth';
 import { autoDetectTemplate } from '../../lib/template-detection';
 import { log, LogLevel } from '../../lib/logger';
+import { withRetry } from '../../lib/utils';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -24,11 +25,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    // Get user data
-    const user = await getUserByEmail(session.email);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
+    // Get user data with retry logic for Notion service outages
+    const user = await withRetry(
+      async () => {
+        const userData = await getUserByEmail(session.email);
+        if (!userData) {
+          throw new Error('USER_NOT_FOUND');
+        }
+        return userData;
+      },
+      'getUserByEmail for setup detection',
+      { maxAttempts: 3, initialDelayMs: 2000, maxDelayMs: 10000 }
+    );
 
     // Check if already set up
     if (user.stockAnalysesDbId && user.stockHistoryDbId && user.sageStocksPageId) {
@@ -122,29 +130,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
     });
   } catch (error: any) {
+    const errorMessage = error.message || String(error);
+
+    // Check for specific error types
+    const isNotionServiceUnavailable = errorMessage.includes('NOTION_SERVICE_UNAVAILABLE');
+    const isNotionRateLimited = errorMessage.includes('NOTION_RATE_LIMITED');
+    const isUserNotFound = errorMessage === 'USER_NOT_FOUND';
+
     log(LogLevel.ERROR, 'Auto-detection error', {
-      error: error.message,
+      error: errorMessage,
       stack: error.stack,
+      isNotionServiceUnavailable,
+      isNotionRateLimited,
+      isUserNotFound,
     });
+
+    // User-friendly error messages
+    let userMessage: string;
+    let errorCode: string;
+    let statusCode = 500;
+
+    if (isNotionServiceUnavailable) {
+      userMessage = "Notion's API is temporarily unavailable. This is a temporary issue on Notion's end. Please wait a few minutes and try again.";
+      errorCode = 'NOTION_SERVICE_UNAVAILABLE';
+      statusCode = 503;
+    } else if (isNotionRateLimited) {
+      userMessage = "We're sending too many requests to Notion. Please wait a minute and try again.";
+      errorCode = 'NOTION_RATE_LIMITED';
+      statusCode = 429;
+    } else if (isUserNotFound) {
+      userMessage = 'User account not found. Please complete the OAuth flow first.';
+      errorCode = 'USER_NOT_FOUND';
+      statusCode = 404;
+    } else {
+      userMessage = 'Auto-detection failed. Please try again or contact support if the issue persists.';
+      errorCode = 'DETECTION_ERROR';
+    }
 
     // Mark error in setup progress
     try {
       await updateSetupProgress(req, {
         errors: [{
           step: 3,
-          message: error.message || 'Auto-detection failed',
-          code: 'DETECTION_ERROR',
+          message: userMessage,
+          code: errorCode,
         }],
       });
     } catch (updateError) {
       console.warn('⚠️ Failed to update setup progress with error (non-critical):', updateError);
     }
 
-    return res.status(500).json({
+    return res.status(statusCode).json({
       success: false,
-      error: 'Auto-detection failed',
-      details: error.message,
-      needsManual: true,
+      error: userMessage,
+      errorCode,
+      details: errorMessage,
+      needsManual: !isNotionServiceUnavailable, // Don't suggest manual setup for temporary outages
     });
   }
 }

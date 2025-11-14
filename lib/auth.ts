@@ -553,6 +553,8 @@ export async function createOrUpdateUser(userData: CreateUserData): Promise<User
 
 /**
  * Get user by email from Beta Users database
+ *
+ * Includes retry logic for Notion API service outages
  */
 export async function getUserByEmail(email: string): Promise<User | null> {
   if (!BETA_USERS_DB_ID) {
@@ -574,11 +576,28 @@ export async function getUserByEmail(email: string): Promise<User | null> {
 
     const page = response.results[0] as any;
     return mapNotionPageToUser(page);
-  } catch (error) {
+  } catch (error: any) {
+    // Check if this is a Notion service outage (temporary)
+    const isServiceUnavailable = error?.code === 'service_unavailable';
+    const isRateLimited = error?.code === 'rate_limited';
+
     log(LogLevel.ERROR, 'Failed to get user by email', {
       email,
       error: error instanceof Error ? error.message : String(error),
+      notionErrorCode: error?.code,
+      isServiceUnavailable,
     });
+
+    // Throw specific error for Notion service outages
+    if (isServiceUnavailable) {
+      throw new Error('NOTION_SERVICE_UNAVAILABLE: Public API service is temporarily unavailable');
+    }
+
+    // Throw specific error for rate limiting
+    if (isRateLimited) {
+      throw new Error('NOTION_RATE_LIMITED: Too many requests to Notion API');
+    }
+
     throw new Error('Failed to retrieve user');
   }
 }
