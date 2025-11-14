@@ -401,57 +401,61 @@ function createStep2Content() {
       <div class="flex items-start">
         <div class="text-3xl mr-4">📄</div>
         <div class="flex-1">
-          <h3 class="font-bold text-gray-900 text-xl mb-2">Step 2: Duplicate the Notion Template</h3>
+          <h3 class="font-bold text-gray-900 text-xl mb-2">Step 2: Template Duplication</h3>
 
           <div id="step2-checking" class="text-center py-4">
             <div class="inline-block spinner mx-auto mb-3" style="width: 32px; height: 32px; border: 3px solid #10B981; border-top-color: transparent; border-radius: 50%;"></div>
-            <p class="text-gray-700 font-medium">Checking if you already duplicated the template during sign-in...</p>
+            <p id="step2-status" class="text-gray-700 font-medium mb-2">Looking for your Sage Stocks template...</p>
+            <p id="step2-elapsed" class="text-sm text-gray-500"></p>
+            <div class="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p class="text-sm text-blue-800">
+                💡 <strong>Note:</strong> The template should duplicate automatically during sign-in. This usually takes 10-30 seconds.
+              </p>
+            </div>
           </div>
 
-          <div id="step2-already-done" class="hidden">
+          <div id="step2-found" class="hidden">
             <div class="p-4 bg-green-100 border-2 border-green-300 rounded-lg mb-4">
-              <p class="text-green-800 font-medium mb-2">✅ Template Already Duplicated!</p>
-              <p class="text-sm text-green-700">We detected that you already duplicated the Sage Stocks template during sign-in. No need to duplicate again!</p>
+              <p class="text-green-800 font-medium mb-2">✅ Template Found!</p>
+              <p class="text-sm text-green-700">Your Sage Stocks template is ready in your Notion workspace.</p>
             </div>
             <button
-              id="step2-skip"
+              id="step2-continue-found"
               class="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl"
             >
               Continue to Verification →
             </button>
           </div>
 
-          <div id="step2-manual" class="hidden">
-            <p class="text-gray-700 mb-4">
-              Get your own copy of the Sage Stocks template. This includes the Stock Analyses database, Stock History database, and the Sage Stocks page.
-            </p>
-            <div class="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <p class="text-sm text-yellow-800 font-medium">
-                ⚠️ <strong>Did you duplicate during sign-in?</strong> If you already duplicated the template when you signed in with Notion, click "I already duplicated" below to skip this step.
-              </p>
+          <div id="step2-not-found" class="hidden">
+            <div class="p-4 bg-yellow-100 border-2 border-yellow-300 rounded-lg mb-4">
+              <p class="text-yellow-800 font-medium mb-2">⚠️ Template Not Found Yet</p>
+              <p class="text-sm text-yellow-700 mb-2">We couldn't find the Sage Stocks template in your workspace. This could mean:</p>
+              <ul class="text-sm text-yellow-700 ml-6 list-disc">
+                <li>The automatic duplication is still in progress (keep waiting)</li>
+                <li>You need to duplicate it manually using the button below</li>
+              </ul>
             </div>
+            <p class="text-gray-700 mb-4">
+              Click the button below to open the template and duplicate it to your Notion workspace:
+            </p>
             <a
               href="${TEMPLATE_URL}"
               target="_blank"
               rel="noopener noreferrer"
               class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl mb-4"
+              onclick="window.step2ManualClick = true;"
             >
-              📄 Duplicate Template <span class="ml-2">→</span>
+              📄 Open Template to Duplicate <span class="ml-2">→</span>
             </a>
             <p class="text-sm text-gray-600 mb-4">
-              <strong>Important:</strong> When duplicating, make sure the template goes to your workspace (not a private page).
+              <strong>After duplicating:</strong> Come back to this page and click "Check Again" below. We'll automatically detect it.
             </p>
-            <p class="text-sm text-gray-600 mb-4">After duplicating (or if you already did), confirm below:</p>
-            <div class="flex items-center gap-3 mb-4">
-              <input type="checkbox" id="step2-confirm" class="w-5 h-5 text-green-600 rounded focus:ring-2 focus:ring-green-500" />
-              <label for="step2-confirm" class="text-gray-700 font-medium cursor-pointer">I've duplicated the template (or already duplicated during sign-in)</label>
-            </div>
             <button
-              id="step2-continue"
-              disabled
-              class="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              id="step2-recheck"
+              class="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-all"
             >
-              Continue to Verification
+              🔄 Check Again
             </button>
           </div>
         </div>
@@ -461,20 +465,28 @@ function createStep2Content() {
 
   // Setup event listeners after render
   setTimeout(async () => {
-    // OAuth with template_id ALWAYS duplicates the template in background
-    // We need to wait for it to appear, with retries
     const checkingDiv = section.querySelector('#step2-checking');
-    const alreadyDoneDiv = section.querySelector('#step2-already-done');
-    const manualDiv = section.querySelector('#step2-manual');
-    const skipButton = section.querySelector('#step2-skip');
+    const foundDiv = section.querySelector('#step2-found');
+    const notFoundDiv = section.querySelector('#step2-not-found');
+    const statusText = section.querySelector('#step2-status');
+    const elapsedText = section.querySelector('#step2-elapsed');
 
-    const MAX_RETRIES = 12; // 12 retries = 60 seconds total
-    const RETRY_DELAY = 5000; // 5 seconds between retries
-    let retryCount = 0;
+    let checkCount = 0;
+    let startTime = Date.now();
+    let isChecking = true;
 
     async function checkForTemplate() {
+      if (!isChecking) return;
+
       try {
-        console.log(`🔍 Checking for template (attempt ${retryCount + 1}/${MAX_RETRIES})...`);
+        checkCount++;
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        console.log(`🔍 Checking for template (attempt #${checkCount}, ${elapsed}s elapsed)...`);
+
+        // Update elapsed time display
+        if (elapsedText) {
+          elapsedText.textContent = `Checking... (${elapsed}s elapsed)`;
+        }
 
         const response = await fetch('/api/setup/detect', {
           method: 'POST',
@@ -485,99 +497,86 @@ function createStep2Content() {
 
         if (response.ok && data.detection && data.detection.sageStocksPage) {
           // Template found! Show success UI
-          console.log('✅ Template detected! OAuth duplication complete.');
+          isChecking = false;
+          console.log('✅ Template detected!', data.detection);
           checkingDiv.classList.add('hidden');
-          alreadyDoneDiv.classList.remove('hidden');
+          foundDiv.classList.remove('hidden');
 
           // Setup continue button
-          if (skipButton) {
-            skipButton.addEventListener('click', async () => {
-              skipButton.disabled = true;
-              skipButton.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Continuing...';
-              await advanceToStep(3, { templateAlreadyDuplicated: true });
+          const continueButton = section.querySelector('#step2-continue-found');
+          if (continueButton) {
+            continueButton.addEventListener('click', async () => {
+              continueButton.disabled = true;
+              continueButton.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Continuing...';
+              await advanceToStep(3, { templateFound: true });
               setTimeout(() => {
                 triggerAutoDetection();
               }, 500);
             });
           }
-          return true; // Success
-        } else {
-          // Template not found yet
-          retryCount++;
-
-          if (retryCount < MAX_RETRIES) {
-            // Update checking message with retry count
-            const checkingMessage = checkingDiv.querySelector('p');
-            if (checkingMessage) {
-              checkingMessage.textContent = `Waiting for template duplication to complete... (${retryCount * 5}s elapsed)`;
-            }
-
-            // Retry after delay
-            console.log(`⏳ Template not found yet, retrying in ${RETRY_DELAY / 1000}s...`);
-            setTimeout(() => checkForTemplate(), RETRY_DELAY);
-          } else {
-            // Max retries reached - show manual fallback
-            console.warn('⚠️ Max retries reached, template not detected. Showing manual UI.');
-            checkingDiv.classList.add('hidden');
-            manualDiv.classList.remove('hidden');
-
-            // Setup manual duplication flow (last resort)
-            const checkbox = section.querySelector('#step2-confirm');
-            const button = section.querySelector('#step2-continue');
-
-            if (checkbox && button) {
-              checkbox.addEventListener('change', () => {
-                button.disabled = !checkbox.checked;
-              });
-
-              button.addEventListener('click', async () => {
-                button.disabled = true;
-                button.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Starting verification...';
-                await advanceToStep(3, { manualConfirm: true });
-                setTimeout(() => {
-                  triggerAutoDetection();
-                }, 500);
-              });
-            }
-          }
-          return false; // Not found yet
+          return;
         }
+
+        // Template not found yet
+        // Show "not found" UI after 45 seconds, but keep checking
+        if (elapsed >= 45 && checkingDiv && !checkingDiv.classList.contains('hidden')) {
+          console.log('⏰ 45 seconds elapsed, showing manual option while continuing to check...');
+          checkingDiv.classList.add('hidden');
+          notFoundDiv.classList.remove('hidden');
+
+          // Setup "Check Again" button
+          const recheckButton = section.querySelector('#step2-recheck');
+          if (recheckButton) {
+            recheckButton.addEventListener('click', () => {
+              recheckButton.disabled = true;
+              recheckButton.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Checking...';
+
+              // Immediately trigger another check
+              setTimeout(() => {
+                notFoundDiv.classList.add('hidden');
+                checkingDiv.classList.remove('hidden');
+                checkForTemplate();
+              }, 100);
+            });
+          }
+        }
+
+        // Schedule next check
+        // More aggressive polling: every 3 seconds for first minute, then every 5 seconds
+        const delay = elapsed < 60 ? 3000 : 5000;
+        console.log(`⏳ Template not found yet, checking again in ${delay / 1000}s...`);
+        setTimeout(() => checkForTemplate(), delay);
+
       } catch (error) {
         console.error('❌ Error checking for template:', error);
-        retryCount++;
 
-        if (retryCount < MAX_RETRIES) {
-          // Retry on error
-          setTimeout(() => checkForTemplate(), RETRY_DELAY);
-        } else {
-          // Max retries reached - show manual fallback
-          console.warn('⚠️ Detection failed after max retries. Showing manual UI.');
+        // Show error state after 45 seconds
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        if (elapsed >= 45) {
+          isChecking = false;
           checkingDiv.classList.add('hidden');
-          manualDiv.classList.remove('hidden');
+          notFoundDiv.classList.remove('hidden');
 
-          // Setup manual duplication flow (error fallback)
-          const checkbox = section.querySelector('#step2-confirm');
-          const button = section.querySelector('#step2-continue');
-
-          if (checkbox && button) {
-            checkbox.addEventListener('change', () => {
-              button.disabled = !checkbox.checked;
-            });
-
-            button.addEventListener('click', async () => {
-              button.disabled = true;
-              button.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Starting verification...';
-              await advanceToStep(3, { manualConfirm: true });
-              setTimeout(() => {
-                triggerAutoDetection();
-              }, 500);
+          // Setup "Check Again" button with retry logic
+          const recheckButton = section.querySelector('#step2-recheck');
+          if (recheckButton) {
+            recheckButton.addEventListener('click', () => {
+              isChecking = true;
+              startTime = Date.now();
+              checkCount = 0;
+              notFoundDiv.classList.add('hidden');
+              checkingDiv.classList.remove('hidden');
+              checkForTemplate();
             });
           }
+        } else {
+          // Retry on error
+          setTimeout(() => checkForTemplate(), 3000);
         }
       }
     }
 
-    // Start checking for template
+    // Start checking for template immediately
     checkForTemplate();
   }, 0);
 

@@ -105,6 +105,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       workspaceId,
     });
 
+    // v1.2.3 Diagnostic: Check if user has access to any pages (template should have been duplicated)
+    try {
+      const { Client } = await import('@notionhq/client');
+      const userNotion = new Client({ auth: accessToken });
+      const searchResults = await userNotion.search({
+        filter: { property: 'object', value: 'page' },
+        page_size: 10,
+      });
+
+      const pageCount = searchResults.results.length;
+      const sageStocksPage = searchResults.results.find((p: any) =>
+        p.object === 'page' &&
+        p.properties?.title?.title?.[0]?.plain_text?.includes('Sage Stocks')
+      );
+
+      log(LogLevel.INFO, 'Post-OAuth template check', {
+        totalPagesAccessible: pageCount,
+        sageStocksFound: !!sageStocksPage,
+        sageStocksId: sageStocksPage?.id,
+        templateIdWasSet: !!process.env.SAGE_STOCKS_TEMPLATE_ID,
+      });
+
+      if (!sageStocksPage && process.env.SAGE_STOCKS_TEMPLATE_ID) {
+        log(LogLevel.WARN, 'Template was NOT duplicated during OAuth despite template_id being set', {
+          templateId: process.env.SAGE_STOCKS_TEMPLATE_ID,
+          pagesFound: pageCount,
+        });
+      }
+    } catch (diagError) {
+      log(LogLevel.ERROR, 'Diagnostic search failed (non-critical)', {
+        error: diagError instanceof Error ? diagError.message : String(diagError),
+      });
+    }
+
     // Step 3: Create or update user in Beta Users database
     const user = await createOrUpdateUser({
       notionUserId: userId,

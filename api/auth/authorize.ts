@@ -41,9 +41,13 @@ export default async function handler(_req: VercelRequest, res: VercelResponse):
     // Template ID format: 32-char hex without dashes (e.g., ce9b3a07e96a41c3ac1cc2a99f92bd90)
     if (templateId) {
       authUrl.searchParams.set('template_id', templateId);
-      log(LogLevel.INFO, 'OAuth flow includes template_id', { templateId });
+      log(LogLevel.INFO, 'OAuth flow includes template_id', { templateId, fullUrl: authUrl.toString() });
     } else {
-      log(LogLevel.WARN, 'OAuth flow without template_id - falling back to integration settings');
+      log(LogLevel.ERROR, 'CRITICAL: SAGE_STOCKS_TEMPLATE_ID not set - template will NOT be duplicated automatically', {
+        hasClientId: !!clientId,
+        hasRedirectUri: !!redirectUri,
+        hasTemplateId: !!templateId
+      });
     }
 
     log(LogLevel.INFO, 'Redirecting to Notion OAuth', {
