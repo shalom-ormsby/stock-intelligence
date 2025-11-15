@@ -99,6 +99,110 @@ All development versions are documented below with full technical details.
 
 ---
 
+## [v1.2.3] - 2025-11-14
+
+### 🐛 Critical Bug Fix: Notion API Resilience in Setup Flow
+
+**Issue:** When Notion's API experienced a temporary service outage (`service_unavailable` error), the setup flow would fail catastrophically:
+
+1. **Symptom 1:** Setup detection would timeout after 10 minutes with confusing "this is unusual" message
+2. **Symptom 2:** Even worse - setup would appear to succeed, but the first analysis would fail with "Database not configured" error
+
+**Root Cause:**
+
+The system had **three critical vulnerabilities** when Notion's API was temporarily down:
+
+1. **No retry logic on getUserByEmail** ([lib/auth.ts:577-583](lib/auth.ts#L577-L583))
+   - Failed immediately on Notion outage instead of retrying
+   - Affected both setup detection and analysis endpoints
+   - Led to 10-minute timeout in setup flow
+
+2. **Silent failure of database ID save** ([api/setup/detect.ts:71-87](api/setup/detect.ts#L71-L87))
+   - When `updateUserDatabaseIds` failed, it was marked "non-critical" and swallowed
+   - Setup showed "success" but database IDs weren't saved to user record
+   - First analysis then failed because stockAnalysesDbId/stockHistoryDbId were missing
+   - **This was the silent killer** - user thought setup worked but it didn't
+
+3. **Generic error messages**
+   - Notion `service_unavailable` errors were logged but not differentiated
+   - Users saw "Failed to retrieve user" instead of "Notion API is temporarily down"
+
+**The Fix:**
+
+Added comprehensive retry logic and proper error propagation across the entire setup and analysis flow:
+
+1. **Enhanced error detection** ([lib/auth.ts:579-602](lib/auth.ts#L579-L602))
+   - `getUserByEmail` now detects and preserves Notion error codes
+   - Throws specific errors: `NOTION_SERVICE_UNAVAILABLE`, `NOTION_RATE_LIMITED`
+   - Enables retry logic to identify transient failures
+
+2. **Database ID save now uses retry logic** ([lib/auth.ts:706-728](lib/auth.ts#L706-L728))
+   - `updateUserDatabaseIds` preserves Notion error codes
+   - Allows retry wrapper to handle service outages
+
+3. **Retry logic recognizes Notion outages** ([lib/utils.ts:165-173](lib/utils.ts#L165-L173))
+   - `isRetryableError` now includes NOTION_SERVICE_UNAVAILABLE
+   - Exponential backoff with 3 attempts (2s, 4s, 8s delays)
+   - Total retry time: ~14 seconds instead of 10-minute timeout
+
+4. **Setup detection with retries** ([api/setup/detect.ts:28-39](api/setup/detect.ts#L28-L39))
+   - Wrapped `getUserByEmail` call with retry logic
+   - 3 attempts with exponential backoff
+   - Clearer error messages for Notion outages
+
+5. **Database ID save is now CRITICAL** ([api/setup/detect.ts:73-97](api/setup/detect.ts#L73-L97))
+   - Changed from "non-critical" to **required operation**
+   - Uses retry logic (3 attempts with backoff)
+   - Re-throws error if all retries fail - setup will not show "success" unless IDs are saved
+   - **This prevents the silent failure scenario**
+
+6. **Analysis endpoint protection** ([api/analyze.ts:151-161](api/analyze.ts#L151-L161))
+   - Also wrapped `getUserByEmail` with retry logic
+   - Prevents first analysis failures from Notion flakiness
+
+7. **User-friendly error messages** ([api/setup/detect.ts:145-180](api/setup/detect.ts#L145-L180))
+   - Notion outage: "Notion's API is temporarily unavailable. This is a temporary issue on Notion's end. Please wait a few minutes and try again." (HTTP 503)
+   - Rate limited: "We're sending too many requests to Notion. Please wait a minute and try again." (HTTP 429)
+   - Returns proper HTTP status codes for different failure types
+
+**Impact:**
+
+**Before:**
+- Notion API down → 10-minute timeout OR silent database ID failure → confusing error
+- User sees "Setup complete!" but first analysis fails
+- No way to recover without manual intervention
+
+**After:**
+- Notion API down → 3 automatic retries (~14 seconds total)
+- Database IDs **must** save or setup fails with clear error
+- User gets actionable error message: "Notion's API is temporarily unavailable..."
+- Setup only shows "success" when everything is truly configured
+- First analysis also protected with retry logic
+
+**Testing:**
+- ✅ TypeScript compilation passed
+- ✅ Retry logic properly integrated across 3 endpoints
+- ✅ Errors properly propagate with Notion error codes
+- ✅ Database ID save marked as critical operation
+
+**Future-Proofing Lesson:**
+
+When dealing with external APIs (especially Notion, which has occasional outages), always:
+1. **Preserve error codes** - Don't swallow specific errors with generic messages
+2. **Add retry logic to critical operations** - Service outages are temporary
+3. **Never mark critical operations as "non-critical"** - If the system can't work without it, it must succeed or fail explicitly
+4. **Fail fast with clear errors** - Don't let setup show "success" when it hasn't fully completed
+
+**Files Changed:**
+- `lib/auth.ts` - Error detection and preservation in getUserByEmail and updateUserDatabaseIds
+- `lib/utils.ts` - Retry logic recognizes Notion service outages
+- `api/setup/detect.ts` - Retry logic for getUserByEmail and updateUserDatabaseIds (now critical)
+- `api/analyze.ts` - Retry logic for getUserByEmail
+
+**Deployment:** Ready for immediate deployment to fix setup reliability issues
+
+---
+
 ## [v1.2.2] - 2025-11-14
 
 ### 🐛 Bug Fix: Duplicate Template Prevention

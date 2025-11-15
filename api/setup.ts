@@ -133,11 +133,11 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
     console.log('✓ Validation passed, storing configuration...');
 
     // Get Sage Stocks page URL
-    const notion = new Client({ auth: userToken });
+    const notion = new Client({ auth: userToken, notionVersion: '2025-09-03' });
     await notion.pages.retrieve({ page_id: sageStocksPageId });
 
     // Store in Beta Users database
-    const adminNotion = new Client({ auth: process.env.NOTION_API_KEY! });
+    const adminNotion = new Client({ auth: process.env.NOTION_API_KEY!, notionVersion: '2025-09-03' });
     await adminNotion.pages.update({
       page_id: user.id,
       properties: {

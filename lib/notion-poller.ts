@@ -75,7 +75,7 @@ export class NotionPoller {
   private isPolling = false;
 
   constructor(config: PollerConfig) {
-    this.client = new Client({ auth: config.apiKey });
+    this.client = new Client({ auth: config.apiKey, notionVersion: '2025-09-03' });
     this.stockAnalysesDbId = config.stockAnalysesDbId;
     this.pollInterval = config.pollInterval || 30;
     this.maxRetries = config.maxRetries || 3;

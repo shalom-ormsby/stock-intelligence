@@ -96,7 +96,7 @@ export async function collectStockRequests(
 
       // Decrypt user's OAuth token
       const userAccessToken = await decryptToken(user.accessToken);
-      const notion = new Client({ auth: userAccessToken });
+      const notion = new Client({ auth: userAccessToken, notionVersion: '2025-09-03' });
 
       // Query user's Stock Analyses database (user-specific DB ID)
       const response = await notion.databases.query({
@@ -491,7 +491,7 @@ async function broadcastToUser(
       await notionClient.syncToNotion(analysisData, false);
 
       // Set Status to "Complete" since analysis is done
-      const notion = new Client({ auth: subscriber.accessToken });
+      const notion = new Client({ auth: subscriber.accessToken, notionVersion: '2025-09-03' });
       try {
         await notion.pages.update({
           page_id: subscriber.pageId,
@@ -536,7 +536,7 @@ async function broadcastToUser(
 async function setAnalyzingStatus(subscribers: Subscriber[]): Promise<void> {
   const promises = subscribers.map(async subscriber => {
     try {
-      const notion = new Client({ auth: subscriber.accessToken });
+      const notion = new Client({ auth: subscriber.accessToken, notionVersion: '2025-09-03' });
 
       await notion.pages.update({
         page_id: subscriber.pageId,
@@ -565,7 +565,7 @@ async function broadcastError(
 
   const errorPromises = subscribers.map(async subscriber => {
     try {
-      const notion = new Client({ auth: subscriber.accessToken });
+      const notion = new Client({ auth: subscriber.accessToken, notionVersion: '2025-09-03' });
 
       // Try to update Status if it exists
       // Don't fail if the property doesn't exist

@@ -1,8 +1,8 @@
 # Sage Stocks Architecture
 
-*Last updated: November 12, 2025*
+*Last updated: November 14, 2025*
 
-**Development Version:** v1.2.0 (Complete) - Subway Map Setup & Multi-User Database IDs
+**Development Version:** v1.2.3 (Complete) - Notion API Resilience & Critical Operation Retry Logic
 **Template Version:** v0.1.0 (Beta) - Launching with Cohort 1
 **Production URL:** [https://sagestocks.vercel.app](https://sagestocks.vercel.app)
 **Status:** ✅ Live in Production - Fully Automated
@@ -2593,6 +2593,55 @@ LOG_LEVEL=INFO
 **Alternative Considered:**
 - ML-based scoring: Too complex, requires training data
 - Single-dimension scoring: Misses important signals
+
+---
+
+### 11. **Critical Operations Require Retry Logic**
+**Decision:** All critical Notion API operations use retry logic with exponential backoff (v1.2.3)
+
+**Rationale:**
+- Notion API has occasional service outages (`service_unavailable` errors)
+- Critical operations (like saving database IDs during setup) cannot silently fail
+- Retry logic converts transient failures into successful operations
+- Better UX than immediate failure or long timeouts
+
+**Implementation:**
+- `withRetry` utility with 3 attempts, exponential backoff (2s, 4s, 8s delays)
+- Total retry time: ~14 seconds (vs 10-minute timeout)
+- Preserve Notion error codes (`NOTION_SERVICE_UNAVAILABLE`, `NOTION_RATE_LIMITED`)
+- `isRetryableError` identifies transient vs permanent failures
+
+**Critical Operations Using Retry Logic:**
+1. **getUserByEmail** ([lib/auth.ts](lib/auth.ts))
+   - Used in setup detection and analysis endpoints
+   - Preserves specific Notion error codes for retry decisions
+   - Prevents immediate failure on temporary Notion outages
+
+2. **updateUserDatabaseIds** ([api/setup/detect.ts](api/setup/detect.ts))
+   - Saves stockAnalysesDbId, stockHistoryDbId, sageStocksPageId
+   - **Marked as CRITICAL** - setup fails if this doesn't succeed
+   - Prevents "silent failure" where setup shows success but analysis fails later
+
+**Key Learnings (v1.2.3 Bug Fix):**
+
+**Problem:** Setup would show "success" but first analysis would fail with "Database not configured"
+- Root cause: `updateUserDatabaseIds` was marked "non-critical" and silently failed during Notion outages
+- Database IDs weren't saved, but user saw "Setup complete!"
+
+**Solution:**
+1. Never mark critical operations as "non-critical" - if the system can't work without it, it must succeed or fail explicitly
+2. Preserve error codes - don't swallow specific errors with generic messages
+3. Add retry logic to all Notion API calls in critical paths
+4. Fail fast with clear errors - don't let operations appear successful when they haven't completed
+
+**Alternatives Considered:**
+- No retry logic: Too brittle, poor UX during Notion outages
+- Infinite retries: Risk of hanging requests
+- Circuit breaker: Too complex for current scale
+
+**Future Consideration:**
+- Circuit breaker pattern if Notion outages become more frequent
+- Health check endpoint to pre-validate Notion availability
 
 ---
 

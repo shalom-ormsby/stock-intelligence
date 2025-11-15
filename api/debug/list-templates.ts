@@ -34,7 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Decrypt user's OAuth token
     const userAccessToken = await decryptToken(user.accessToken);
-    const notion = new Client({ auth: userAccessToken });
+    const notion = new Client({ auth: userAccessToken, notionVersion: '2025-09-03' });
 
     console.log(`🔍 Searching workspace for ${user.email}...`);
 
