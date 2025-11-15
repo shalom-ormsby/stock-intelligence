@@ -69,20 +69,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     // v1.2.4: Auto-save database IDs when template is found
+    // CRITICAL: This must succeed or the first analysis will fail!
     if (!detection.needsManual && detection.sageStocksPage) {
+      // Store IDs for use in retry closure
+      const detectedIds = {
+        sageStocksPageId: detection.sageStocksPage.id,
+        stockAnalysesDbId: detection.stockAnalysesDb?.id,
+        stockHistoryDbId: detection.stockHistoryDb?.id,
+      };
+
       try {
-        await updateUserDatabaseIds(user.id, {
-          sageStocksPageId: detection.sageStocksPage.id,
-          stockAnalysesDbId: detection.stockAnalysesDb?.id,
-          stockHistoryDbId: detection.stockHistoryDb?.id,
-        });
+        await withRetry(
+          async () => {
+            await updateUserDatabaseIds(user.id, detectedIds);
+          },
+          'updateUserDatabaseIds after detection',
+          { maxAttempts: 3, initialDelayMs: 2000, maxDelayMs: 10000 }
+        );
         log(LogLevel.INFO, 'Auto-saved database IDs to user record', { userId: user.id });
       } catch (saveError) {
-        log(LogLevel.ERROR, 'Failed to auto-save database IDs (non-critical)', {
+        log(LogLevel.ERROR, 'Failed to auto-save database IDs - THIS IS CRITICAL', {
           userId: user.id,
           error: saveError instanceof Error ? saveError.message : String(saveError),
         });
-        // Don't fail the request if saving fails
+        // Re-throw the error - database IDs MUST be saved for analysis to work
+        throw new Error('Failed to save database configuration. Please try the setup again.');
       }
     }
 

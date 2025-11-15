@@ -26,7 +26,7 @@ import { createNotionClient, AnalysisData } from '../lib/notion-client';
 import { requireAuth as requireAuthSession, getUserByEmail, decryptToken, incrementUserAnalyses, updateSetupProgress, getSetupProgress } from '../lib/auth';
 import { validateStockData, validateTicker } from '../lib/validators';
 import { createTimer, logAnalysisStart, logAnalysisComplete, logAnalysisFailed } from '../lib/logger';
-import { formatErrorResponse, formatErrorForNotion } from '../lib/utils';
+import { formatErrorResponse, formatErrorForNotion, withRetry } from '../lib/utils';
 import { getErrorCode, getStatusCode, RateLimitError } from '../lib/errors';
 import { RateLimiter } from '../lib/rate-limiter';
 import { LLMFactory } from '../lib/llm/LLMFactory';
@@ -147,16 +147,18 @@ export default async function handler(
   let userAccessToken: string | null = null; // User's decrypted OAuth token
 
   try {
-    // Get user data and decrypt their OAuth token
-    user = await getUserByEmail(session.email);
-    if (!user) {
-      res.status(500).json({
-        success: false,
-        error: 'User not found',
-        details: 'User record not found in database',
-      });
-      return;
-    }
+    // Get user data and decrypt their OAuth token (with retry logic for Notion API outages)
+    user = await withRetry(
+      async () => {
+        const userData = await getUserByEmail(session.email);
+        if (!userData) {
+          throw new Error('USER_NOT_FOUND_IN_DATABASE');
+        }
+        return userData;
+      },
+      'getUserByEmail for analysis',
+      { maxAttempts: 3, initialDelayMs: 2000, maxDelayMs: 10000 }
+    );
 
     // Check if user is approved
     if (user.status !== 'approved') {

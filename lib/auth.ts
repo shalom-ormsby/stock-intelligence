@@ -703,11 +703,27 @@ export async function updateUserDatabaseIds(
       hasStockAnalyses: !!databaseIds.stockAnalysesDbId,
       hasStockHistory: !!databaseIds.stockHistoryDbId,
     });
-  } catch (error) {
+  } catch (error: any) {
+    // Check if this is a Notion service outage (temporary)
+    const isServiceUnavailable = error?.code === 'service_unavailable';
+    const isRateLimited = error?.code === 'rate_limited';
+
     log(LogLevel.ERROR, 'Failed to update user database IDs', {
       userId,
       error: error instanceof Error ? error.message : String(error),
+      notionErrorCode: error?.code,
+      isServiceUnavailable,
     });
+
+    // Preserve Notion error information for retry logic
+    if (isServiceUnavailable) {
+      throw new Error('NOTION_SERVICE_UNAVAILABLE: Failed to save database IDs - Notion API temporarily unavailable');
+    }
+
+    if (isRateLimited) {
+      throw new Error('NOTION_RATE_LIMITED: Failed to save database IDs - Too many requests to Notion');
+    }
+
     throw new Error('Failed to update database IDs');
   }
 }
