@@ -89,7 +89,7 @@ const SESSION_TTL = 24 * 60 * 60; // 24 hours in seconds
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || '';
 
 // Initialize Notion client for user management
-const notion = new Client({ auth: process.env.NOTION_API_KEY, notionVersion: '2025-09-03' });
+const notion = new Client({ auth: process.env.NOTION_API_KEY });
 
 // ============================================================================
 // Session Management (Redis)

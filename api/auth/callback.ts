@@ -108,7 +108,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     // v1.2.3 Diagnostic: Check if user has access to any pages (template should have been duplicated)
     try {
       const { Client } = await import('@notionhq/client');
-      const userNotion = new Client({ auth: accessToken, notionVersion: '2025-09-03' });
+      const userNotion = new Client({ auth: accessToken });
       const searchResults = await userNotion.search({
         filter: { property: 'object', value: 'page' },
         page_size: 10,

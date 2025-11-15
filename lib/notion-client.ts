@@ -99,7 +99,7 @@ export class NotionClient {
   private timezone: SupportedTimezone;
 
   constructor(config: NotionConfig) {
-    this.client = new Client({ auth: config.apiKey, notionVersion: '2025-09-03' });
+    this.client = new Client({ auth: config.apiKey });
     this.stockAnalysesDbId = config.stockAnalysesDbId;
     this.stockHistoryDbId = config.stockHistoryDbId;
     this.userId = config.userId;

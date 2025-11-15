@@ -68,7 +68,7 @@ export async function validateDatabaseConfig(
   notionToken: string,
   config: DatabaseConfig
 ): Promise<ValidationResult> {
-  const notion = new Client({ auth: notionToken, notionVersion: '2025-09-03' });
+  const notion = new Client({ auth: notionToken });
   const errors: ValidationError[] = [];
   const warnings: ValidationWarning[] = [];
   const details: ValidationDetails = {};

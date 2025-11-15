@@ -78,7 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Check Notion token validity
     let tokenValid = false;
     try {
-      const notion = new Client({ auth: userToken, notionVersion: '2025-09-03' });
+      const notion = new Client({ auth: userToken });
       await notion.users.me({});
       tokenValid = true;
     } catch (error: any) {

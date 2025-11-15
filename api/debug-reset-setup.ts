@@ -28,7 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('🔧 [DEBUG] Resetting setup for user:', session.email);
 
     // Clear setup fields in Beta Users database
-    const adminNotion = new Client({ auth: process.env.NOTION_API_KEY!, notionVersion: '2025-09-03' });
+    const adminNotion = new Client({ auth: process.env.NOTION_API_KEY! });
     await adminNotion.pages.update({
       page_id: user.id,
       properties: {
