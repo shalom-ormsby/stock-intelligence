@@ -71,7 +71,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       headers: {
         Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
         'Content-Type': 'application/json',
-        'Notion-Version': '2025-09-03',
+        'Notion-Version': '2022-06-28',
       },
       body: JSON.stringify({
         grant_type: 'authorization_code',
