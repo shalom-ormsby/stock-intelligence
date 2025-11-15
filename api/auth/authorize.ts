@@ -3,12 +3,16 @@
  *
  * Initiates the Notion OAuth flow by redirecting to Notion's authorization page.
  * User will be prompted to select which pages to share with the integration.
+ *
+ * v1.2.4 Bug Fix: Only include template_id for NEW users to prevent duplicate templates
+ * when existing users re-authenticate.
  */
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { log, LogLevel } from '../../lib/logger';
+import { validateSession, getUserByEmail } from '../../lib/auth';
 
-export default async function handler(_req: VercelRequest, res: VercelResponse): Promise<void> {
+export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
     const clientId = process.env.NOTION_OAUTH_CLIENT_ID;
     const redirectUri = process.env.NOTION_OAUTH_REDIRECT_URI;
@@ -36,23 +40,68 @@ export default async function handler(_req: VercelRequest, res: VercelResponse):
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('owner', 'user');
 
-    // Add template_id if configured (v1.2.1 - Fix for beta tester template duplication bug)
-    // This tells Notion which template to show during OAuth flow
-    // Template ID format: 32-char hex without dashes (e.g., ce9b3a07e96a41c3ac1cc2a99f92bd90)
-    if (templateId) {
+    // v1.2.4 Bug Fix: Check if user has already completed setup
+    // Only include template_id for NEW users to prevent duplicate templates
+    // when existing users re-authenticate (e.g., after API upgrade, token expiry)
+    let shouldIncludeTemplate = true;
+    let userSetupStatus = 'unknown';
+
+    try {
+      // Try to get existing session (will fail silently if no session or expired)
+      const session = await validateSession(req);
+
+      if (session) {
+        // User has a session - check if they've completed setup
+        const user = await getUserByEmail(session.email);
+
+        if (user && user.stockAnalysesDbId && user.stockHistoryDbId && user.sageStocksPageId) {
+          // User has already completed setup - DON'T duplicate template
+          shouldIncludeTemplate = false;
+          userSetupStatus = 'setup_complete';
+          log(LogLevel.INFO, 'Existing user re-authenticating - skipping template duplication', {
+            email: session.email,
+            hasStockAnalysesDb: !!user.stockAnalysesDbId,
+            hasStockHistoryDb: !!user.stockHistoryDbId,
+            hasSageStocksPage: !!user.sageStocksPageId,
+          });
+        } else {
+          userSetupStatus = 'setup_incomplete';
+        }
+      } else {
+        userSetupStatus = 'no_session';
+      }
+    } catch (error) {
+      // Session validation failed or user lookup failed - treat as new user
+      log(LogLevel.INFO, 'Could not validate existing user session (treating as new user)', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      userSetupStatus = 'validation_failed';
+    }
+
+    // Add template_id only if user is new or hasn't completed setup
+    if (templateId && shouldIncludeTemplate) {
       authUrl.searchParams.set('template_id', templateId);
-      log(LogLevel.INFO, 'OAuth flow includes template_id', { templateId, fullUrl: authUrl.toString() });
+      log(LogLevel.INFO, 'OAuth flow includes template_id (new user)', {
+        templateId,
+        userSetupStatus,
+      });
+    } else if (templateId && !shouldIncludeTemplate) {
+      log(LogLevel.INFO, 'OAuth flow SKIPPING template_id (existing user with setup complete)', {
+        userSetupStatus,
+      });
     } else {
       log(LogLevel.ERROR, 'CRITICAL: SAGE_STOCKS_TEMPLATE_ID not set - template will NOT be duplicated automatically', {
         hasClientId: !!clientId,
         hasRedirectUri: !!redirectUri,
-        hasTemplateId: !!templateId
+        hasTemplateId: !!templateId,
+        userSetupStatus,
       });
     }
 
     log(LogLevel.INFO, 'Redirecting to Notion OAuth', {
       redirectUri,
-      hasTemplateId: !!templateId,
+      includesTemplateId: shouldIncludeTemplate && !!templateId,
+      userSetupStatus,
     });
 
     // Redirect to Notion OAuth page
