@@ -97,6 +97,7 @@ export class NotionClient {
   private stockHistoryDbId: string;
   private userId?: string;
   private timezone: SupportedTimezone;
+  private dataSourceCache = new Map<string, string>();
 
   constructor(config: NotionConfig) {
     this.client = new Client({ auth: config.apiKey, notionVersion: '2025-09-03' });
@@ -104,6 +105,34 @@ export class NotionClient {
     this.stockHistoryDbId = config.stockHistoryDbId;
     this.userId = config.userId;
     this.timezone = validateTimezone(config.timezone, getTimezoneFromEnv());
+  }
+
+  /**
+   * Get data source ID from database ID
+   * Caches result to avoid repeated API calls
+   * Required for API version 2025-09-03
+   */
+  private async getDataSourceId(databaseId: string): Promise<string> {
+    // Check cache first
+    if (this.dataSourceCache.has(databaseId)) {
+      return this.dataSourceCache.get(databaseId)!;
+    }
+
+    // Fetch from API
+    const db = await this.client.databases.retrieve({
+      database_id: databaseId
+    });
+
+    // Extract first data source ID
+    const dataSourceId = (db as any).data_sources?.[0]?.id;
+
+    if (!dataSourceId) {
+      throw new Error(`No data source found for database ${databaseId}`);
+    }
+
+    // Cache and return
+    this.dataSourceCache.set(databaseId, dataSourceId);
+    return dataSourceId;
   }
 
   /**
@@ -263,8 +292,11 @@ export class NotionClient {
     propertyType: 'title' | 'rich_text'
   ): Promise<string | null> {
     try {
-      const response = await this.client.databases.query({
-        database_id: databaseId,
+      // Get data source ID for API v2025-09-03
+      const dataSourceId = await this.getDataSourceId(databaseId);
+
+      const response = await this.client.dataSources.query({
+        data_source_id: dataSourceId,
         filter: {
           property: 'Ticker',
           [propertyType]: {
@@ -942,8 +974,11 @@ export class NotionClient {
     metrics?: Record<string, any>;
   }>> {
     try {
-      const response = await this.client.databases.query({
-        database_id: this.stockHistoryDbId,
+      // Get data source ID for API v2025-09-03
+      const dataSourceId = await this.getDataSourceId(this.stockHistoryDbId);
+
+      const response = await this.client.dataSources.query({
+        data_source_id: dataSourceId,
         filter: {
           property: 'Ticker',
           title: {
