@@ -179,21 +179,54 @@ export function buildAnalysisPrompt(context: AnalysisContext): string {
   prompt += `## CRITICAL: Data Grounding Rules\n\n`;
   prompt += `**You MUST only use the data provided above. Do NOT invent or hallucinate information.**\n\n`;
 
-  // Date Awareness - Extract year and month from current date
+  // Date Awareness - Extract year, month, and calculate current quarter
   const [year, month] = currentDate.split('-').map(Number);
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const currentMonthName = monthNames[month - 1];
+  const currentQuarter = Math.ceil(month / 3); // Q1=1-3, Q2=4-6, Q3=7-9, Q4=10-12
 
-  prompt += `**DATE AWARENESS (CRITICAL):**\n`;
-  prompt += `- TODAY is ${currentMonthName} ${year}. We are currently in ${year}.\n`;
-  prompt += `- ANY date before ${currentMonthName} ${year} is in the PAST (already happened)\n`;
-  prompt += `- Do NOT reference past dates/events as if they are upcoming or future\n`;
-  prompt += `- Examples of CORRECT temporal language:\n`;
-  prompt += `  ✅ "Recent Q3 ${year} earnings showed..." (if discussing past quarters)\n`;
-  prompt += `  ✅ "Upcoming Q4 ${year} earnings..." (if Q4 hasn't happened yet)\n`;
-  prompt += `  ✅ "Next Fed meeting..." (generic future reference)\n`;
-  prompt += `  ❌ "December ${year - 1} Fed meeting could boost..." (this is PAST, not future!)\n`;
-  prompt += `  ❌ "Q4 ${year - 1} earnings will show..." (this already happened!)\n\n`;
+  // Build EXPLICIT lists of past and future dates
+  const pastYears: number[] = [];
+  for (let y = year - 5; y < year; y++) {
+    pastYears.push(y);
+  }
+
+  const pastQuarters: string[] = [];
+  const futureQuarters: string[] = [];
+
+  // All quarters from previous years are PAST
+  for (const y of pastYears) {
+    pastQuarters.push(`Q1 ${y}`, `Q2 ${y}`, `Q3 ${y}`, `Q4 ${y}`);
+  }
+
+  // Current year: quarters before current quarter are PAST
+  for (let q = 1; q < currentQuarter; q++) {
+    pastQuarters.push(`Q${q} ${year}`);
+  }
+
+  // Current and future quarters of current year are FUTURE/CURRENT
+  for (let q = currentQuarter; q <= 4; q++) {
+    futureQuarters.push(`Q${q} ${year}`);
+  }
+
+  prompt += `**DATE AWARENESS (CRITICAL - READ CAREFULLY):**\n`;
+  prompt += `- TODAY is ${currentMonthName} ${year}. Current quarter: Q${currentQuarter} ${year}.\n`;
+  prompt += `- The ENTIRE YEAR ${year - 1} is in the PAST. ALL months and quarters from ${year - 1} already happened.\n`;
+  prompt += `- PAST quarters (DO NOT use as future catalysts): ${pastQuarters.slice(-8).join(', ')}\n`;
+  prompt += `- Current/Future quarters (OK to reference): ${futureQuarters.join(', ')}\n\n`;
+
+  prompt += `**FORBIDDEN PHRASES (DO NOT USE THESE):**\n`;
+  prompt += `- ❌ ANY mention of "${year - 1}" as a future date\n`;
+  prompt += `- ❌ "December ${year - 1}" / "Dec ${year - 1}"\n`;
+  prompt += `- ❌ "Q4 ${year - 1} earnings" (unless clearly marked as PAST: "Recent Q4 ${year - 1} results showed...")\n`;
+  prompt += `- ❌ "Check Q4 ${year - 1} calendar"\n`;
+  prompt += `- ❌ Any ${year - 1} date listed in "Key Dates" section\n\n`;
+
+  prompt += `**ALLOWED PHRASES (Use these instead):**\n`;
+  prompt += `- ✅ "Next earnings report" / "Upcoming earnings"\n`;
+  prompt += `- ✅ "Next Fed meeting" / "Upcoming Fed decision"\n`;
+  prompt += `- ✅ "Q${currentQuarter} ${year} earnings" (current quarter)\n`;
+  prompt += `- ✅ "Recent Q${currentQuarter - 1} ${year} results" (if discussing past)\n\n`;
 
   if (currentMetrics.currentPrice != null) {
     const minEntry = currentMetrics.currentPrice * 0.90;
@@ -211,22 +244,15 @@ export function buildAnalysisPrompt(context: AnalysisContext): string {
 
   prompt += `\n**Catalyst & Risk Constraints:**\n`;
   prompt += `- Base catalysts on: sector trends (${currentMetrics.sector || 'Technology'}), macro factors (provided above), technical setups\n`;
-  prompt += `- Do NOT invent specific earnings dates, product launches, or company events\n`;
-  prompt += `- If you need a specific date, say "Check earnings calendar" instead of guessing\n`;
-  prompt += `- Risks MUST derive from: P/E ratio, debt levels, beta, sector exposure, macro headwinds (all provided)\n`;
+  prompt += `- Do NOT invent specific dates or events\n`;
+  prompt += `- Use ONLY generic future language: "Next earnings", "Upcoming Fed meeting", "Next product cycle"\n`;
+  prompt += `- Risks MUST derive from: P/E ratio, debt levels, beta, sector exposure, macro headwinds (all provided)\n\n`;
 
-  prompt += `\n**Key Dates (Temporal Rules):**\n`;
-  prompt += `- ONLY mention specific dates if they are provided in the data above\n`;
-  prompt += `- If no specific future dates are available, use GENERIC language:\n`;
-  prompt += `  ✅ "Upcoming earnings report"\n`;
-  prompt += `  ✅ "Next Fed meeting"\n`;
-  prompt += `  ✅ "Upcoming product launch"\n`;
-  prompt += `- If referencing PAST events (before ${currentMonthName} ${year}), use past tense:\n`;
-  prompt += `  ✅ "Recent Q3 earnings beat expectations"\n`;
-  prompt += `  ✅ "Last Fed meeting raised rates"\n`;
-  prompt += `- NEVER list a past date as if it's a future catalyst:\n`;
-  prompt += `  ❌ "December ${year - 1}: Fed meeting (potential rate pause)" - THIS IS WRONG!\n`;
-  prompt += `  ❌ "Q4 ${year - 1} Earnings: Check calendar" - THIS ALREADY HAPPENED!\n\n`;
+  prompt += `**Key Dates Section Rules:**\n`;
+  prompt += `- The "Key Dates" section in your output MUST contain ONLY future events\n`;
+  prompt += `- Use generic language ONLY: "Upcoming earnings", "Next Fed meeting", "Upcoming event"\n`;
+  prompt += `- DO NOT mention ANY specific past dates, especially anything from ${year - 1}\n`;
+  prompt += `- If you want to reference a past event, do it in the "Catalysts" section using past tense: "Recent earnings showed..."\n\n`;
 
   // Output structure
   prompt += `## Required Output (5 Sections)\n\n`;
