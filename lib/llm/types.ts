@@ -6,7 +6,8 @@
 
 export interface AnalysisContext {
   ticker: string;
-  currentMetrics: Record<string, any>;
+  currentDate: string; // ISO date string (e.g., "2025-11-16")
+  currentMetrics: Record<string, any>; // Expanded to include all technical, fundamental, and macro data
   previousAnalysis?: {
     date: string;
     compositeScore: number;

@@ -17,7 +17,7 @@ import { AnalysisContext } from '../types';
  * and improved scannability while preserving analytical value.
  */
 export function buildAnalysisPrompt(context: AnalysisContext): string {
-  const { ticker, currentMetrics, previousAnalysis, deltas } = context;
+  const { ticker, currentDate, currentMetrics, previousAnalysis, deltas } = context;
 
   // Determine recommendation badge and callout color
   const { badge, calloutColor } = getRecommendationFormatting(currentMetrics.recommendation);
@@ -36,9 +36,122 @@ export function buildAnalysisPrompt(context: AnalysisContext): string {
   prompt += `- NO fluff, every sentence adds value\n`;
   prompt += `- **TARGET: 1,700-2,000 tokens total**\n\n`;
 
-  // Current metrics context
+  // Current metrics context - EXPANDED to include ALL API data (v1.0.6)
   prompt += `## Analysis Context\n\n`;
-  prompt += `**Current Metrics:**\n`;
+
+  // Date and Company Info
+  prompt += `**Date:** ${currentDate}\n`;
+  prompt += `**Company:** ${currentMetrics.companyName || ticker} (${ticker})`;
+  if (currentMetrics.sector || currentMetrics.industry) {
+    prompt += ` - ${currentMetrics.sector || ''}${currentMetrics.sector && currentMetrics.industry ? ' / ' : ''}${currentMetrics.industry || ''}`;
+  }
+  prompt += `\n`;
+  if (currentMetrics.marketCap) {
+    const mcap = currentMetrics.marketCap;
+    const mcapFormatted = mcap >= 1e12 ? `$${(mcap / 1e12).toFixed(2)}T` :
+                          mcap >= 1e9 ? `$${(mcap / 1e9).toFixed(2)}B` :
+                          mcap >= 1e6 ? `$${(mcap / 1e6).toFixed(2)}M` : `$${mcap.toFixed(0)}`;
+    prompt += `**Market Cap:** ${mcapFormatted}`;
+    if (currentMetrics.beta != null) {
+      prompt += ` | **Beta:** ${currentMetrics.beta.toFixed(2)}`;
+    }
+    prompt += `\n`;
+  }
+  prompt += `\n`;
+
+  // Current Price and Range
+  if (currentMetrics.currentPrice != null) {
+    prompt += `**Current Price:** $${currentMetrics.currentPrice.toFixed(2)}\n`;
+
+    if (currentMetrics.week52Low != null && currentMetrics.week52High != null) {
+      const rangePercent = ((currentMetrics.currentPrice - currentMetrics.week52Low) / (currentMetrics.week52High - currentMetrics.week52Low) * 100);
+      prompt += `**52-Week Range:** $${currentMetrics.week52Low.toFixed(2)} - $${currentMetrics.week52High.toFixed(2)} (currently at ${rangePercent.toFixed(0)}% of range)\n`;
+    }
+
+    if (currentMetrics.ma50 != null) {
+      const ma50Diff = ((currentMetrics.currentPrice - currentMetrics.ma50) / currentMetrics.ma50 * 100);
+      prompt += `**50-day MA:** $${currentMetrics.ma50.toFixed(2)} (${ma50Diff > 0 ? '+' : ''}${ma50Diff.toFixed(1)}% ${ma50Diff > 0 ? 'above' : 'below'})\n`;
+    }
+
+    if (currentMetrics.ma200 != null) {
+      const ma200Diff = ((currentMetrics.currentPrice - currentMetrics.ma200) / currentMetrics.ma200 * 100);
+      prompt += `**200-day MA:** $${currentMetrics.ma200.toFixed(2)} (${ma200Diff > 0 ? '+' : ''}${ma200Diff.toFixed(1)}% ${ma200Diff > 0 ? 'above' : 'below'})\n`;
+    }
+    prompt += `\n`;
+  }
+
+  // Technical Indicators
+  prompt += `**Technical Indicators:**\n`;
+  if (currentMetrics.rsi != null) {
+    const rsiSignal = currentMetrics.rsi > 70 ? ' (overbought)' : currentMetrics.rsi < 30 ? ' (oversold)' : '';
+    prompt += `- RSI: ${currentMetrics.rsi.toFixed(1)}${rsiSignal}\n`;
+  }
+  if (currentMetrics.volume != null && currentMetrics.avgVolume != null) {
+    const volChange = ((currentMetrics.volume - currentMetrics.avgVolume) / currentMetrics.avgVolume * 100);
+    const volFormatted = currentMetrics.volume >= 1e9 ? `${(currentMetrics.volume / 1e9).toFixed(1)}B` :
+                         currentMetrics.volume >= 1e6 ? `${(currentMetrics.volume / 1e6).toFixed(1)}M` :
+                         `${(currentMetrics.volume / 1e3).toFixed(1)}K`;
+    const avgVolFormatted = currentMetrics.avgVolume >= 1e9 ? `${(currentMetrics.avgVolume / 1e9).toFixed(1)}B` :
+                            currentMetrics.avgVolume >= 1e6 ? `${(currentMetrics.avgVolume / 1e6).toFixed(1)}M` :
+                            `${(currentMetrics.avgVolume / 1e3).toFixed(1)}K`;
+    prompt += `- Volume: ${volFormatted} (vs ${avgVolFormatted} avg, ${volChange > 0 ? '+' : ''}${volChange.toFixed(1)}%)\n`;
+  }
+  if (currentMetrics.priceChange1d != null) {
+    prompt += `- Price Changes: 1D ${formatPercent(currentMetrics.priceChange1d * 100)}`;
+    if (currentMetrics.priceChange5d != null) prompt += ` | 5D ${formatPercent(currentMetrics.priceChange5d * 100)}`;
+    if (currentMetrics.priceChange1m != null) prompt += ` | 1M ${formatPercent(currentMetrics.priceChange1m * 100)}`;
+    prompt += `\n`;
+  }
+  if (currentMetrics.volatility30d != null) {
+    prompt += `- 30-day Volatility: ${(currentMetrics.volatility30d * 100).toFixed(1)}%\n`;
+  }
+  prompt += `\n`;
+
+  // Fundamental Metrics
+  prompt += `**Fundamentals:**\n`;
+  if (currentMetrics.peRatio != null) {
+    prompt += `- P/E Ratio: ${currentMetrics.peRatio.toFixed(1)}\n`;
+  }
+  if (currentMetrics.eps != null) {
+    prompt += `- EPS (TTM): $${currentMetrics.eps.toFixed(2)}\n`;
+  }
+  if (currentMetrics.revenueTTM != null) {
+    const rev = currentMetrics.revenueTTM;
+    const revFormatted = rev >= 1e12 ? `$${(rev / 1e12).toFixed(2)}T` :
+                         rev >= 1e9 ? `$${(rev / 1e9).toFixed(2)}B` :
+                         rev >= 1e6 ? `$${(rev / 1e6).toFixed(2)}M` : `$${rev.toFixed(0)}`;
+    prompt += `- Revenue (TTM): ${revFormatted}\n`;
+  }
+  if (currentMetrics.debtToEquity != null) {
+    const leverage = currentMetrics.debtToEquity < 0.3 ? ' (low leverage)' :
+                     currentMetrics.debtToEquity > 1.0 ? ' (high leverage)' : '';
+    prompt += `- Debt/Equity: ${currentMetrics.debtToEquity.toFixed(2)}${leverage}\n`;
+  }
+  prompt += `\n`;
+
+  // Macro Environment
+  prompt += `**Macro Environment:**\n`;
+  if (currentMetrics.fedFundsRate != null) {
+    prompt += `- Fed Funds Rate: ${currentMetrics.fedFundsRate.toFixed(2)}%\n`;
+  }
+  if (currentMetrics.unemployment != null) {
+    prompt += `- Unemployment: ${currentMetrics.unemployment.toFixed(1)}%\n`;
+  }
+  if (currentMetrics.vix != null) {
+    const vixSignal = currentMetrics.vix > 30 ? ' (high volatility)' : currentMetrics.vix < 15 ? ' (low volatility)' : '';
+    prompt += `- VIX: ${currentMetrics.vix.toFixed(1)}${vixSignal}\n`;
+  }
+  if (currentMetrics.consumerSentiment != null) {
+    prompt += `- Consumer Sentiment: ${currentMetrics.consumerSentiment.toFixed(1)}\n`;
+  }
+  if (currentMetrics.yieldCurveSpread != null) {
+    const inverted = currentMetrics.yieldCurveSpread < 0 ? ' (inverted - recession signal)' : '';
+    prompt += `- Yield Curve Spread: ${currentMetrics.yieldCurveSpread.toFixed(2)}%${inverted}\n`;
+  }
+  prompt += `\n`;
+
+  // Scores
+  prompt += `**Analysis Scores:**\n`;
   prompt += `- Composite: ${currentMetrics.compositeScore}/5.0 (${currentMetrics.recommendation})\n`;
   prompt += `- Technical: ${currentMetrics.technicalScore}/5.0 | Fundamental: ${currentMetrics.fundamentalScore}/5.0 | Macro: ${currentMetrics.macroScore}/5.0\n`;
   prompt += `- Risk: ${currentMetrics.riskScore}/5.0 | Sentiment: ${currentMetrics.sentimentScore}/5.0\n`;
@@ -61,6 +174,35 @@ export function buildAnalysisPrompt(context: AnalysisContext): string {
     }
     prompt += '\n';
   }
+
+  // Data Grounding Rules - CRITICAL to prevent hallucination (v1.0.6)
+  prompt += `## CRITICAL: Data Grounding Rules\n\n`;
+  prompt += `**You MUST only use the data provided above. Do NOT invent or hallucinate information.**\n\n`;
+
+  if (currentMetrics.currentPrice != null) {
+    const minEntry = currentMetrics.currentPrice * 0.90;
+    const maxEntry = currentMetrics.currentPrice * 1.10;
+    prompt += `**Price Constraints:**\n`;
+    prompt += `- Entry zones MUST be within ±10% of current price ($${minEntry.toFixed(2)} - $${maxEntry.toFixed(2)})\n`;
+    prompt += `- Use these reference levels for support/resistance:\n`;
+    prompt += `  • Current: $${currentMetrics.currentPrice.toFixed(2)}\n`;
+    if (currentMetrics.ma50 != null) prompt += `  • 50-day MA: $${currentMetrics.ma50.toFixed(2)}\n`;
+    if (currentMetrics.ma200 != null) prompt += `  • 200-day MA: $${currentMetrics.ma200.toFixed(2)}\n`;
+    if (currentMetrics.week52High != null) prompt += `  • 52-week high: $${currentMetrics.week52High.toFixed(2)}\n`;
+    if (currentMetrics.week52Low != null) prompt += `  • 52-week low: $${currentMetrics.week52Low.toFixed(2)}\n`;
+    prompt += `  • Round numbers (e.g., $${Math.round(currentMetrics.currentPrice / 10) * 10}, $${Math.ceil(currentMetrics.currentPrice / 10) * 10})\n`;
+  }
+
+  prompt += `\n**Catalyst & Risk Constraints:**\n`;
+  prompt += `- Base catalysts on: sector trends (${currentMetrics.sector || 'Technology'}), macro factors (provided above), technical setups\n`;
+  prompt += `- Do NOT invent specific earnings dates, product launches, or company events\n`;
+  prompt += `- If you need a specific date, say "Check earnings calendar" instead of guessing\n`;
+  prompt += `- Risks MUST derive from: P/E ratio, debt levels, beta, sector exposure, macro headwinds (all provided)\n`;
+
+  prompt += `\n**Key Dates:**\n`;
+  prompt += `- ONLY mention dates if you have them in the context above\n`;
+  prompt += `- Generic placeholders OK: "Next earnings (check Q4 2024 schedule)", "Fed meeting (December 2024)"\n`;
+  prompt += `- Do NOT fabricate specific dates\n\n`;
 
   // Output structure
   prompt += `## Required Output (5 Sections)\n\n`;

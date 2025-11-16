@@ -212,7 +212,9 @@ export async function analyzeStockCore(
     // when writing to Notion. For now, generate analysis without historical context.
     const analysisContext: AnalysisContext = {
       ticker: tickerUpper,
+      currentDate: new Date().toISOString().split('T')[0], // e.g., "2025-11-16"
       currentMetrics: {
+        // Scores
         compositeScore: scores.composite,
         technicalScore: scores.technical,
         fundamentalScore: scores.fundamental,
@@ -224,6 +226,41 @@ export async function analyzeStockCore(
         pattern: 'Unknown',
         confidence: qualityReport.dataCompleteness * 5,
         dataQualityGrade: qualityReport.grade,
+
+        // Company Profile
+        companyName: fundamental.company_name,
+        sector: fmpData.profile.sector,
+        industry: fmpData.profile.industry,
+
+        // Technical Data (ALL from API)
+        currentPrice: technical.current_price,
+        ma50: technical.ma_50,
+        ma200: technical.ma_200,
+        rsi: technical.rsi,
+        volume: technical.volume,
+        avgVolume: technical.avg_volume_20d,
+        volatility30d: technical.volatility_30d,
+        priceChange1d: technical.price_change_1d,
+        priceChange5d: technical.price_change_5d,
+        priceChange1m: technical.price_change_1m,
+        week52High: technical.week_52_high,
+        week52Low: technical.week_52_low,
+
+        // Fundamental Data (ALL from API)
+        marketCap: fundamental.market_cap,
+        peRatio: fundamental.pe_ratio,
+        eps: fundamental.eps,
+        revenueTTM: fundamental.revenue_ttm,
+        debtToEquity: fundamental.debt_to_equity,
+        beta: fundamental.beta,
+
+        // Macro Data (ALL from API)
+        fedFundsRate: macro.fed_funds_rate,
+        unemployment: macro.unemployment,
+        consumerSentiment: macro.consumer_sentiment,
+        yieldCurveSpread: macro.yield_curve_spread,
+        vix: macro.vix,
+        gdp: macro.gdp,
       },
       previousAnalysis: undefined, // Broadcaster will handle historical context
       historicalAnalyses: [],
