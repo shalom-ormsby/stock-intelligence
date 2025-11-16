@@ -179,6 +179,22 @@ export function buildAnalysisPrompt(context: AnalysisContext): string {
   prompt += `## CRITICAL: Data Grounding Rules\n\n`;
   prompt += `**You MUST only use the data provided above. Do NOT invent or hallucinate information.**\n\n`;
 
+  // Date Awareness - Extract year and month from current date
+  const [year, month] = currentDate.split('-').map(Number);
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const currentMonthName = monthNames[month - 1];
+
+  prompt += `**DATE AWARENESS (CRITICAL):**\n`;
+  prompt += `- TODAY is ${currentMonthName} ${year}. We are currently in ${year}.\n`;
+  prompt += `- ANY date before ${currentMonthName} ${year} is in the PAST (already happened)\n`;
+  prompt += `- Do NOT reference past dates/events as if they are upcoming or future\n`;
+  prompt += `- Examples of CORRECT temporal language:\n`;
+  prompt += `  ✅ "Recent Q3 ${year} earnings showed..." (if discussing past quarters)\n`;
+  prompt += `  ✅ "Upcoming Q4 ${year} earnings..." (if Q4 hasn't happened yet)\n`;
+  prompt += `  ✅ "Next Fed meeting..." (generic future reference)\n`;
+  prompt += `  ❌ "December ${year - 1} Fed meeting could boost..." (this is PAST, not future!)\n`;
+  prompt += `  ❌ "Q4 ${year - 1} earnings will show..." (this already happened!)\n\n`;
+
   if (currentMetrics.currentPrice != null) {
     const minEntry = currentMetrics.currentPrice * 0.90;
     const maxEntry = currentMetrics.currentPrice * 1.10;
@@ -199,10 +215,18 @@ export function buildAnalysisPrompt(context: AnalysisContext): string {
   prompt += `- If you need a specific date, say "Check earnings calendar" instead of guessing\n`;
   prompt += `- Risks MUST derive from: P/E ratio, debt levels, beta, sector exposure, macro headwinds (all provided)\n`;
 
-  prompt += `\n**Key Dates:**\n`;
-  prompt += `- ONLY mention dates if you have them in the context above\n`;
-  prompt += `- Generic placeholders OK: "Next earnings (check Q4 2024 schedule)", "Fed meeting (December 2024)"\n`;
-  prompt += `- Do NOT fabricate specific dates\n\n`;
+  prompt += `\n**Key Dates (Temporal Rules):**\n`;
+  prompt += `- ONLY mention specific dates if they are provided in the data above\n`;
+  prompt += `- If no specific future dates are available, use GENERIC language:\n`;
+  prompt += `  ✅ "Upcoming earnings report"\n`;
+  prompt += `  ✅ "Next Fed meeting"\n`;
+  prompt += `  ✅ "Upcoming product launch"\n`;
+  prompt += `- If referencing PAST events (before ${currentMonthName} ${year}), use past tense:\n`;
+  prompt += `  ✅ "Recent Q3 earnings beat expectations"\n`;
+  prompt += `  ✅ "Last Fed meeting raised rates"\n`;
+  prompt += `- NEVER list a past date as if it's a future catalyst:\n`;
+  prompt += `  ❌ "December ${year - 1}: Fed meeting (potential rate pause)" - THIS IS WRONG!\n`;
+  prompt += `  ❌ "Q4 ${year - 1} Earnings: Check calendar" - THIS ALREADY HAPPENED!\n\n`;
 
   // Output structure
   prompt += `## Required Output (5 Sections)\n\n`;
@@ -237,8 +261,9 @@ export function buildAnalysisPrompt(context: AnalysisContext): string {
   prompt += `| T2 | $X | Trim X% | [Catalyst or resistance] |\n`;
   prompt += `| T3 | $X | Hold X% | [Bull case target] |\n\n`;
 
-  prompt += `**Key Dates** (top 3 only):\n`;
-  prompt += `- **[Date]:** [Event] ([impact expectation]) 🔥🔥🔥 [if critical]\n\n`;
+  prompt += `**Key Dates** (top 3 only - MUST be future dates only!):\n`;
+  prompt += `- **[Generic future reference]:** [Event] ([impact expectation]) 🔥🔥🔥 [if critical]\n`;
+  prompt += `- Example: "Upcoming earnings" or "Next Fed meeting" - DO NOT use specific past dates!\n\n`;
 
   prompt += `### Section 3: Catalysts & Risks (500 tokens max)\n\n`;
   prompt += `**Top 3 Catalysts 🚀**\n\n`;
