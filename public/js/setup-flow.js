@@ -47,6 +47,33 @@ let currentState = {
 };
 
 // ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Handle Notion sign-in with existing user detection
+ * v1.2.5: Prevents duplicate template creation for returning users
+ */
+function handleNotionSignIn() {
+  // Check if user has an existing session (cookie or localStorage)
+  const hasSessionCookie = document.cookie.includes('si_session=');
+  const hasLocalSetupFlag = localStorage.getItem('sage_stocks_setup_complete') === 'true';
+  const isExistingUser = hasSessionCookie || hasLocalSetupFlag;
+
+  // Build authorization URL with detection parameter
+  let authUrl = '/api/auth/authorize';
+  if (isExistingUser) {
+    authUrl += '?existing_user=true';
+    console.log('🔍 Existing user detected (cookie or localStorage) - will skip template duplication');
+  } else {
+    console.log('✨ New user - will duplicate template during OAuth');
+  }
+
+  // Redirect to OAuth
+  window.location.href = authUrl;
+}
+
+// ============================================================================
 // Initialization
 // ============================================================================
 
@@ -354,7 +381,7 @@ function createStep1Content() {
             By signing in, you authorize Sage Stocks to create and access your workspace databases.
           </p>
           <button
-            onclick="window.location.href='/api/auth/authorize'"
+            onclick="handleNotionSignIn()"
             class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl"
           >
             <img src="/notion-logo.png" alt="Notion" class="w-5 h-5 mr-2" onerror="this.style.display='none'" />
@@ -894,6 +921,10 @@ function createStep5Content() {
 }
 
 async function completeSetup() {
+  // Set localStorage flag to prevent duplicate templates on re-authentication
+  localStorage.setItem('sage_stocks_setup_complete', 'true');
+  console.log('✅ Setup complete flag set in localStorage');
+
   await advanceToStep(6);
 }
 

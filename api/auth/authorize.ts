@@ -40,42 +40,78 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('owner', 'user');
 
-    // v1.2.4 Bug Fix: Check if user has already completed setup
-    // Only include template_id for NEW users to prevent duplicate templates
-    // when existing users re-authenticate (e.g., after API upgrade, token expiry)
+    // v1.2.5 Bug Fix: Multi-layered detection to prevent duplicate templates
+    // Checks: (1) URL parameter, (2) Session cookie presence, (3) Active session validation
     let shouldIncludeTemplate = true;
     let userSetupStatus = 'unknown';
+    let detectionMethod = 'none';
 
     try {
-      // Try to get existing session (will fail silently if no session or expired)
-      const session = await validateSession(req);
+      // Layer 1: Check for explicit URL parameter from frontend
+      // Frontend should set this based on localStorage or existing session
+      const existingUserParam = req.query?.existing_user === 'true';
+      if (existingUserParam) {
+        shouldIncludeTemplate = false;
+        userSetupStatus = 'existing_via_param';
+        detectionMethod = 'url_parameter';
+        log(LogLevel.INFO, 'Existing user detected via URL parameter - skipping template duplication', {
+          existingUserParam,
+        });
+      }
 
-      if (session) {
-        // User has a session - check if they've completed setup
-        const user = await getUserByEmail(session.email);
+      // Layer 2: Check for session cookie presence (even if expired in Redis)
+      // If a user has ANY session cookie, they're likely a returning user
+      if (shouldIncludeTemplate) {
+        const cookies = req.headers.cookie || '';
+        const hasSessionCookie = cookies.includes('si_session=');
 
-        if (user && user.stockAnalysesDbId && user.stockHistoryDbId && user.sageStocksPageId) {
-          // User has already completed setup - DON'T duplicate template
-          shouldIncludeTemplate = false;
-          userSetupStatus = 'setup_complete';
-          log(LogLevel.INFO, 'Existing user re-authenticating - skipping template duplication', {
-            email: session.email,
-            hasStockAnalysesDb: !!user.stockAnalysesDbId,
-            hasStockHistoryDb: !!user.stockHistoryDbId,
-            hasSageStocksPage: !!user.sageStocksPageId,
-          });
+        if (hasSessionCookie) {
+          // User has a session cookie - likely returning user
+          // Try to validate the session to get more info
+          const session = await validateSession(req);
+
+          if (session) {
+            // Valid session - definitely a returning user
+            const user = await getUserByEmail(session.email);
+
+            if (user && user.stockAnalysesDbId && user.stockHistoryDbId && user.sageStocksPageId) {
+              // User has completed setup - DON'T duplicate
+              shouldIncludeTemplate = false;
+              userSetupStatus = 'setup_complete';
+              detectionMethod = 'valid_session';
+              log(LogLevel.INFO, 'Existing user detected via valid session - skipping template duplication', {
+                email: session.email,
+                hasStockAnalysesDb: !!user.stockAnalysesDbId,
+                hasStockHistoryDb: !!user.stockHistoryDbId,
+                hasSageStocksPage: !!user.sageStocksPageId,
+              });
+            } else {
+              userSetupStatus = 'setup_incomplete';
+              detectionMethod = 'valid_session_incomplete_setup';
+            }
+          } else {
+            // Cookie exists but session expired in Redis
+            // Conservative approach: Skip template to avoid duplicates
+            shouldIncludeTemplate = false;
+            userSetupStatus = 'expired_session_cookie';
+            detectionMethod = 'expired_cookie';
+            log(LogLevel.WARN, 'Session cookie exists but expired in Redis - assuming returning user to prevent duplicate', {
+              hasSessionCookie,
+            });
+          }
         } else {
-          userSetupStatus = 'setup_incomplete';
+          userSetupStatus = 'no_session_cookie';
+          detectionMethod = 'no_cookie';
         }
-      } else {
-        userSetupStatus = 'no_session';
       }
     } catch (error) {
-      // Session validation failed or user lookup failed - treat as new user
-      log(LogLevel.INFO, 'Could not validate existing user session (treating as new user)', {
+      // All detection failed - treat as new user (safer to duplicate than to skip for truly new users)
+      log(LogLevel.INFO, 'Could not detect existing user status (treating as new user)', {
         error: error instanceof Error ? error.message : String(error),
       });
-      userSetupStatus = 'validation_failed';
+      userSetupStatus = 'detection_failed';
+      detectionMethod = 'error';
+      shouldIncludeTemplate = true; // Default to including template for new users
     }
 
     // Add template_id only if user is new or hasn't completed setup
@@ -84,10 +120,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       log(LogLevel.INFO, 'OAuth flow includes template_id (new user)', {
         templateId,
         userSetupStatus,
+        detectionMethod,
       });
     } else if (templateId && !shouldIncludeTemplate) {
-      log(LogLevel.INFO, 'OAuth flow SKIPPING template_id (existing user with setup complete)', {
+      log(LogLevel.INFO, 'OAuth flow SKIPPING template_id (existing user detected)', {
         userSetupStatus,
+        detectionMethod,
       });
     } else {
       log(LogLevel.ERROR, 'CRITICAL: SAGE_STOCKS_TEMPLATE_ID not set - template will NOT be duplicated automatically', {
@@ -95,6 +133,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         hasRedirectUri: !!redirectUri,
         hasTemplateId: !!templateId,
         userSetupStatus,
+        detectionMethod,
       });
     }
 
@@ -102,6 +141,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       redirectUri,
       includesTemplateId: shouldIncludeTemplate && !!templateId,
       userSetupStatus,
+      detectionMethod,
     });
 
     // Redirect to Notion OAuth page

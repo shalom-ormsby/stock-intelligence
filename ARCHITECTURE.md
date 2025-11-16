@@ -2,7 +2,7 @@
 
 *Last updated: November 15, 2025*
 
-**Development Version:** v1.2.4 (Complete) - Notion API v2025-09-03 Migration
+**Development Version:** v1.2.5 (Complete) - Template Duplication Prevention
 **Template Version:** v0.1.0 (Beta) - Launching with Cohort 1
 **Production URL:** [https://sagestocks.vercel.app](https://sagestocks.vercel.app)
 **Status:** ✅ Live in Production - Fully Automated
@@ -1678,9 +1678,51 @@ GET /api/usage?userId=user-123
 ---
 
 ### `/api/auth/authorize` (GET)
-**Purpose:** Initiate Notion OAuth flow (v1.1.1)
+**Purpose:** Initiate Notion OAuth flow with template duplication prevention (v1.1.1, enhanced v1.2.5)
+
+**Query Parameters:**
+- `existing_user` (optional) - Set to `"true"` by frontend if user has existing session/setup
 
 **Response:** HTTP 302 redirect to Notion authorization URL
+
+**Template Duplication Prevention (v1.2.5):**
+
+Prevents duplicate "Sage Stocks" templates when users re-authenticate (e.g., after API upgrades, session expiry). Uses a **3-layer detection system**:
+
+| Layer | Detection Method | When It Works | Status Logged |
+|-------|-----------------|---------------|---------------|
+| **1. URL Parameter** | Frontend passes `?existing_user=true` based on localStorage or cookie | User has `sage_stocks_setup_complete` flag OR session cookie | `existing_via_param` |
+| **2. Expired Cookie** | Session cookie exists but Redis session expired | Common during re-authentication after 24-hour TTL | `expired_session_cookie` |
+| **3. Valid Session** | Active Redis session with completed setup | User has valid session and database IDs configured | `setup_complete` |
+
+**Decision Flow:**
+```typescript
+// Layer 1: Frontend detection
+if (req.query.existing_user === 'true') → Skip template_id
+
+// Layer 2: Cookie presence (even if expired)
+else if (hasSessionCookie && sessionExpired) → Skip template_id  // Conservative approach
+
+// Layer 3: Valid session check
+else if (validSession && setupComplete) → Skip template_id
+
+// Default: New user
+else → Include template_id in OAuth URL
+```
+
+**Why Layer 2 is Critical:**
+- When users re-authenticate after session expiry, Redis no longer has their session data
+- Previous fix (v1.2.4) only checked valid sessions, which failed for expired sessions
+- Layer 2 detects cookie **presence** (not validity) and assumes returning user
+- Conservative approach: Better to skip template for edge-case new users than duplicate for existing users
+
+**Logging:**
+All detections are logged with `detectionMethod` field for debugging:
+- `url_parameter` - Frontend detected existing user
+- `expired_cookie` - Cookie exists but Redis session expired
+- `valid_session` - Active session with setup complete
+- `no_cookie` - New user (no cookie detected)
+- `error` - Detection failed, defaulting to new user
 
 ---
 

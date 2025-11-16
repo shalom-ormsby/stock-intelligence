@@ -99,6 +99,147 @@ All development versions are documented below with full technical details.
 
 ---
 
+## [v1.2.5] - 2025-11-15
+
+### 🐛 Critical Bug Fix: Template Duplication Prevention (Multi-Layered)
+
+**Issue:** Duplicate "Sage Stocks" templates were being created in users' Notion workspaces every time they re-authenticated (e.g., after API upgrades, session expiry, or token refresh).
+
+**Root Cause Analysis:**
+
+Previous fix attempt (v1.2.4) relied solely on `validateSession(req)`, which had a **fatal flaw**:
+- When users re-authenticate after session expiry, their Redis session has already expired (24-hour TTL)
+- `validateSession()` returns `null` for expired sessions
+- System treated them as "new users" and included `template_id` in OAuth URL
+- Notion duplicated the template again
+
+**The Problem with Session-Based Detection:**
+```typescript
+// v1.2.4 approach (BROKEN):
+const session = await validateSession(req);  // Returns null for expired sessions
+if (session) { /* check user */ }            // Never executes for re-auth scenarios
+→ Includes template_id → Notion duplicates template
+```
+
+**Why It Failed:**
+- Users re-authenticate **because** their session is expired/invalid
+- Relying on session validity creates a chicken-and-egg problem
+- The exact scenario we need to detect (re-auth) is the scenario where sessions are expired
+
+**The Solution: 3-Layer Detection System**
+
+Implemented multi-layered defense that works even when sessions are expired:
+
+| Layer | Detection Method | When It Works | Fallback Behavior |
+|-------|-----------------|---------------|-------------------|
+| **1. URL Parameter** | Frontend passes `?existing_user=true` | User has `sage_stocks_setup_complete` flag OR session cookie | Skip template_id |
+| **2. Expired Cookie** | Session cookie exists but Redis expired | **Common during re-authentication** after 24hr TTL | Skip template_id (conservative) |
+| **3. Valid Session** | Active Redis session with setup complete | User has valid session + database IDs configured | Skip template_id |
+
+**Layer 2 is the Critical Fix:**
+- Detects cookie **presence** (not validity)
+- If cookie exists but Redis session is expired → Assumes returning user
+- Conservative approach: Better to skip template for edge-case new users than duplicate for existing users
+
+**Changes:**
+
+**Backend:** [api/auth/authorize.ts](api/auth/authorize.ts)
+```typescript
+// Layer 1: Check URL parameter from frontend
+if (req.query?.existing_user === 'true') {
+  shouldIncludeTemplate = false;
+  detectionMethod = 'url_parameter';
+}
+
+// Layer 2: Check for ANY session cookie (even if expired in Redis)
+const cookies = req.headers.cookie || '';
+const hasSessionCookie = cookies.includes('si_session=');
+
+if (hasSessionCookie) {
+  const session = await validateSession(req);
+
+  if (session) {
+    // Layer 3: Valid session - check setup completion
+    const user = await getUserByEmail(session.email);
+    if (user?.stockAnalysesDbId && user?.stockHistoryDbId && user?.sageStocksPageId) {
+      shouldIncludeTemplate = false;
+      detectionMethod = 'valid_session';
+    }
+  } else {
+    // Cookie exists but session expired in Redis
+    // Conservative: Skip template to prevent duplicates
+    shouldIncludeTemplate = false;
+    detectionMethod = 'expired_cookie';
+    log(LogLevel.WARN, 'Session cookie exists but expired - assuming returning user');
+  }
+}
+```
+
+**Frontend:** [public/js/setup-flow.js](public/js/setup-flow.js)
+```javascript
+function handleNotionSignIn() {
+  // Check for existing session or setup completion
+  const hasSessionCookie = document.cookie.includes('si_session=');
+  const hasLocalSetupFlag = localStorage.getItem('sage_stocks_setup_complete') === 'true';
+  const isExistingUser = hasSessionCookie || hasLocalSetupFlag;
+
+  // Pass detection to backend
+  let authUrl = '/api/auth/authorize';
+  if (isExistingUser) {
+    authUrl += '?existing_user=true';
+  }
+
+  window.location.href = authUrl;
+}
+
+// Set localStorage flag on setup completion
+async function completeSetup() {
+  localStorage.setItem('sage_stocks_setup_complete', 'true');
+  await advanceToStep(6);
+}
+```
+
+**Logging Enhancements:**
+
+All detections logged with `detectionMethod` field:
+- `url_parameter` - Frontend detected existing user
+- `expired_cookie` - Cookie exists but Redis session expired (**This catches re-auth scenarios**)
+- `valid_session` - Active session with setup complete
+- `no_cookie` - New user (no cookie detected)
+- `error` - Detection failed, defaulting to new user
+
+**Testing Scenarios:**
+
+| Scenario | Layer 1 | Layer 2 | Layer 3 | Result |
+|----------|---------|---------|---------|--------|
+| New user (first signup) | ❌ No localStorage | ❌ No cookie | ❌ No session | **Duplicates template** ✅ |
+| Existing user with valid session | ✅ Cookie detected | ✅ Cookie exists | ✅ Setup complete | **No duplicate** ✅ |
+| **Re-auth after session expiry** | ✅ Cookie detected | ✅ **Cookie exists** | ❌ Session expired | **No duplicate** ✅ |
+| User cleared cookies but has localStorage | ✅ **localStorage flag** | ❌ No cookie | ❌ No session | **No duplicate** ✅ |
+
+**Why This Works:**
+
+1. **No dependency on Redis session validity** - Works when sessions expire
+2. **Multiple detection methods** - If one fails, others catch it
+3. **Conservative approach** - When uncertain, assumes existing user
+4. **Frontend + Backend coordination** - Both systems validate
+5. **Persistent localStorage** - Survives session expiry
+
+**Files Changed:**
+- `api/auth/authorize.ts` - 3-layer detection system
+- `public/js/setup-flow.js` - Frontend detection + localStorage flag
+- `ARCHITECTURE.md` - Template duplication prevention documentation
+
+**Impact:**
+- ✅ Prevents duplicate templates during re-authentication
+- ✅ Preserves template duplication for genuinely new users
+- ✅ Comprehensive logging for debugging
+- ✅ No breaking changes to OAuth flow
+
+**Deployment:** ✅ Ready for production
+
+---
+
 ## [v1.2.4] - 2025-11-15
 
 ### 🔄 Major: Notion API v2025-09-03 Migration
