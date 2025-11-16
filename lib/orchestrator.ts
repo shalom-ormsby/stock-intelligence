@@ -98,9 +98,18 @@ export async function collectStockRequests(
       const userAccessToken = await decryptToken(user.accessToken);
       const notion = new Client({ auth: userAccessToken, notionVersion: '2025-09-03' });
 
+      // Get data source ID for API v2025-09-03
+      const db = await notion.databases.retrieve({ database_id: user.stockAnalysesDbId });
+      const dataSourceId = (db as any).data_sources?.[0]?.id;
+
+      if (!dataSourceId) {
+        console.warn(`[ORCHESTRATOR]   → User ${user.email}: No data source found, skipping`);
+        continue;
+      }
+
       // Query user's Stock Analyses database (user-specific DB ID)
-      const response = await notion.databases.query({
-        database_id: user.stockAnalysesDbId,
+      const response = await notion.dataSources.query({
+        data_source_id: dataSourceId,
         filter: {
           property: 'Analysis Cadence',
           select: { equals: 'Daily' },

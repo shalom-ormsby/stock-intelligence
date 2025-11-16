@@ -374,9 +374,18 @@ export async function testDatabaseRead(notionToken: string, databaseId: string):
 export async function testDatabaseWrite(notionToken: string, databaseId: string): Promise<boolean> {
   try {
     const notion = new Client({ auth: notionToken, notionVersion: '2025-09-03' });
+
+    // Get data source ID for API v2025-09-03
+    const db = await notion.databases.retrieve({ database_id: databaseId });
+    const dataSourceId = (db as any).data_sources?.[0]?.id;
+
+    if (!dataSourceId) {
+      return false;
+    }
+
     // Query the database (read operation that requires proper permissions)
-    await notion.databases.query({
-      database_id: databaseId,
+    await notion.dataSources.query({
+      data_source_id: dataSourceId,
       page_size: 1,
     });
     return true;
