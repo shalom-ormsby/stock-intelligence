@@ -96,11 +96,20 @@ export async function collectStockRequests(
 
       // Decrypt user's OAuth token
       const userAccessToken = await decryptToken(user.accessToken);
-      const notion = new Client({ auth: userAccessToken });
+      const notion = new Client({ auth: userAccessToken, notionVersion: '2025-09-03' });
+
+      // Get data source ID for API v2025-09-03
+      const db = await notion.databases.retrieve({ database_id: user.stockAnalysesDbId });
+      const dataSourceId = (db as any).data_sources?.[0]?.id;
+
+      if (!dataSourceId) {
+        console.warn(`[ORCHESTRATOR]   → User ${user.email}: No data source found, skipping`);
+        continue;
+      }
 
       // Query user's Stock Analyses database (user-specific DB ID)
-      const response = await notion.databases.query({
-        database_id: user.stockAnalysesDbId,
+      const response = await notion.dataSources.query({
+        data_source_id: dataSourceId,
         filter: {
           property: 'Analysis Cadence',
           select: { equals: 'Daily' },
@@ -491,7 +500,7 @@ async function broadcastToUser(
       await notionClient.syncToNotion(analysisData, false);
 
       // Set Status to "Complete" since analysis is done
-      const notion = new Client({ auth: subscriber.accessToken });
+      const notion = new Client({ auth: subscriber.accessToken, notionVersion: '2025-09-03' });
       try {
         await notion.pages.update({
           page_id: subscriber.pageId,
@@ -536,7 +545,7 @@ async function broadcastToUser(
 async function setAnalyzingStatus(subscribers: Subscriber[]): Promise<void> {
   const promises = subscribers.map(async subscriber => {
     try {
-      const notion = new Client({ auth: subscriber.accessToken });
+      const notion = new Client({ auth: subscriber.accessToken, notionVersion: '2025-09-03' });
 
       await notion.pages.update({
         page_id: subscriber.pageId,
@@ -565,7 +574,7 @@ async function broadcastError(
 
   const errorPromises = subscribers.map(async subscriber => {
     try {
-      const notion = new Client({ auth: subscriber.accessToken });
+      const notion = new Client({ auth: subscriber.accessToken, notionVersion: '2025-09-03' });
 
       // Try to update Status if it exists
       // Don't fail if the property doesn't exist

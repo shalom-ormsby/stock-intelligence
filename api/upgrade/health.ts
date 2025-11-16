@@ -78,7 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Check Notion token validity
     let tokenValid = false;
     try {
-      const notion = new Client({ auth: userToken });
+      const notion = new Client({ auth: userToken, notionVersion: '2025-09-03' });
       await notion.users.me({});
       tokenValid = true;
     } catch (error: any) {
@@ -104,7 +104,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let currentVersion: string | null = null;
     if (tokenValid) {
       try {
-        const notion = new Client({ auth: userToken });
+        const notion = new Client({ auth: userToken, notionVersion: '2025-09-03' });
         const page = await notion.pages.retrieve({ page_id: user.sageStocksPageId });
 
         pageFound = true;

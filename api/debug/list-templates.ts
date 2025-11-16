@@ -34,13 +34,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Decrypt user's OAuth token
     const userAccessToken = await decryptToken(user.accessToken);
-    const notion = new Client({ auth: userAccessToken });
+    const notion = new Client({ auth: userAccessToken, notionVersion: '2025-09-03' });
 
     console.log(`🔍 Searching workspace for ${user.email}...`);
 
-    // Search for all databases
+    // Search for all databases (now returns data sources in v2025-09-03)
     const databasesResponse = await notion.search({
-      filter: { property: 'object', value: 'database' },
+      filter: { property: 'object', value: 'data_source' },
       page_size: 100,
     });
 

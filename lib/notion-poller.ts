@@ -14,7 +14,7 @@
 import { Client } from '@notionhq/client';
 import {
   PageObjectResponse,
-  QueryDatabaseResponse,
+  QueryDataSourceResponse,
 } from '@notionhq/client/build/src/api-endpoints';
 
 export interface PollerConfig {
@@ -73,13 +73,34 @@ export class NotionPoller {
   private maxRetries: number;
   private rateLimiter: RateLimiter;
   private isPolling = false;
+  private dataSourceCache = new Map<string, string>();
 
   constructor(config: PollerConfig) {
-    this.client = new Client({ auth: config.apiKey });
+    this.client = new Client({ auth: config.apiKey, notionVersion: '2025-09-03' });
     this.stockAnalysesDbId = config.stockAnalysesDbId;
     this.pollInterval = config.pollInterval || 30;
     this.maxRetries = config.maxRetries || 3;
     this.rateLimiter = new RateLimiter();
+  }
+
+  /**
+   * Get data source ID from database ID
+   * Required for API version 2025-09-03
+   */
+  private async getDataSourceId(databaseId: string): Promise<string> {
+    if (this.dataSourceCache.has(databaseId)) {
+      return this.dataSourceCache.get(databaseId)!;
+    }
+
+    const db = await this.client.databases.retrieve({ database_id: databaseId });
+    const dataSourceId = (db as any).data_sources?.[0]?.id;
+
+    if (!dataSourceId) {
+      throw new Error(`No data source found for database ${databaseId}`);
+    }
+
+    this.dataSourceCache.set(databaseId, dataSourceId);
+    return dataSourceId;
   }
 
   /**
@@ -109,8 +130,11 @@ export class NotionPoller {
     await this.rateLimiter.throttle();
 
     try {
-      const response: QueryDatabaseResponse = await this.client.databases.query({
-        database_id: this.stockAnalysesDbId,
+      // Get data source ID for API v2025-09-03
+      const dataSourceId = await this.getDataSourceId(this.stockAnalysesDbId);
+
+      const response: QueryDataSourceResponse = await this.client.dataSources.query({
+        data_source_id: dataSourceId,
         filter: {
           and: [
             {
