@@ -91,6 +91,29 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL || '';
 // Initialize Notion client for user management
 const notion = new Client({ auth: process.env.NOTION_API_KEY, notionVersion: '2025-09-03' });
 
+// Cache for data source IDs (API v2025-09-03)
+const dataSourceCache = new Map<string, string>();
+
+/**
+ * Get data source ID from database ID
+ * Required for API version 2025-09-03
+ */
+async function getDataSourceId(databaseId: string): Promise<string> {
+  if (dataSourceCache.has(databaseId)) {
+    return dataSourceCache.get(databaseId)!;
+  }
+
+  const db = await notion.databases.retrieve({ database_id: databaseId });
+  const dataSourceId = (db as any).data_sources?.[0]?.id;
+
+  if (!dataSourceId) {
+    throw new Error(`No data source found for database ${databaseId}`);
+  }
+
+  dataSourceCache.set(databaseId, dataSourceId);
+  return dataSourceId;
+}
+
 // ============================================================================
 // Session Management (Redis)
 // ============================================================================
@@ -562,8 +585,11 @@ export async function getUserByEmail(email: string): Promise<User | null> {
   }
 
   try {
-    const response = await notion.databases.query({
-      database_id: BETA_USERS_DB_ID,
+    // Get data source ID for API v2025-09-03
+    const dataSourceId = await getDataSourceId(BETA_USERS_DB_ID);
+
+    const response = await notion.dataSources.query({
+      data_source_id: dataSourceId,
       filter: {
         property: 'Email',
         email: { equals: email },
@@ -611,8 +637,11 @@ export async function getUserByNotionId(notionUserId: string): Promise<User | nu
   }
 
   try {
-    const response = await notion.databases.query({
-      database_id: BETA_USERS_DB_ID,
+    // Get data source ID for API v2025-09-03
+    const dataSourceId = await getDataSourceId(BETA_USERS_DB_ID);
+
+    const response = await notion.dataSources.query({
+      data_source_id: dataSourceId,
       filter: {
         property: 'Notion User ID',
         rich_text: { equals: notionUserId },
@@ -737,8 +766,11 @@ export async function getAllUsers(): Promise<User[]> {
   }
 
   try {
-    const response = await notion.databases.query({
-      database_id: BETA_USERS_DB_ID,
+    // Get data source ID for API v2025-09-03
+    const dataSourceId = await getDataSourceId(BETA_USERS_DB_ID);
+
+    const response = await notion.dataSources.query({
+      data_source_id: dataSourceId,
       sorts: [{ property: 'Signup Date', direction: 'descending' }],
     });
 
