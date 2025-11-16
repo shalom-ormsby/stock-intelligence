@@ -1,8 +1,8 @@
 # Sage Stocks Architecture
 
-*Last updated: November 14, 2025*
+*Last updated: November 15, 2025*
 
-**Development Version:** v1.2.3 (Complete) - Notion API Resilience & Critical Operation Retry Logic
+**Development Version:** v1.2.4 (Complete) - Notion API v2025-09-03 Migration
 **Template Version:** v0.1.0 (Beta) - Launching with Cohort 1
 **Production URL:** [https://sagestocks.vercel.app](https://sagestocks.vercel.app)
 **Status:** ✅ Live in Production - Fully Automated
@@ -87,7 +87,12 @@ Sage Stocks is a **serverless stock analysis platform** that delivers automated 
 - **Template Detection** - Auto-discovery of user's Notion databases (v1.1.6)
 
 ### Integration Layer
-- **Notion API** - Primary data store for Stock Analyses, Stock History, Beta Users databases
+- **Notion API v2025-09-03** (v1.2.4) - Primary data store for Stock Analyses, Stock History, Beta Users databases
+  - **SDK:** `@notionhq/client` v5.4.0 (upgraded from v2.3.0)
+  - **Multi-source database support** with data source ID resolution pattern
+  - **Data source caching** to minimize API calls (in-memory cache per client instance)
+  - **Breaking changes resolved:** Migrated from `databases.query()` → `dataSources.query()`
+  - **Query pattern:** Fetch data source ID from database before queries (cached for performance)
 - **Upstash Redis** - Rate limiting state and admin bypass sessions (REST API, serverless-friendly)
 - **PostgreSQL (Supabase)** - Planned migration in v2.0 for performance optimization
 - **REST APIs** - All external communication via HTTP

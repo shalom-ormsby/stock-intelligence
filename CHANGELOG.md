@@ -99,6 +99,94 @@ All development versions are documented below with full technical details.
 
 ---
 
+## [v1.2.4] - 2025-11-15
+
+### 🔄 Major: Notion API v2025-09-03 Migration
+
+**Summary:** Complete migration from Notion API v2022-06-28 to v2025-09-03, implementing multi-source database support with breaking changes resolved across the entire codebase.
+
+**Background:**
+Notion API v2025-09-03 introduced fundamental changes to database querying to support multi-source databases. The `databases.query()` method was removed in favor of `dataSources.query()`, requiring data source ID resolution before all query operations.
+
+**Changes:**
+
+1. **SDK Upgrade**
+   - Updated `@notionhq/client` from v2.3.0 → v5.4.0
+   - Added `notionVersion: '2025-09-03'` parameter to all 20+ Client initializations
+
+2. **Breaking API Changes Resolved**
+   - Migrated 9 `databases.query()` calls → `dataSources.query()`
+   - Updated 3 search filters: `'database'` → `'data_source'`
+   - Fixed type import: `QueryDatabaseResponse` → `QueryDataSourceResponse`
+   - Implemented data source ID resolution pattern with caching
+
+3. **Data Source Resolution Pattern**
+   ```typescript
+   // New pattern used across codebase
+   private async getDataSourceId(databaseId: string): Promise<string> {
+     if (this.dataSourceCache.has(databaseId)) {
+       return this.dataSourceCache.get(databaseId)!;
+     }
+
+     const db = await this.client.databases.retrieve({ database_id: databaseId });
+     const dataSourceId = (db as any).data_sources?.[0]?.id;
+
+     if (!dataSourceId) {
+       throw new Error(`No data source found for database ${databaseId}`);
+     }
+
+     this.dataSourceCache.set(databaseId, dataSourceId);
+     return dataSourceId;
+   }
+   ```
+
+4. **Files Modified** (17 files)
+   - `lib/notion-client.ts` - Added data source caching to NotionClient class
+   - `lib/auth.ts` - Updated user management queries (getUserByEmail, getUserByNotionId, getAllUsers)
+   - `lib/orchestrator.ts` - Fixed collectStockRequests() data source query
+   - `lib/template-detection.ts` - Updated auto-detection + testDatabaseWrite()
+   - `lib/notion-poller.ts` - Added NotionPoller data source resolution
+   - `api/auth/callback.ts` - Updated OAuth callback search filter
+   - `api/debug/list-templates.ts` - Fixed debug endpoint search filter
+   - `lib/database-validator.ts` - Updated validation search filter
+   - `api/setup.ts`, `api/upgrade.ts`, `api/upgrade/health.ts`, `lib/bug-reporter.ts`, `api/debug-reset-setup.ts` - Added API version headers
+
+5. **Migration Process**
+   - **Batch 1:** SDK upgrade + search filters + type imports (4 errors fixed)
+   - **Batch 2:** NotionClient data source queries (2 errors fixed)
+   - **Batch 3:** Auth system data source queries (4 errors fixed)
+   - **Batch 4:** Orchestrator, template detection, poller queries (3 errors fixed)
+
+**Testing:**
+- ✅ OAuth flow verified (no more `oauth_failed` errors from first attempt)
+- ✅ Analysis creation tested successfully
+- ✅ TypeScript compilation: 0 errors
+- ✅ Vercel preview deployment: Ready
+- ✅ Production deployment: Successful (21s build time)
+
+**Performance Impact:**
+- **Caching Strategy:** Data source IDs cached in-memory to avoid repeated API calls
+- **API Call Overhead:** +1 initial API call per database (cached for subsequent queries)
+- **No Breaking Changes:** All OAuth, analysis, and setup flows preserved
+
+**Migration Documentation:**
+- `MIGRATION_PLAN_2025-09-03.md` - Complete migration specification
+- `PHASE1_TYPESCRIPT_ERRORS.md` - Detailed error tracking and resolution steps
+
+**Rollback Safety:**
+Feature branch `feature/notion-api-2025-09-03` with clean 4-commit history allows easy rollback if issues discovered.
+
+**Deployment:** ✅ Deployed to production - sagestocks.vercel.app
+
+**Commits:**
+- `d4ae3cc` - Merge: Complete Notion API v2025-09-03 migration
+- `1955dd1` - Batch 4: Fix final data source queries
+- `df2905b` - Batch 3: Fix auth system data source queries
+- `3a0ab84` - Batch 2: Fix NotionClient data source queries
+- `c15282c` - Batch 1: SDK upgrade + quick wins
+
+---
+
 ## [v1.2.3] - 2025-11-14
 
 ### 🐛 Critical Bug Fix: Notion API Resilience in Setup Flow
