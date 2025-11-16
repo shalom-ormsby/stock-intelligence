@@ -1098,6 +1098,95 @@ export class NotionClient {
         continue;
       }
 
+      // Table detection (markdown tables with | delimiters)
+      if (line.startsWith('|') && line.endsWith('|')) {
+        const tableRows: string[] = [];
+
+        // Collect all consecutive table rows
+        while (i < lines.length) {
+          const tableLine = lines[i].trim();
+          if (tableLine.startsWith('|') && tableLine.endsWith('|')) {
+            tableRows.push(tableLine);
+            i++;
+          } else {
+            break;
+          }
+        }
+
+        // Parse table if we have at least 2 rows (header + separator, or header + data)
+        if (tableRows.length >= 2) {
+          // Parse header row
+          const headerCells = tableRows[0]
+            .split('|')
+            .slice(1, -1) // Remove first and last empty strings
+            .map(cell => cell.trim());
+
+          // Check if second row is a separator (e.g., |---|---|)
+          const isSeparatorRow = tableRows[1].split('|')
+            .slice(1, -1)
+            .every(cell => /^[-:]+$/.test(cell.trim()));
+
+          // Start from data rows (skip separator if present)
+          const dataStartIndex = isSeparatorRow ? 2 : 1;
+          const dataRows = tableRows.slice(dataStartIndex);
+
+          // Build Notion table block
+          const tableWidth = headerCells.length;
+
+          // Create table structure
+          const tableChildren: Array<any> = [];
+
+          // Data rows
+          for (const dataRow of dataRows) {
+            const dataCells = dataRow
+              .split('|')
+              .slice(1, -1)
+              .map(cell => cell.trim());
+
+            const rowCells: Array<Array<any>> = [];
+            for (const cellContent of dataCells) {
+              // Parse cell content for bold formatting
+              rowCells.push(this.parseRichText(cellContent));
+            }
+
+            tableChildren.push({
+              object: 'block',
+              type: 'table_row',
+              table_row: {
+                cells: rowCells,
+              },
+            });
+          }
+
+          // Create table block with header row as the first row
+          blocks.push({
+            object: 'block',
+            type: 'table',
+            table: {
+              table_width: tableWidth,
+              has_column_header: true,
+              has_row_header: false,
+              children: [
+                {
+                  object: 'block',
+                  type: 'table_row',
+                  table_row: {
+                    cells: headerCells.map(header => [{
+                      type: 'text',
+                      text: { content: header },
+                      annotations: { bold: true },
+                    }]),
+                  },
+                },
+                ...tableChildren,
+              ],
+            },
+          });
+
+          continue;
+        }
+      }
+
       // H3 heading (###)
       if (line.startsWith('### ')) {
         blocks.push({
