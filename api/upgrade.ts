@@ -58,7 +58,7 @@ async function handleGet(req: VercelRequest, res: VercelResponse) {
 
     // Decrypt token and get current version
     const userToken = await decryptToken(user.accessToken);
-    const notion = new Client({ auth: userToken });
+    const notion = new Client({ auth: userToken, notionVersion: '2025-09-03' });
 
     let currentVersion = user.templateVersion || '1.0.0';
 
@@ -295,7 +295,7 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
     }
 
     // Update Beta Users database
-    const adminNotion = new Client({ auth: process.env.NOTION_API_KEY! });
+    const adminNotion = new Client({ auth: process.env.NOTION_API_KEY!, notionVersion: '2025-09-03' });
 
     // Get existing upgrade history
     const existingHistory: UpgradeHistory[] = user.upgradeHistory
@@ -340,7 +340,7 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
       if (session) {
         const user = await getUserByEmail(session.email);
         if (user) {
-          const adminNotion = new Client({ auth: process.env.NOTION_API_KEY! });
+          const adminNotion = new Client({ auth: process.env.NOTION_API_KEY!, notionVersion: '2025-09-03' });
           const existingHistory: UpgradeHistory[] = user.upgradeHistory
             ? JSON.parse(user.upgradeHistory)
             : [];
@@ -397,7 +397,7 @@ async function validateUpgradePreconditions(user: any): Promise<{ success: boole
 
   // Check page access
   try {
-    const notion = new Client({ auth: userToken });
+    const notion = new Client({ auth: userToken, notionVersion: '2025-09-03' });
     await notion.pages.retrieve({ page_id: user.sageStocksPageId });
   } catch (error: any) {
     issues.push('Cannot access Sage Stocks page');
@@ -449,7 +449,7 @@ async function performUpgradeWithRetry(
  */
 async function applyUpgrade(user: any, targetVersion: string): Promise<void> {
   const userToken = await decryptToken(user.accessToken);
-  const notion = new Client({ auth: userToken });
+  const notion = new Client({ auth: userToken, notionVersion: '2025-09-03' });
 
   // Update Template Version property in Sage Stocks page
   await notion.pages.update({

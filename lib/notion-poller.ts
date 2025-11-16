@@ -14,7 +14,7 @@
 import { Client } from '@notionhq/client';
 import {
   PageObjectResponse,
-  QueryDatabaseResponse,
+  QueryDataSourceResponse,
 } from '@notionhq/client/build/src/api-endpoints';
 
 export interface PollerConfig {
@@ -75,7 +75,7 @@ export class NotionPoller {
   private isPolling = false;
 
   constructor(config: PollerConfig) {
-    this.client = new Client({ auth: config.apiKey });
+    this.client = new Client({ auth: config.apiKey, notionVersion: '2025-09-03' });
     this.stockAnalysesDbId = config.stockAnalysesDbId;
     this.pollInterval = config.pollInterval || 30;
     this.maxRetries = config.maxRetries || 3;
@@ -109,7 +109,7 @@ export class NotionPoller {
     await this.rateLimiter.throttle();
 
     try {
-      const response: QueryDatabaseResponse = await this.client.databases.query({
+      const response: QueryDataSourceResponse = await this.client.databases.query({
         database_id: this.stockAnalysesDbId,
         filter: {
           and: [

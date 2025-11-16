@@ -43,7 +43,7 @@ interface MatchCriteria {
  * Search for all databases in user's workspace
  */
 async function searchUserDatabases(notionToken: string): Promise<any[]> {
-  const notion = new Client({ auth: notionToken });
+  const notion = new Client({ auth: notionToken, notionVersion: '2025-09-03' });
   const databases: any[] = [];
 
   let hasMore = true;
@@ -53,7 +53,7 @@ async function searchUserDatabases(notionToken: string): Promise<any[]> {
 
   while (hasMore) {
     const response = await notion.search({
-      filter: { property: 'object', value: 'database' },
+      filter: { property: 'object', value: 'data_source' },
       start_cursor: startCursor,
       page_size: 100,
     });
@@ -77,7 +77,7 @@ async function searchUserDatabases(notionToken: string): Promise<any[]> {
  * Search for pages with Template Version property
  */
 async function searchUserPages(notionToken: string): Promise<any[]> {
-  const notion = new Client({ auth: notionToken });
+  const notion = new Client({ auth: notionToken, notionVersion: '2025-09-03' });
   const pages: any[] = [];
 
   let hasMore = true;
@@ -360,7 +360,7 @@ export async function autoDetectTemplate(
  */
 export async function testDatabaseRead(notionToken: string, databaseId: string): Promise<boolean> {
   try {
-    const notion = new Client({ auth: notionToken });
+    const notion = new Client({ auth: notionToken, notionVersion: '2025-09-03' });
     await notion.databases.retrieve({ database_id: databaseId });
     return true;
   } catch (error) {
@@ -373,7 +373,7 @@ export async function testDatabaseRead(notionToken: string, databaseId: string):
  */
 export async function testDatabaseWrite(notionToken: string, databaseId: string): Promise<boolean> {
   try {
-    const notion = new Client({ auth: notionToken });
+    const notion = new Client({ auth: notionToken, notionVersion: '2025-09-03' });
     // Query the database (read operation that requires proper permissions)
     await notion.databases.query({
       database_id: databaseId,
@@ -390,7 +390,7 @@ export async function testDatabaseWrite(notionToken: string, databaseId: string)
  */
 export async function testPageRead(notionToken: string, pageId: string): Promise<boolean> {
   try {
-    const notion = new Client({ auth: notionToken });
+    const notion = new Client({ auth: notionToken, notionVersion: '2025-09-03' });
     await notion.pages.retrieve({ page_id: pageId });
     return true;
   } catch (error) {

@@ -68,7 +68,7 @@ export async function reportBug(
   }
 
   try {
-    const notion = new Client({ auth: ADMIN_NOTION_KEY });
+    const notion = new Client({ auth: ADMIN_NOTION_KEY, notionVersion: '2025-09-03' });
 
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : undefined;

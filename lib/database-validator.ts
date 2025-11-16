@@ -68,7 +68,7 @@ export async function validateDatabaseConfig(
   notionToken: string,
   config: DatabaseConfig
 ): Promise<ValidationResult> {
-  const notion = new Client({ auth: notionToken });
+  const notion = new Client({ auth: notionToken, notionVersion: '2025-09-03' });
   const errors: ValidationError[] = [];
   const warnings: ValidationWarning[] = [];
   const details: ValidationDetails = {};
@@ -227,7 +227,7 @@ async function checkForDuplicates(notion: Client): Promise<{
   sageStocksPages: number;
 }> {
   const databasesResponse = await notion.search({
-    filter: { property: 'object', value: 'database' },
+    filter: { property: 'object', value: 'data_source' },
     page_size: 100,
   });
 
