@@ -609,7 +609,8 @@ export default async function handler(
     const analysisContext: AnalysisContext = {
       ticker: tickerUpper,
       currentDate: new Date().toISOString().split('T')[0], // e.g., "2025-11-16"
-      marketContext: marketContext || undefined, // v1.1.0: Market environment context
+      // Only include marketContext if it has valid regime data (v1.1.0)
+      marketContext: (marketContext && marketContext.regime) ? marketContext : undefined,
       currentMetrics: {
         // Scores
         compositeScore: scores.composite,

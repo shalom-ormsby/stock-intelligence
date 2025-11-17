@@ -159,23 +159,37 @@ export function buildAnalysisPrompt(context: AnalysisContext): string {
   prompt += `- Pattern: ${currentMetrics.pattern} | Confidence: ${currentMetrics.confidence}/5.0\n\n`;
 
   // Market Context (if available) - CRITICAL FOR REGIME-AWARE ANALYSIS
-  if (marketContext) {
+  if (marketContext && marketContext.regime) {
     prompt += `## 📊 Market Environment (Context for Your Analysis)\n\n`;
     prompt += `**TODAY'S MARKET REGIME: ${marketContext.regime.toUpperCase()}** (${Math.round(marketContext.regimeConfidence * 100)}% confidence)\n`;
     prompt += `**Risk Assessment:** ${marketContext.riskAssessment}\n\n`;
 
     prompt += `**Market Overview:**\n`;
-    prompt += `- S&P 500: ${marketContext.spy.change1D > 0 ? '+' : ''}${marketContext.spy.change1D.toFixed(2)}% (1D) | ${marketContext.spy.change1M > 0 ? '+' : ''}${marketContext.spy.change1M.toFixed(2)}% (1M)\n`;
-    prompt += `- VIX: ${marketContext.vix.toFixed(1)} ${marketContext.vix > 30 ? '(high volatility)' : marketContext.vix < 15 ? '(low volatility)' : ''}\n`;
-    prompt += `- Market Direction: ${marketContext.marketDirection}\n\n`;
+    if (marketContext.spy) {
+      prompt += `- S&P 500: ${marketContext.spy.change1D > 0 ? '+' : ''}${marketContext.spy.change1D.toFixed(2)}% (1D) | ${marketContext.spy.change1M > 0 ? '+' : ''}${marketContext.spy.change1M.toFixed(2)}% (1M)\n`;
+    }
+    if (marketContext.vix != null) {
+      prompt += `- VIX: ${marketContext.vix.toFixed(1)} ${marketContext.vix > 30 ? '(high volatility)' : marketContext.vix < 15 ? '(low volatility)' : ''}\n`;
+    }
+    if (marketContext.marketDirection) {
+      prompt += `- Market Direction: ${marketContext.marketDirection}\n`;
+    }
+    prompt += `\n`;
 
-    prompt += `**Sector Rotation (1-Month Performance):**\n`;
-    prompt += `- Leaders: ${marketContext.sectorLeaders.map(s => `${s.name} (+${s.change1M.toFixed(1)}%)`).join(', ')}\n`;
-    prompt += `- Laggards: ${marketContext.sectorLaggards.map(s => `${s.name} (${s.change1M.toFixed(1)}%)`).join(', ')}\n\n`;
+    if (marketContext.sectorLeaders && marketContext.sectorLaggards) {
+      prompt += `**Sector Rotation (1-Month Performance):**\n`;
+      if (marketContext.sectorLeaders.length > 0) {
+        prompt += `- Leaders: ${marketContext.sectorLeaders.map(s => `${s.name} (+${s.change1M.toFixed(1)}%)`).join(', ')}\n`;
+      }
+      if (marketContext.sectorLaggards.length > 0) {
+        prompt += `- Laggards: ${marketContext.sectorLaggards.map(s => `${s.name} (${s.change1M.toFixed(1)}%)`).join(', ')}\n`;
+      }
+      prompt += `\n`;
+    }
 
     // Check if stock's sector is in leaders or laggards
     const stockSector = currentMetrics.sector;
-    if (stockSector) {
+    if (stockSector && marketContext.allSectors && marketContext.allSectors.length > 0) {
       const sectorRank = marketContext.allSectors.find(s =>
         s.name.toLowerCase() === stockSector.toLowerCase()
       );
@@ -193,8 +207,10 @@ export function buildAnalysisPrompt(context: AnalysisContext): string {
       }
     }
 
-    prompt += `\n**Market Summary:**\n`;
-    prompt += `${marketContext.summary}\n\n`;
+    if (marketContext.summary) {
+      prompt += `\n**Market Summary:**\n`;
+      prompt += `${marketContext.summary}\n\n`;
+    }
 
     prompt += `**CRITICAL: Use this market context to inform your analysis:**\n`;
     if (marketContext.regime === 'Risk-On') {
