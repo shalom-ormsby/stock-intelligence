@@ -1,6 +1,6 @@
 # Changelog
 
-**Last Updated:** November 16, 2025
+**Last Updated:** November 17, 2025
 
 All notable changes to Sage Stocks will be documented in this file.
 
@@ -96,6 +96,48 @@ All development versions are documented below with full technical details.
 ---
 
 ## [Unreleased]
+
+### 🐛 Bug Fix: Market Context Integration in /api/analyze Endpoint
+
+**Date:** November 17, 2025
+
+**Problem:**
+The `/api/analyze` endpoint had two critical issues:
+1. **Internal Server Error** - Endpoint returned 500 error even though analysis wrote to Notion successfully
+2. **Missing Market Context** - Analysis content didn't include market environment information (regime, VIX, sector performance)
+
+**Root Cause:**
+1. `AnalyzeResponse` interface was missing `marketAlignment` field in `scores` object
+2. Response object construction was missing `marketAlignment` property
+3. The endpoint didn't fetch market context at all
+4. Market context wasn't passed to scorer or LLM analysis
+
+**Solution:**
+Implemented complete market context integration in [api/analyze.ts](api/analyze.ts):
+
+1. **Fetch Market Context** (Lines 285-298)
+   - Added market context fetch after creating FMP/FRED clients
+   - Graceful degradation if fetch fails (continues with null)
+   - Logs market regime, confidence, risk assessment, VIX, and SPY performance
+
+2. **Pass to Scoring** (Lines 466-476)
+   - Extract stock sector from `fmpData.profile.sector`
+   - Pass `marketContext` and `stockSector` to `calculateScores()`
+   - Enables 7th scoring dimension: **Market Alignment** (5% weight)
+
+3. **Pass to LLM** (Line 612)
+   - Added `marketContext` to `analysisContext` object
+   - LLM now sees market regime, volatility, sector leaders/laggards
+   - Includes market environment insights in generated analysis
+
+**Impact:**
+- ✅ Fixes Internal Server Error (TypeScript type mismatch resolved)
+- ✅ Brings `/api/analyze` to parity with orchestrator workflow
+- ✅ Enables market-aware scoring and analysis generation
+- ✅ Market context now appears in all manual stock analyses
+
+**Files Modified:**
+- [api/analyze.ts](api/analyze.ts:285-298,466-476,612) - Market context integration
 
 ---
 
