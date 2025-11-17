@@ -13,14 +13,21 @@
     "api/page/analyze.ts": {
       "maxDuration": 10
     },
+    "api/jobs/market-context.ts": {
+      "maxDuration": 60
+    },
     "api/cron/scheduled-analyses.ts": {
       "maxDuration": 800
     }
   },
   "crons": [
     {
+      "path": "/api/jobs/market-context",
+      "schedule": "0 13 * * 1-5"
+    },
+    {
       "path": "/api/cron/scheduled-analyses",
-      "schedule": "0 13 * * *"
+      "schedule": "30 13 * * 1-5"
     }
   ],
   "buildCommand": "npm run type-check",

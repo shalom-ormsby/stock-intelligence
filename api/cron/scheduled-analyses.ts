@@ -1,24 +1,24 @@
 /**
- * Scheduled Stock Analyses Cron Endpoint (v1.0.4)
+ * Scheduled Stock Analyses Cron Endpoint (v1.1.0)
  *
- * Runs daily at 6am PT (14:00 UTC) via Vercel Cron
+ * Runs daily at 5:30 AM PT (13:30 UTC) via Vercel Cron
  * Automatically analyzes stocks with "Daily" cadence for all users
  *
  * Workflow:
  * 1. Verify cron secret (authentication)
  * 2. Check if today is a NYSE market day (skip weekends/holidays)
- * 3. Get all beta users
- * 4. For each user:
- *    - Query stocks with Analysis Cadence = "Daily"
- *    - Apply tier limits (Free=10, Starter=50, Analyst=200, Pro=unlimited)
- *    - Execute analyses
- *    - Update Last Auto-Analysis timestamps
- * 5. Return execution summary
+ * 3. Fetch market context (Step 0 - NEW in v1.1.0)
+ * 4. Get all beta users
+ * 5. Run orchestrator with market context
+ * 6. Return execution summary
  */
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getAllUsers } from '../../lib/auth';
 import { runOrchestrator } from '../../lib/orchestrator';
+import { getMarketContext, MarketContext } from '../../lib/market';
+import { createFMPClient } from '../../lib/fmp-client';
+import { createFREDClient } from '../../lib/fred-client';
 
 // Vercel function configuration
 // Pro plan with Fluid Compute supports up to 800 seconds (~13 min)
@@ -75,12 +75,22 @@ export default async function handler(
 
     console.log('[CRON] ✓ Market is open today');
 
-    // 3. Get all beta users
+    // 3. Fetch market context (Step 0 - NEW in v1.1.0)
+    const marketContext = await fetchMarketContext();
+
+    if (marketContext) {
+      console.log(`[CRON] ✓ Market context ready: ${marketContext.regime} regime (${Math.round(marketContext.regimeConfidence * 100)}% confidence)`);
+      console.log(`[CRON]   VIX: ${marketContext.vix.toFixed(1)} | SPY: ${marketContext.spy.change1D > 0 ? '+' : ''}${marketContext.spy.change1D.toFixed(2)}% (1D)`);
+    } else {
+      console.warn('[CRON] ⚠️  Market context unavailable - continuing with neutral assumptions');
+    }
+
+    // 4. Get all beta users
     const users = await getAllUsers();
     console.log(`[CRON] Found ${users.length} users`);
 
-    // 4. Run orchestrator (v1.0.5)
-    const metrics = await runOrchestrator(users);
+    // 5. Run orchestrator with market context (v1.1.0)
+    const metrics = await runOrchestrator(users, marketContext);
 
     // 5. Return execution summary
     const summary = {
@@ -111,6 +121,34 @@ export default async function handler(
       error: 'Internal server error',
       message: error instanceof Error ? error.message : String(error)
     });
+  }
+}
+
+/**
+ * Fetch market context for today's analysis
+ * Returns null if APIs unavailable (graceful degradation)
+ */
+async function fetchMarketContext(): Promise<MarketContext | null> {
+  try {
+    const fmpApiKey = process.env.FMP_API_KEY || '';
+    const fredApiKey = process.env.FRED_API_KEY || '';
+
+    if (!fmpApiKey || !fredApiKey) {
+      console.warn('[CRON] Missing FMP/FRED API keys - skipping market context');
+      return null;
+    }
+
+    const fmpClient = createFMPClient(fmpApiKey);
+    const fredClient = createFREDClient(fredApiKey);
+
+    // Fetch market context with smart caching (1-hour TTL)
+    const marketContext = await getMarketContext(fmpClient, fredClient);
+
+    return marketContext;
+  } catch (error) {
+    console.error('[CRON] Failed to fetch market context:', error);
+    // Graceful degradation - continue without market context
+    return null;
   }
 }
 

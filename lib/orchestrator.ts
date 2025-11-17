@@ -650,14 +650,22 @@ async function getOrFetchMarketContext(): Promise<MarketContext | null> {
 
 /**
  * Main orchestrator entry point
+ *
+ * @param users Array of users to process
+ * @param marketContextOverride Optional pre-fetched market context (cron can pass this)
  */
-export async function runOrchestrator(users: User[]): Promise<OrchestratorMetrics> {
+export async function runOrchestrator(
+  users: User[],
+  marketContextOverride?: MarketContext | null
+): Promise<OrchestratorMetrics> {
   console.log('\n' + '='.repeat(60));
   console.log('Stock Analysis Orchestrator v1.1.0 (with Market Context)');
   console.log('='.repeat(60));
 
-  // Step 0: Fetch/validate market context (NEW)
-  const marketContext = await getOrFetchMarketContext();
+  // Step 0: Use provided market context or fetch fresh
+  const marketContext = marketContextOverride !== undefined
+    ? marketContextOverride
+    : await getOrFetchMarketContext();
 
   if (marketContext) {
     console.log(`[MARKET] Market Regime: ${marketContext.regime} (${Math.round(marketContext.regimeConfidence * 100)}% confidence)`);
