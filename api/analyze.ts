@@ -286,10 +286,17 @@ export default async function handler(
     console.log('\n📊 Step 0: Fetching market context...');
     let marketContext: MarketContext | null = null;
     try {
-      marketContext = await getMarketContext(fmpClient, fredClient);
+      // Force fresh fetch to bypass potentially corrupted cache
+      marketContext = await getMarketContext(fmpClient, fredClient, true);
 
       if (marketContext) {
         console.log('✅ Market context fetched');
+
+        // Debug: Log the full structure to see what we got
+        console.log('[DEBUG] Market context keys:', Object.keys(marketContext));
+        console.log('[DEBUG] Market context type:', typeof marketContext);
+        console.log('[DEBUG] Has regime?', 'regime' in marketContext, 'Value:', marketContext.regime);
+
         console.log(`   Regime: ${marketContext.regime || 'undefined'} (${Math.round((marketContext.regimeConfidence || 0) * 100)}% confidence)`);
         console.log(`   Risk: ${marketContext.riskAssessment || 'undefined'} | VIX: ${marketContext.vix?.toFixed(1) || 'N/A'}`);
         console.log(`   SPY: ${marketContext.spy ? `${marketContext.spy.change1D > 0 ? '+' : ''}${marketContext.spy.change1D.toFixed(2)}% (1D)` : 'N/A'}`);
@@ -297,6 +304,9 @@ export default async function handler(
         // Validate market context has required data
         if (!marketContext.regime) {
           console.warn('⚠️  Market context missing regime property - will be excluded from analysis');
+          console.warn('[DEBUG] Clearing Redis cache to force fresh fetch next time');
+          // Clear cache asynchronously (don't wait)
+          import('../lib/market').then(m => m.clearMarketContextCache().catch(() => {}));
           marketContext = null;
         }
       } else {
