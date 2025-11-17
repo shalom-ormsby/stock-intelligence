@@ -17,7 +17,7 @@ import { AnalysisContext } from '../types';
  * and improved scannability while preserving analytical value.
  */
 export function buildAnalysisPrompt(context: AnalysisContext): string {
-  const { ticker, currentDate, currentMetrics, previousAnalysis, deltas } = context;
+  const { ticker, currentDate, currentMetrics, marketContext, previousAnalysis, deltas } = context;
 
   // Determine recommendation badge and callout color
   const { badge, calloutColor } = getRecommendationFormatting(currentMetrics.recommendation);
@@ -155,7 +155,63 @@ export function buildAnalysisPrompt(context: AnalysisContext): string {
   prompt += `- Composite: ${currentMetrics.compositeScore}/5.0 (${currentMetrics.recommendation})\n`;
   prompt += `- Technical: ${currentMetrics.technicalScore}/5.0 | Fundamental: ${currentMetrics.fundamentalScore}/5.0 | Macro: ${currentMetrics.macroScore}/5.0\n`;
   prompt += `- Risk: ${currentMetrics.riskScore}/5.0 | Sentiment: ${currentMetrics.sentimentScore}/5.0\n`;
+  prompt += `- Market Alignment: ${currentMetrics.marketAlignment || 3.0}/5.0 (regime fit)\n`;
   prompt += `- Pattern: ${currentMetrics.pattern} | Confidence: ${currentMetrics.confidence}/5.0\n\n`;
+
+  // Market Context (if available) - CRITICAL FOR REGIME-AWARE ANALYSIS
+  if (marketContext) {
+    prompt += `## 📊 Market Environment (Context for Your Analysis)\n\n`;
+    prompt += `**TODAY'S MARKET REGIME: ${marketContext.regime.toUpperCase()}** (${Math.round(marketContext.regimeConfidence * 100)}% confidence)\n`;
+    prompt += `**Risk Assessment:** ${marketContext.riskAssessment}\n\n`;
+
+    prompt += `**Market Overview:**\n`;
+    prompt += `- S&P 500: ${marketContext.spy.change1D > 0 ? '+' : ''}${marketContext.spy.change1D.toFixed(2)}% (1D) | ${marketContext.spy.change1M > 0 ? '+' : ''}${marketContext.spy.change1M.toFixed(2)}% (1M)\n`;
+    prompt += `- VIX: ${marketContext.vix.toFixed(1)} ${marketContext.vix > 30 ? '(high volatility)' : marketContext.vix < 15 ? '(low volatility)' : ''}\n`;
+    prompt += `- Market Direction: ${marketContext.marketDirection}\n\n`;
+
+    prompt += `**Sector Rotation (1-Month Performance):**\n`;
+    prompt += `- Leaders: ${marketContext.sectorLeaders.map(s => `${s.name} (+${s.change1M.toFixed(1)}%)`).join(', ')}\n`;
+    prompt += `- Laggards: ${marketContext.sectorLaggards.map(s => `${s.name} (${s.change1M.toFixed(1)}%)`).join(', ')}\n\n`;
+
+    // Check if stock's sector is in leaders or laggards
+    const stockSector = currentMetrics.sector;
+    if (stockSector) {
+      const sectorRank = marketContext.allSectors.find(s =>
+        s.name.toLowerCase() === stockSector.toLowerCase()
+      );
+      if (sectorRank) {
+        const isLeader = sectorRank.rank <= 3;
+        const isLaggard = sectorRank.rank >= 9;
+        prompt += `**${ticker}'s Sector (${stockSector}):** Rank #${sectorRank.rank} of 11 `;
+        if (isLeader) {
+          prompt += `✅ TOP PERFORMER - sector tailwind\n`;
+        } else if (isLaggard) {
+          prompt += `⚠️ LAGGING SECTOR - sector headwind\n`;
+        } else {
+          prompt += `(mid-pack)\n`;
+        }
+      }
+    }
+
+    prompt += `\n**Market Summary:**\n`;
+    prompt += `${marketContext.summary}\n\n`;
+
+    prompt += `**CRITICAL: Use this market context to inform your analysis:**\n`;
+    if (marketContext.regime === 'Risk-On') {
+      prompt += `- Growth stocks, high-beta names, and cyclical sectors have tailwinds\n`;
+      prompt += `- Defensive stocks may underperform in this environment\n`;
+      prompt += `- Entry opportunities on pullbacks are favorable\n`;
+    } else if (marketContext.regime === 'Risk-Off') {
+      prompt += `- Defensive stocks, low-beta names, and quality companies have tailwinds\n`;
+      prompt += `- High-beta growth stocks face amplified downside risk\n`;
+      prompt += `- Capital preservation is priority over aggressive positioning\n`;
+    } else {
+      prompt += `- Mixed signals suggest balanced, diversified approach\n`;
+      prompt += `- Avoid large directional bets until regime clarity emerges\n`;
+      prompt += `- Focus on stock-specific opportunities over broad market trends\n`;
+    }
+    prompt += `\n`;
+  }
 
   // Delta context (if exists) - HISTORICAL REFERENCE ONLY
   if (previousAnalysis && deltas) {

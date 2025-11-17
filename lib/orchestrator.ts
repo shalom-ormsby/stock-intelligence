@@ -19,6 +19,9 @@ import { User, decryptToken } from './auth';
 import { analyzeStockCore, validateAnalysisComplete, AnalysisResult } from './stock-analyzer';
 import { createNotionClient, AnalysisData } from './notion-client';
 import { reportScheduledTaskError } from './bug-reporter';
+import { getMarketContext, MarketContext } from './market';
+import { createFMPClient } from './fmp-client';
+import { createFREDClient } from './fred-client';
 
 // Environment configuration
 const ANALYSIS_DELAY_MS = parseInt(process.env.ANALYSIS_DELAY_MS || '8000', 10); // Default: 8 seconds
@@ -211,7 +214,8 @@ export function buildPriorityQueue(
  * 4. Delay before next ticker
  */
 export async function processQueue(
-  queue: QueueItem[]
+  queue: QueueItem[],
+  marketContext: MarketContext | null = null
 ): Promise<OrchestratorMetrics> {
   console.log(`[ORCHESTRATOR] Processing queue with ${queue.length} tickers...`);
   console.log(`[ORCHESTRATOR] Rate limit: ${ANALYSIS_DELAY_MS}ms delay between tickers`);
@@ -251,8 +255,8 @@ export async function processQueue(
     // Set Status to "Analyzing" for all subscribers before analysis starts
     await setAnalyzingStatus(item.subscribers);
 
-    // Step 3a: Analyze stock once
-    const analysisResult = await analyzeWithRetry(item);
+    // Step 3a: Analyze stock once WITH market context
+    const analysisResult = await analyzeWithRetry(item, 3, marketContext);
 
     if (!analysisResult.success) {
       console.error(`[ORCHESTRATOR]   → ✗ Analysis failed: ${analysisResult.error}`);
@@ -310,7 +314,8 @@ export async function processQueue(
  */
 async function analyzeWithRetry(
   item: QueueItem,
-  maxRetries: number = 3
+  maxRetries: number = 3,
+  marketContext: MarketContext | null = null
 ): Promise<AnalysisResult> {
   const backoffDelays = [2000, 4000, 8000]; // 2s, 4s, 8s
 
@@ -324,6 +329,7 @@ async function analyzeWithRetry(
         userAccessToken: firstSubscriber.accessToken,
         notionUserId: firstSubscriber.notionUserId,
         timezone: firstSubscriber.timezone,
+        marketContext, // Pass market context to stock analysis
       });
 
       // If analysis succeeded or failed with non-retryable error, return
@@ -377,6 +383,7 @@ async function analyzeWithRetry(
           macro: 0,
           risk: 0,
           sentiment: 0,
+          marketAlignment: 0,
           recommendation: 'Error',
         },
         dataQuality: {
@@ -612,12 +619,52 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
+ * Step 0: Get or fetch market context with smart caching
+ *
+ * Fetches market context once per orchestrator run and caches for 1 hour.
+ * This provides regime awareness for all stock analyses.
+ */
+async function getOrFetchMarketContext(): Promise<MarketContext | null> {
+  try {
+    const fmpApiKey = process.env.FMP_API_KEY || '';
+    const fredApiKey = process.env.FRED_API_KEY || '';
+
+    if (!fmpApiKey || !fredApiKey) {
+      console.warn('[MARKET] Missing API keys - skipping market context');
+      return null;
+    }
+
+    const fmpClient = createFMPClient(fmpApiKey);
+    const fredClient = createFREDClient(fredApiKey);
+
+    // Fetch with smart caching (1-hour TTL)
+    const marketContext = await getMarketContext(fmpClient, fredClient);
+
+    return marketContext;
+  } catch (error) {
+    console.error('[MARKET] Failed to fetch market context:', error);
+    // Graceful degradation - continue without market context
+    return null;
+  }
+}
+
+/**
  * Main orchestrator entry point
  */
 export async function runOrchestrator(users: User[]): Promise<OrchestratorMetrics> {
   console.log('\n' + '='.repeat(60));
-  console.log('Stock Analysis Orchestrator v1.0.5');
+  console.log('Stock Analysis Orchestrator v1.1.0 (with Market Context)');
   console.log('='.repeat(60));
+
+  // Step 0: Fetch/validate market context (NEW)
+  const marketContext = await getOrFetchMarketContext();
+
+  if (marketContext) {
+    console.log(`[MARKET] Market Regime: ${marketContext.regime} (${Math.round(marketContext.regimeConfidence * 100)}% confidence)`);
+    console.log(`[MARKET] Risk Assessment: ${marketContext.riskAssessment}`);
+    console.log(`[MARKET] VIX: ${marketContext.vix.toFixed(1)} | SPY: ${marketContext.spy.change1D > 0 ? '+' : ''}${marketContext.spy.change1D.toFixed(2)}% (1D)`);
+    console.log(`[MARKET] Top Sectors: ${marketContext.sectorLeaders.map(s => s.name).join(', ')}`);
+  }
 
   // Step 1: Collect requests
   const tickerMap = await collectStockRequests(users);
@@ -641,8 +688,8 @@ export async function runOrchestrator(users: User[]): Promise<OrchestratorMetric
   // Step 2: Build priority queue
   const queue = buildPriorityQueue(tickerMap);
 
-  // Step 3: Process queue
-  const metrics = await processQueue(queue);
+  // Step 3: Process queue WITH market context
+  const metrics = await processQueue(queue, marketContext);
 
   console.log('\n' + '='.repeat(60));
   console.log('Orchestrator Complete');

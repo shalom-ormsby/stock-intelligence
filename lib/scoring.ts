@@ -21,6 +21,7 @@ import { ScoringConfig } from '../config/scoring-config';
 import { isValidNumber, isValidScore } from './validators';
 import { clamp } from './utils';
 import { warn, info } from './logger';
+import { MarketContext, getSectorDataForStock } from './market';
 
 export interface TechnicalData {
   current_price?: number;
@@ -65,16 +66,18 @@ export interface ScoreResults {
   macro: number;
   risk: number;
   sentiment: number;
+  marketAlignment: number; // NEW: Market regime alignment score
   composite: number;
   recommendation: string;
 }
 
 export class StockScorer {
   private weights = {
-    technical: 0.3,
-    fundamental: 0.35,
-    macro: 0.2,
-    risk: 0.15,
+    technical: 0.285,      // 28.5% (was 30%)
+    fundamental: 0.33,     // 33% (was 35%)
+    macro: 0.19,           // 19% (was 20%)
+    risk: 0.145,           // 14.5% (was 15%)
+    marketAlignment: 0.05, // 5% (new)
   };
 
   /**
@@ -83,7 +86,11 @@ export class StockScorer {
    * Returns validated scores with graceful degradation for missing data.
    * All scores are guaranteed to be in valid range (1.0-5.0).
    */
-  calculateScores(data: AnalysisData): ScoreResults {
+  calculateScores(
+    data: AnalysisData,
+    marketContext?: MarketContext | null,
+    stockSector?: string
+  ): ScoreResults {
     // Calculate individual scores with validation
     const technical = this.validateScore(
       this.scoreTechnical(data.technical),
@@ -105,6 +112,10 @@ export class StockScorer {
       this.scoreSentiment(data.technical),
       'sentiment'
     );
+    const marketAlignment = this.validateScore(
+      this.scoreMarketAlignment(data, marketContext, stockSector),
+      'marketAlignment'
+    );
 
     const scores = {
       technical,
@@ -112,6 +123,7 @@ export class StockScorer {
       macro,
       risk,
       sentiment,
+      marketAlignment,
     };
 
     // Calculate composite score with validation
@@ -156,6 +168,7 @@ export class StockScorer {
       macro,
       risk,
       sentiment,
+      marketAlignment,
       composite,
       recommendation,
     });
@@ -166,6 +179,7 @@ export class StockScorer {
       macro,
       risk,
       sentiment,
+      marketAlignment,
       composite,
       recommendation,
     };
@@ -607,6 +621,94 @@ export class StockScorer {
     }
 
     const score = 1.0 + (points / maxPoints) * 4.0;
+    return Math.round(score * 100) / 100;
+  }
+
+  /**
+   * Market Alignment Score (1.0-5.0)
+   *
+   * Evaluates how well the stock aligns with current market regime.
+   * Considers regime type, sector rotation, and stock characteristics (beta).
+   *
+   * Scoring logic:
+   * - Risk-On + High beta + Growth sector = Higher score
+   * - Risk-Off + Low beta + Defensive sector = Higher score
+   * - Misalignment (e.g., Risk-Off + High beta growth) = Lower score
+   */
+  scoreMarketAlignment(
+    data: AnalysisData,
+    marketContext?: MarketContext | null,
+    stockSector?: string
+  ): number {
+    // If no market context available, return neutral score
+    if (!marketContext) {
+      return 3.0;
+    }
+
+    let score = 2.5; // Start neutral
+    const { fundamental } = data;
+    const beta = fundamental.beta;
+
+    // Factor 1: Regime alignment based on beta (40% of score, ±0.8 points)
+    if (isValidNumber(beta)) {
+      if (marketContext.regime === 'Risk-On') {
+        // High beta benefits in Risk-On
+        if (beta > 1.3) {
+          score += 0.8;
+        } else if (beta > 1.0) {
+          score += 0.4;
+        } else if (beta < 0.8) {
+          score -= 0.4; // Low beta underperforms in Risk-On
+        }
+      } else if (marketContext.regime === 'Risk-Off') {
+        // Low beta benefits in Risk-Off
+        if (beta < 0.7) {
+          score += 0.8;
+        } else if (beta < 1.0) {
+          score += 0.4;
+        } else if (beta > 1.3) {
+          score -= 0.8; // High beta amplifies downside in Risk-Off
+        } else if (beta > 1.0) {
+          score -= 0.4;
+        }
+      }
+      // Transition regime: neutral, no adjustment
+    }
+
+    // Factor 2: Sector rotation alignment (40% of score, ±0.8 points)
+    if (stockSector && marketContext.allSectors && marketContext.allSectors.length > 0) {
+      const sectorInfo = getSectorDataForStock(marketContext, stockSector);
+
+      if (sectorInfo) {
+        const { rank } = sectorInfo;
+
+        // Top 3 sectors get bonus
+        if (rank <= 3) {
+          score += 0.8;
+        } else if (rank <= 5) {
+          score += 0.4;
+        } else if (rank >= 10) {
+          score -= 0.8; // Bottom 2 sectors get penalty
+        } else if (rank >= 8) {
+          score -= 0.4;
+        }
+      }
+    }
+
+    // Factor 3: VIX consideration (20% of score, ±0.4 points)
+    const vix = marketContext.vix;
+    if (isValidNumber(vix) && isValidNumber(beta)) {
+      if (vix > 30 && beta < 0.8) {
+        score += 0.4; // Defensive stocks do well in high volatility
+      } else if (vix < 15 && beta > 1.2) {
+        score += 0.4; // Growth stocks do well in low volatility
+      } else if (vix > 30 && beta > 1.3) {
+        score -= 0.4; // High beta + high VIX = risky
+      }
+    }
+
+    // Clamp to valid range
+    score = clamp(score, 1.0, 5.0);
     return Math.round(score * 100) / 100;
   }
 

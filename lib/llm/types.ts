@@ -4,10 +4,13 @@
  * Shared types and interfaces for all LLM providers
  */
 
+import { MarketContext } from '../market';
+
 export interface AnalysisContext {
   ticker: string;
   currentDate: string; // ISO date string (e.g., "2025-11-16")
   currentMetrics: Record<string, any>; // Expanded to include all technical, fundamental, and macro data
+  marketContext?: MarketContext | null; // NEW: Market regime and sector rotation context
   previousAnalysis?: {
     date: string;
     compositeScore: number;
@@ -29,6 +32,7 @@ export interface AnalysisContext {
       macro: number;
       risk: number;
       sentiment: number;
+      marketAlignment?: number; // NEW: Market alignment score delta
     };
     priceDeltas?: {
       priceChangePercent: number;

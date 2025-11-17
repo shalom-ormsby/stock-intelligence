@@ -13,12 +13,14 @@ import { createStockScorer, ScoreResults } from './scoring';
 import { validateStockData } from './validators';
 import { AnalysisContext } from './llm/types';
 import { LLMFactory } from './llm/LLMFactory';
+import { MarketContext } from './market';
 
 export interface AnalysisInput {
   ticker: string;
   userAccessToken: string;
   notionUserId: string;
   timezone: string;
+  marketContext?: MarketContext | null; // Optional market context for regime-aware analysis
 }
 
 export interface AnalysisResult {
@@ -200,12 +202,19 @@ export async function analyzeStockCore(
       macro,
     });
 
-    // Calculate scores
-    const scores = scorer.calculateScores({
-      technical,
-      fundamental,
-      macro,
-    });
+    // Extract sector for market alignment calculation
+    const stockSector = fmpData.profile?.sector || undefined;
+
+    // Calculate scores WITH market context
+    const scores = scorer.calculateScores(
+      {
+        technical,
+        fundamental,
+        macro,
+      },
+      input.marketContext,
+      stockSector
+    );
 
     // Generate LLM analysis
     // Note: We don't query historical analyses here - that's the broadcaster's job
@@ -213,6 +222,7 @@ export async function analyzeStockCore(
     const analysisContext: AnalysisContext = {
       ticker: tickerUpper,
       currentDate: new Date().toISOString().split('T')[0], // e.g., "2025-11-16"
+      marketContext: input.marketContext, // NEW: Pass market context to LLM
       currentMetrics: {
         // Scores
         compositeScore: scores.composite,
@@ -221,6 +231,7 @@ export async function analyzeStockCore(
         macroScore: scores.macro,
         riskScore: scores.risk,
         sentimentScore: scores.sentiment,
+        marketAlignment: scores.marketAlignment, // NEW: Market alignment score
         sectorScore: 0,
         recommendation: scores.recommendation,
         pattern: 'Unknown',
@@ -317,6 +328,7 @@ export async function analyzeStockCore(
         macro: 0,
         risk: 0,
         sentiment: 0,
+        marketAlignment: 0,
         recommendation: 'Error',
       },
       dataQuality: {
