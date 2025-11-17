@@ -97,47 +97,73 @@ All development versions are documented below with full technical details.
 
 ## [Unreleased]
 
-### 🐛 Bug Fix: Market Context Integration in /api/analyze Endpoint
+---
 
-**Date:** November 17, 2025
+## [v1.0.7] - 2025-11-17
 
-**Problem:**
-The `/api/analyze` endpoint had two critical issues:
-1. **Internal Server Error** - Endpoint returned 500 error even though analysis wrote to Notion successfully
-2. **Missing Market Context** - Analysis content didn't include market environment information (regime, VIX, sector performance)
+### ✨ Feature Complete: Market Context Integration in Manual Stock Analysis
 
-**Root Cause:**
-1. `AnalyzeResponse` interface was missing `marketAlignment` field in `scores` object
-2. Response object construction was missing `marketAlignment` property
-3. The endpoint didn't fetch market context at all
-4. Market context wasn't passed to scorer or LLM analysis
+**Summary:**
+Completed integration of market context awareness into the `/api/analyze` endpoint, bringing manual stock analyses to parity with automated scheduled analyses. The system now provides market regime-aware scoring and LLM-generated insights for all analyses.
 
-**Solution:**
-Implemented complete market context integration in [api/analyze.ts](api/analyze.ts):
+**What Was Built:**
 
-1. **Fetch Market Context** (Lines 285-298)
-   - Added market context fetch after creating FMP/FRED clients
-   - Graceful degradation if fetch fails (continues with null)
-   - Logs market regime, confidence, risk assessment, VIX, and SPY performance
+1. **Market Context Fetching** ([api/analyze.ts:285-304](api/analyze.ts))
+   - Fetches market regime (Risk-On, Risk-Off, Transition) from FMP + FRED APIs
+   - Retrieves VIX, SPY performance, sector rotation data
+   - Smart caching with 1-hour TTL via Redis (optional)
+   - Graceful degradation if APIs unavailable
 
-2. **Pass to Scoring** (Lines 466-476)
-   - Extract stock sector from `fmpData.profile.sector`
-   - Pass `marketContext` and `stockSector` to `calculateScores()`
-   - Enables 7th scoring dimension: **Market Alignment** (5% weight)
+2. **Market Alignment Scoring** ([api/analyze.ts:451-461](api/analyze.ts))
+   - 7th scoring dimension (5% weight in composite score)
+   - Evaluates stock alignment with current market regime
+   - Considers sector performance (leaders vs. laggards)
+   - Adjusts risk assessment based on regime
 
-3. **Pass to LLM** (Line 612)
-   - Added `marketContext` to `analysisContext` object
-   - LLM now sees market regime, volatility, sector leaders/laggards
-   - Includes market environment insights in generated analysis
+3. **LLM Context Enhancement** ([api/analyze.ts:593](api/analyze.ts), [lib/llm/prompts/shared.ts:162-213](lib/llm/prompts/shared.ts))
+   - Passes market context to analysis generation
+   - LLM integrates market insights throughout analysis (not a separate section)
+   - Regime-aware recommendations and risk assessment
+   - Defensive programming with null checks
 
-**Impact:**
-- ✅ Fixes Internal Server Error (TypeScript type mismatch resolved)
-- ✅ Brings `/api/analyze` to parity with orchestrator workflow
-- ✅ Enables market-aware scoring and analysis generation
-- ✅ Market context now appears in all manual stock analyses
+**Key Features:**
+- **Automatic**: Market context fetched on every manual analysis
+- **Cached**: 1-hour TTL reduces API calls and latency
+- **Resilient**: Continues with neutral context if fetch fails
+- **Integrated**: Market insights woven throughout analysis, not siloed
+
+**How Market Context Appears in Analysis:**
+Market context is **not** a separate section. Instead, it's integrated throughout:
+- Executive Summary: References market regime and environment
+- Technical/Fundamental Analysis: Contextualized with market conditions
+- Risk Assessment: Regime-specific risk factors
+- Recommendations: Aligned with current market environment
+
+**Example Integration:**
+- Risk-On: "Growth stocks favored in current bullish environment..."
+- Risk-Off: "Defensive positioning recommended given risk-off conditions..."
+- Transition: "Mixed market signals suggest balanced approach..."
+
+**Bug Fixes:**
+- Fixed TypeScript type error: Missing `marketAlignment` in `AnalyzeResponse` interface
+- Fixed Internal Server Error when returning scores without marketAlignment property
+- Added defensive null checks in prompt builder to prevent undefined property access
 
 **Files Modified:**
-- [api/analyze.ts](api/analyze.ts:285-298,466-476,612) - Market context integration
+- [api/analyze.ts](api/analyze.ts) - Market context fetch, scoring integration, LLM context
+- [lib/llm/prompts/shared.ts](lib/llm/prompts/shared.ts) - Defensive null checks for market context properties
+
+**Impact:**
+- ✅ Manual analyses now market-aware (parity with automated analyses)
+- ✅ 7th scoring dimension active (Market Alignment)
+- ✅ LLM generates regime-appropriate recommendations
+- ✅ Graceful degradation if market data unavailable
+
+**Testing:**
+- Verified market context fetch succeeds
+- Confirmed regime property present (e.g., "Transition")
+- Validated LLM receives and uses market context
+- Tested null handling when market context unavailable
 
 ---
 

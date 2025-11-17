@@ -286,31 +286,16 @@ export default async function handler(
     console.log('\n📊 Step 0: Fetching market context...');
     let marketContext: MarketContext | null = null;
     try {
-      // Force fresh fetch to bypass potentially corrupted cache
-      marketContext = await getMarketContext(fmpClient, fredClient, true);
+      marketContext = await getMarketContext(fmpClient, fredClient);
 
-      if (marketContext) {
+      if (marketContext && marketContext.regime) {
         console.log('✅ Market context fetched');
-
-        // Debug: Log the full structure to see what we got
-        console.log('[DEBUG] Market context keys:', Object.keys(marketContext));
-        console.log('[DEBUG] Market context type:', typeof marketContext);
-        console.log('[DEBUG] Has regime?', 'regime' in marketContext, 'Value:', marketContext.regime);
-
-        console.log(`   Regime: ${marketContext.regime || 'undefined'} (${Math.round((marketContext.regimeConfidence || 0) * 100)}% confidence)`);
-        console.log(`   Risk: ${marketContext.riskAssessment || 'undefined'} | VIX: ${marketContext.vix?.toFixed(1) || 'N/A'}`);
-        console.log(`   SPY: ${marketContext.spy ? `${marketContext.spy.change1D > 0 ? '+' : ''}${marketContext.spy.change1D.toFixed(2)}% (1D)` : 'N/A'}`);
-
-        // Validate market context has required data
-        if (!marketContext.regime) {
-          console.warn('⚠️  Market context missing regime property - will be excluded from analysis');
-          console.warn('[DEBUG] Clearing Redis cache to force fresh fetch next time');
-          // Clear cache asynchronously (don't wait)
-          import('../lib/market').then(m => m.clearMarketContextCache().catch(() => {}));
-          marketContext = null;
-        }
+        console.log(`   Regime: ${marketContext.regime} (${Math.round(marketContext.regimeConfidence * 100)}% confidence)`);
+        console.log(`   Risk: ${marketContext.riskAssessment} | VIX: ${marketContext.vix.toFixed(1)}`);
+        console.log(`   SPY: ${marketContext.spy.change1D > 0 ? '+' : ''}${marketContext.spy.change1D.toFixed(2)}% (1D)`);
       } else {
-        console.warn('⚠️  Market context is null - continuing without market context');
+        console.warn('⚠️  Market context unavailable - continuing without market context');
+        marketContext = null;
       }
     } catch (error) {
       console.error('❌ Failed to fetch market context:', error);
