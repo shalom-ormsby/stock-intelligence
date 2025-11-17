@@ -1,9 +1,9 @@
 # Sage Stocks Architecture
 
-*Last updated: November 16, 2025*
+*Last updated: November 17, 2025*
 
 **Development Version:** v1.2.5 (Complete) - Template Duplication Prevention
-**Latest Feature:** v1.0.6 (Complete) - LLM Hallucination Prevention
+**Latest Feature:** v1.0.7 (Complete) - Market Context Integration
 **Template Version:** v0.1.0 (Beta) - Launching with Cohort 1
 **Production URL:** [https://sagestocks.vercel.app](https://sagestocks.vercel.app)
 **Status:** ✅ Live in Production - Fully Automated
@@ -39,8 +39,9 @@ Sage Stocks is a **serverless stock analysis platform** that delivers automated 
 **Core Capabilities:**
 - **Multi-user OAuth authentication** - Notion OAuth with session-based access control (v1.1.x)
 - **Real-time stock analysis** - Technical + fundamental indicators from FMP and FRED APIs
-- **6-category composite scoring** - Technical (30%), Fundamental (35%), Macro (20%), Risk (15%), Sentiment, Sector
-- **LLM-generated analysis** - 7-section analysis narratives (Google Gemini Flash 2.5, $0.013/analysis)
+- **7-dimension composite scoring** - Technical (30%), Fundamental (35%), Macro (20%), Risk (10%), Sentiment (5%), Market Alignment (5% - v1.0.7)
+- **Market context awareness** - Regime detection (Risk-On, Risk-Off, Transition) with sector rotation tracking (v1.0.7)
+- **LLM-generated analysis** - 7-section regime-aware analysis narratives (Google Gemini Flash 2.5, $0.013/analysis)
 - **Historical context tracking** - Delta tracking across previous analyses
 - **Template version management** - User-controlled upgrade system with data preservation (v1.1.6)
 - **Timezone-aware rate limiting** - User-specific quotas with admin bypass (Upstash Redis)
@@ -67,9 +68,9 @@ Sage Stocks is a **serverless stock analysis platform** that delivers automated 
 - **Plan:** Vercel Pro ($20/month) - Required for 300-second timeout on analysis endpoint
 
 ### Data Sources
-- **Financial Modeling Prep (FMP)** - Stock data, fundamentals, technical indicators
-- **FRED API** - Macroeconomic indicators (yield curve, VIX, etc.)
-- **Upstash Redis** - Distributed state for rate limiting
+- **Financial Modeling Prep (FMP)** - Stock data, fundamentals, technical indicators, sector ETF performance
+- **FRED API** - Macroeconomic indicators (yield curve, VIX, consumer sentiment)
+- **Upstash Redis** - Distributed state for rate limiting + market context caching (1-hour TTL, optional - v1.0.7)
 
 ### LLM Integration
 - **Google Gemini Flash 2.5** (Primary) - Analysis generation, $0.013 per analysis, 50% token reduction vs GPT-4
