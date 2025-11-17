@@ -2,29 +2,34 @@
  * Market Context Job Endpoint (v1.1.0)
  *
  * Runs daily at 5:00 AM PT (13:00 UTC) via Vercel Cron
- * Creates a new Market Context page in Notion with today's market analysis
+ * Creates Market Context pages in each user's Notion workspace
  *
  * Workflow:
  * 1. Verify cron secret (authentication)
  * 2. Check if today is a NYSE market day (skip weekends/holidays)
- * 3. Fetch market context from FMP + FRED APIs
- * 4. Create new page in Market Context database
- * 5. Return execution summary
+ * 3. Fetch market context from FMP + FRED APIs (once, cached)
+ * 4. Get all beta users
+ * 5. For each user, create Market Context page in their database
+ * 6. Return execution summary
+ *
+ * Architecture: Per-user distribution (Option 2)
+ * - Each user has their own Market Context database (from template)
+ * - Cron creates one page per user
+ * - Uses each user's OAuth access token
  */
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { Client } from '@notionhq/client';
-import { getMarketContext } from '../../lib/market';
+import { getAllUsers, decryptToken } from '../../lib/auth';
+import { getMarketContext, MarketContext } from '../../lib/market';
 import { createFMPClient } from '../../lib/fmp-client';
 import { createFREDClient } from '../../lib/fred-client';
 
 // Vercel function configuration
-export const maxDuration = 60; // 1 minute (market context fetch is fast)
+export const maxDuration = 120; // 2 minutes (need time for per-user distribution)
 
 // Environment variables
 const CRON_SECRET = process.env.CRON_SECRET || '';
-const NOTION_API_KEY = process.env.NOTION_API_KEY || '';
-const MARKET_CONTEXT_DB_ID = process.env.MARKET_CONTEXT_DB_ID || '';
 const FMP_API_KEY = process.env.FMP_API_KEY || '';
 const FRED_API_KEY = process.env.FRED_API_KEY || '';
 
@@ -35,7 +40,7 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ): Promise<void> {
-  console.log('[MARKET JOB] Market context job started');
+  console.log('[MARKET JOB] Market context distribution started');
 
   try {
     // 1. Verify cron secret
@@ -55,18 +60,12 @@ export default async function handler(
     console.log('[MARKET JOB] ✓ Cron secret verified');
 
     // 2. Check environment variables
-    if (!NOTION_API_KEY || !MARKET_CONTEXT_DB_ID || !FMP_API_KEY || !FRED_API_KEY) {
-      console.error('[MARKET JOB] Missing required environment variables');
+    if (!FMP_API_KEY || !FRED_API_KEY) {
+      console.error('[MARKET JOB] Missing required API keys');
       res.status(500).json({
         success: false,
         error: 'Configuration error',
-        message: 'Missing required environment variables',
-        missing: {
-          NOTION_API_KEY: !NOTION_API_KEY,
-          MARKET_CONTEXT_DB_ID: !MARKET_CONTEXT_DB_ID,
-          FMP_API_KEY: !FMP_API_KEY,
-          FRED_API_KEY: !FRED_API_KEY,
-        }
+        message: 'Missing FMP or FRED API keys',
       });
       return;
     }
@@ -80,36 +79,38 @@ export default async function handler(
         success: true,
         message: 'Market closed today',
         marketDay: false,
-        created: false,
+        created: 0,
+        failed: 0,
       });
       return;
     }
 
     console.log('[MARKET JOB] ✓ Market is open today');
 
-    // 4. Fetch market context
+    // 4. Fetch market context ONCE (will be distributed to all users)
     const fmpClient = createFMPClient(FMP_API_KEY);
     const fredClient = createFREDClient(FRED_API_KEY);
 
     console.log('[MARKET JOB] Fetching market context...');
     const marketContext = await getMarketContext(fmpClient, fredClient, true); // Force refresh
 
-    console.log(`[MARKET JOB] ✓ Market context fetched: ${marketContext.regime} regime`);
+    console.log(`[MARKET JOB] ✓ Market context fetched: ${marketContext.regime} regime (${Math.round(marketContext.regimeConfidence * 100)}% confidence)`);
 
-    // 5. Create Notion page
-    const notion = new Client({ auth: NOTION_API_KEY });
+    // 5. Get all users
+    const users = await getAllUsers();
+    console.log(`[MARKET JOB] Found ${users.length} users`);
 
-    console.log('[MARKET JOB] Creating Notion page...');
-    const pageId = await createMarketContextPage(notion, marketContext);
+    // 6. Distribute market context to each user's database
+    const results = await distributeMarketContext(users, marketContext);
 
-    console.log(`[MARKET JOB] ✓ Notion page created: ${pageId}`);
-
-    // 6. Return success summary
+    // 7. Return success summary
     const summary = {
       success: true,
       marketDay: true,
-      created: true,
-      pageId,
+      totalUsers: users.length,
+      created: results.created,
+      failed: results.failed,
+      skipped: results.skipped,
       context: {
         date: marketContext.date,
         regime: marketContext.regime,
@@ -120,7 +121,7 @@ export default async function handler(
       }
     };
 
-    console.log('[MARKET JOB] ✓ Market context job complete:', JSON.stringify(summary, null, 2));
+    console.log('[MARKET JOB] ✓ Market context distribution complete:', JSON.stringify(summary, null, 2));
     res.json(summary);
 
   } catch (error) {
@@ -134,14 +135,103 @@ export default async function handler(
 }
 
 /**
- * Create Market Context page in Notion
+ * Distribute market context to all users
+ */
+async function distributeMarketContext(
+  users: any[],
+  marketContext: MarketContext
+): Promise<{ created: number; failed: number; skipped: number }> {
+  let created = 0;
+  let failed = 0;
+  let skipped = 0;
+
+  for (const user of users) {
+    try {
+      // Skip if user doesn't have Market Context database configured
+      if (!user.marketContextDbId) {
+        console.log(`[MARKET JOB] Skipping ${user.email} - no Market Context DB ID`);
+        skipped++;
+        continue;
+      }
+
+      // Decrypt user's access token
+      const accessToken = await decryptToken(user.accessToken);
+
+      // Create Notion client with user's OAuth token
+      const notion = new Client({ auth: accessToken });
+
+      // Check if page already exists for today
+      const today = marketContext.date;
+      const existingPage = await checkExistingMarketContext(notion, user.marketContextDbId, today);
+
+      if (existingPage) {
+        console.log(`[MARKET JOB] Skipping ${user.email} - already has context for ${today}`);
+        skipped++;
+        continue;
+      }
+
+      // Create market context page
+      await createMarketContextPage(notion, user.marketContextDbId, marketContext);
+
+      console.log(`[MARKET JOB] ✓ Created market context for ${user.email}`);
+      created++;
+
+    } catch (error) {
+      console.error(`[MARKET JOB] Failed to create market context for ${user.email}:`, error);
+      failed++;
+    }
+  }
+
+  return { created, failed, skipped };
+}
+
+/**
+ * Check if market context already exists for today
+ */
+async function checkExistingMarketContext(
+  notion: Client,
+  databaseId: string,
+  date: string
+): Promise<boolean> {
+  try {
+    // Get data source ID (API v2025-09-03)
+    const db = await notion.databases.retrieve({ database_id: databaseId });
+    const dataSourceId = (db as any).data_sources?.[0]?.id;
+
+    if (!dataSourceId) {
+      console.warn('[MARKET JOB] No data source found for database');
+      return false;
+    }
+
+    // Query using data source API
+    const response = await notion.dataSources.query({
+      data_source_id: dataSourceId,
+      filter: {
+        property: 'Date',
+        date: {
+          equals: date,
+        },
+      },
+      page_size: 1,
+    });
+
+    return response.results.length > 0;
+  } catch (error) {
+    console.warn('[MARKET JOB] Error checking existing context:', error);
+    return false; // Assume doesn't exist if check fails
+  }
+}
+
+/**
+ * Create Market Context page in user's Notion database
  */
 async function createMarketContextPage(
   notion: Client,
-  marketContext: any
+  databaseId: string,
+  marketContext: MarketContext
 ): Promise<string> {
   const response = await notion.pages.create({
-    parent: { database_id: MARKET_CONTEXT_DB_ID },
+    parent: { database_id: databaseId },
     properties: {
       // Title (Date)
       'Name': {
