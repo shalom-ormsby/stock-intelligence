@@ -287,14 +287,25 @@ export default async function handler(
     let marketContext: MarketContext | null = null;
     try {
       marketContext = await getMarketContext(fmpClient, fredClient);
-      console.log('✅ Market context fetched');
-      console.log(`   Regime: ${marketContext.regime} (${Math.round(marketContext.regimeConfidence * 100)}% confidence)`);
-      console.log(`   Risk: ${marketContext.riskAssessment} | VIX: ${marketContext.vix.toFixed(1)}`);
-      console.log(`   SPY: ${marketContext.spy.change1D > 0 ? '+' : ''}${marketContext.spy.change1D.toFixed(2)}% (1D)`);
+
+      if (marketContext) {
+        console.log('✅ Market context fetched');
+        console.log(`   Regime: ${marketContext.regime || 'undefined'} (${Math.round((marketContext.regimeConfidence || 0) * 100)}% confidence)`);
+        console.log(`   Risk: ${marketContext.riskAssessment || 'undefined'} | VIX: ${marketContext.vix?.toFixed(1) || 'N/A'}`);
+        console.log(`   SPY: ${marketContext.spy ? `${marketContext.spy.change1D > 0 ? '+' : ''}${marketContext.spy.change1D.toFixed(2)}% (1D)` : 'N/A'}`);
+
+        // Validate market context has required data
+        if (!marketContext.regime) {
+          console.warn('⚠️  Market context missing regime property - will be excluded from analysis');
+          marketContext = null;
+        }
+      } else {
+        console.warn('⚠️  Market context is null - continuing without market context');
+      }
     } catch (error) {
-      console.warn('⚠️  Failed to fetch market context:', error);
+      console.error('❌ Failed to fetch market context:', error);
       console.warn('   Continuing with null market context (graceful degradation)');
-      // Continue with null - graceful degradation
+      marketContext = null;
     }
 
     // Use user's OAuth token, Notion User ID, and timezone (v1.0.3)
