@@ -157,9 +157,11 @@ export function buildAnalysisPrompt(context: AnalysisContext): string {
   prompt += `- Risk: ${currentMetrics.riskScore}/5.0 | Sentiment: ${currentMetrics.sentimentScore}/5.0\n`;
   prompt += `- Pattern: ${currentMetrics.pattern} | Confidence: ${currentMetrics.confidence}/5.0\n\n`;
 
-  // Delta context (if exists)
+  // Delta context (if exists) - HISTORICAL REFERENCE ONLY
   if (previousAnalysis && deltas) {
-    prompt += `**Changes Since ${previousAnalysis.date} (${deltas.priceDeltas?.daysElapsed || '?'} days ago):**\n`;
+    prompt += `**Changes Since Previous Analysis (${deltas.priceDeltas?.daysElapsed || '?'} days ago):**\n`;
+    prompt += `⚠️ NOTE: The date "${previousAnalysis.date}" below is HISTORICAL REFERENCE ONLY. Do NOT use it in your "Key Dates" section!\n\n`;
+    prompt += `- Previous analysis: ${previousAnalysis.date} (${deltas.priceDeltas?.daysElapsed || '?'} days ago - this is PAST data for comparison only)\n`;
     prompt += `- Score: ${previousAnalysis.compositeScore}/5.0 → ${currentMetrics.compositeScore}/5.0 (${formatDelta(deltas.scoreChange)}, ${deltas.trendDirection})\n`;
 
     if (deltas.categoryDeltas) {
@@ -172,7 +174,7 @@ export function buildAnalysisPrompt(context: AnalysisContext): string {
         prompt += `- Annualized Return: ${formatPercent(deltas.priceDeltas.annualizedReturn)}\n`;
       }
     }
-    prompt += '\n';
+    prompt += `\n⚠️ REMINDER: The date ${previousAnalysis.date} above is in the PAST. It is for historical comparison ONLY. Do NOT reference it in "Key Dates" or as a future catalyst.\n\n`;
   }
 
   // Data Grounding Rules - CRITICAL to prevent hallucination (v1.0.6)
@@ -248,10 +250,12 @@ export function buildAnalysisPrompt(context: AnalysisContext): string {
   prompt += `- Use ONLY generic future language: "Next earnings", "Upcoming Fed meeting", "Next product cycle"\n`;
   prompt += `- Risks MUST derive from: P/E ratio, debt levels, beta, sector exposure, macro headwinds (all provided)\n\n`;
 
-  prompt += `**Key Dates Section Rules:**\n`;
+  prompt += `**Key Dates Section Rules (CRITICAL):**\n`;
   prompt += `- The "Key Dates" section in your output MUST contain ONLY future events\n`;
   prompt += `- Use generic language ONLY: "Upcoming earnings", "Next Fed meeting", "Upcoming event"\n`;
   prompt += `- DO NOT mention ANY specific past dates, especially anything from ${year - 1}\n`;
+  prompt += `- DO NOT use dates from the "Changes Since Previous Analysis" section above - those are PAST dates for comparison only\n`;
+  prompt += `- If historical context mentions a date like "${previousAnalysis?.date || '2024-12-15'}", that is PAST - do NOT use it in Key Dates\n`;
   prompt += `- If you want to reference a past event, do it in the "Catalysts" section using past tense: "Recent earnings showed..."\n\n`;
 
   // Output structure
