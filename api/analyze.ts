@@ -34,6 +34,7 @@ import { AnalysisContext } from '../lib/llm/types';
 import { validateTimezone, getTimezoneFromEnv, getSecondsUntilMidnight } from '../lib/timezone';
 import { assertDatabasesValid } from '../lib/database-validator';
 import { reportAPIError } from '../lib/bug-reporter';
+import { getMarketContext, MarketContext } from '../lib/market'; // v1.1.0: Market context
 
 interface AnalyzeRequest {
   ticker: string;
@@ -59,6 +60,7 @@ interface AnalyzeResponse {
     macro: number;
     risk: number;
     sentiment: number;
+    marketAlignment: number; // v1.1.0: Market alignment scoring
     recommendation: string;
   };
   dataQuality?: {
@@ -280,6 +282,21 @@ export default async function handler(
     const fredClient = createFREDClient(fredApiKey);
     const scorer = createStockScorer();
 
+    // Fetch market context (v1.1.0 - Market Context Integration)
+    console.log('\n📊 Step 0: Fetching market context...');
+    let marketContext: MarketContext | null = null;
+    try {
+      marketContext = await getMarketContext(fmpClient, fredClient);
+      console.log('✅ Market context fetched');
+      console.log(`   Regime: ${marketContext.regime} (${Math.round(marketContext.regimeConfidence * 100)}% confidence)`);
+      console.log(`   Risk: ${marketContext.riskAssessment} | VIX: ${marketContext.vix.toFixed(1)}`);
+      console.log(`   SPY: ${marketContext.spy.change1D > 0 ? '+' : ''}${marketContext.spy.change1D.toFixed(2)}% (1D)`);
+    } catch (error) {
+      console.warn('⚠️  Failed to fetch market context:', error);
+      console.warn('   Continuing with null market context (graceful degradation)');
+      // Continue with null - graceful degradation
+    }
+
     // Use user's OAuth token, Notion User ID, and timezone (v1.0.3)
     const notionClient = createNotionClient({
       apiKey: userAccessToken, // User's OAuth token
@@ -446,12 +463,17 @@ export default async function handler(
 
     console.log('\n📊 Step 2/5: Calculating scores...');
 
-    // Calculate scores
-    const scores = scorer.calculateScores({
-      technical,
-      fundamental,
-      macro,
-    });
+    // Calculate scores with market context (v1.1.0)
+    const stockSector = fmpData.profile?.sector;
+    const scores = scorer.calculateScores(
+      {
+        technical,
+        fundamental,
+        macro,
+      },
+      marketContext,
+      stockSector
+    );
 
     console.log('✅ Scores calculated');
     console.log(`   Composite: ${scores.composite} | ${scores.recommendation}`);
@@ -587,6 +609,7 @@ export default async function handler(
     const analysisContext: AnalysisContext = {
       ticker: tickerUpper,
       currentDate: new Date().toISOString().split('T')[0], // e.g., "2025-11-16"
+      marketContext: marketContext || undefined, // v1.1.0: Market environment context
       currentMetrics: {
         // Scores
         compositeScore: scores.composite,
@@ -785,6 +808,7 @@ export default async function handler(
         macro: scores.macro,
         risk: scores.risk,
         sentiment: scores.sentiment,
+        marketAlignment: scores.marketAlignment, // v1.1.0: Market alignment
         recommendation: scores.recommendation,
       },
       dataQuality: {
