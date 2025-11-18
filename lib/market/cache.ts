@@ -96,16 +96,13 @@ export async function cacheMarketContext(context: MarketContext): Promise<void> 
   }
 
   try {
-    const response = await fetch(`${REDIS_URL}/set/${CACHE_KEY}`, {
+    // Note: Upstash REST API requires EX parameter in query string, not JSON body
+    const response = await fetch(`${REDIS_URL}/set/${CACHE_KEY}?EX=${CACHE_TTL_SECONDS}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${REDIS_TOKEN}`,
-        'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        value: JSON.stringify(context),
-        ex: CACHE_TTL_SECONDS,
-      }),
+      body: JSON.stringify(context),
     });
 
     if (!response.ok) {
