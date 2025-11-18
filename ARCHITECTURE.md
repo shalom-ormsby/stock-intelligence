@@ -1,9 +1,9 @@
 # Sage Stocks Architecture
 
-*Last updated: November 17, 2025*
+*Last updated: November 18, 2025*
 
 **Development Version:** v1.2.5 (Complete) - Template Duplication Prevention
-**Latest Feature:** v1.0.7 (Complete) - Market Context Integration
+**Latest Feature:** v1.0.8b (Complete) - Market Context Cache Bug Fixes
 **Template Version:** v0.1.0 (Beta) - Launching with Cohort 1
 **Production URL:** [https://sagestocks.vercel.app](https://sagestocks.vercel.app)
 **Status:** ✅ Live in Production - Fully Automated
@@ -1568,6 +1568,120 @@ POST /api/debug-reset-setup
 
 **Configuration:**
 - Timeout: 60 seconds (default)
+
+---
+
+### `/api/debug/market-context` (GET)
+**Purpose:** [DIAGNOSTICS] Display current market context status, cache health, and API connectivity
+
+**Added:** v1.0.8b - For debugging market context availability issues
+
+**Authentication:** None (public diagnostic endpoint)
+
+**Request:**
+```bash
+GET /api/debug/market-context
+```
+
+**Response (200 - All Systems Operational):**
+```json
+{
+  "timestamp": "2025-11-18T05:47:09.167Z",
+  "environment": {
+    "variables": {
+      "FMP_API_KEY": true,
+      "FRED_API_KEY": true,
+      "UPSTASH_REDIS_REST_URL": true,
+      "UPSTASH_REDIS_REST_TOKEN": true
+    },
+    "allConfigured": true
+  },
+  "cache": {
+    "metadata": {
+      "exists": true,
+      "age": 10314,
+      "ttl": 3590
+    },
+    "hasCached": true,
+    "cachedRegime": "Transition",
+    "cachedTimestamp": "2025-11-18T05:50:38.950Z"
+  },
+  "fresh": {
+    "success": true,
+    "regime": "Transition",
+    "regimeConfidence": 0.5785714285714286,
+    "vix": 19.83,
+    "spy": {
+      "symbol": "SPY",
+      "price": 665.67,
+      "change1D": -0.93164,
+      "change5D": 0,
+      "change1M": 0,
+      "ma50": 668.4784,
+      "ma200": 613.1523
+    }
+  }
+}
+```
+
+**Response (500 - Market Context Fetch Failed):**
+```json
+{
+  "timestamp": "2025-11-18T05:47:09.167Z",
+  "environment": {
+    "variables": { /* ... */ },
+    "allConfigured": true
+  },
+  "cache": {
+    "metadata": { "exists": false },
+    "hasCached": false
+  },
+  "fresh": {
+    "success": false,
+    "error": {
+      "message": "Request failed with status code 429",
+      "name": "AxiosError",
+      "stack": ["Error: Request failed...", "at createError...", "at settle..."]
+    }
+  }
+}
+```
+
+**What It Shows:**
+- **Environment Variables:** Which API keys and Redis credentials are configured
+- **Cache Metadata:** Whether cache exists, age in milliseconds, TTL in seconds
+- **Cached Data:** Current cached regime, timestamp (if cache hit)
+- **Fresh Fetch:** Attempts to fetch fresh market context and reports success/error
+- **Market Data:** Current market regime, VIX level, SPY performance
+
+**Common Diagnostics:**
+
+| Condition | Meaning | Action |
+|-----------|---------|--------|
+| `cache.ttl: -1` | Cache expired but not deleted | Normal (Redis garbage collection pending) |
+| `cache.ttl: 3600` | Fresh cache (1 hour TTL) | Optimal state |
+| `cache.hasCached: false` | No valid cached data | Fresh fetch will occur on next analysis |
+| `fresh.success: false` | API fetch failed | Check error message for rate limit (429) or timeout |
+| `environment.allConfigured: false` | Missing API keys | Check Vercel environment variables |
+
+**Redis Cache Implementation Details:**
+- **Cache Key:** `market:context:v1`
+- **TTL:** 3600 seconds (1 hour)
+- **Format:** Direct JSON of MarketContext object
+- **Upstash API:** Uses `?EX=3600` query parameter (not JSON body)
+- **Expiration Check:** Validates `ttl > 0` before returning cached data
+- **Fallback:** Returns neutral market context if fetch fails
+
+**Note:** This endpoint always performs a **force refresh** (bypasses cache for fetch test), so it will always show the result of attempting a fresh API call. The cache metadata reflects the state before the forced refresh.
+
+**Production URL:**
+```
+https://sagestocks.vercel.app/api/debug/market-context
+```
+
+**Configuration:**
+- Timeout: 60 seconds (default)
+- Public access (no authentication required)
 
 ---
 

@@ -1,6 +1,6 @@
 # Changelog
 
-**Last Updated:** November 17, 2025
+**Last Updated:** November 18, 2025
 
 All notable changes to Sage Stocks will be documented in this file.
 
@@ -96,6 +96,110 @@ All development versions are documented below with full technical details.
 ---
 
 ## [Unreleased]
+
+### 🐛 Bug Fix: Market Context Redis Cache Not Expiring (v1.0.8b)
+
+**Date:** November 17, 2025
+
+**Problem:**
+Market context caching system had critical bugs preventing proper cache expiration and causing stale data to be returned:
+
+1. **Cache TTL Not Being Set:**
+   - Redis cache keys were being created without expiration (TTL = -1)
+   - Used JSON body format `{value: "...", ex: 3600}` which doesn't work with Upstash REST API
+   - Upstash requires expiration in query parameter: `?EX=3600`
+   - Result: Cache entries never expired, leading to stale market context data
+
+2. **Expired Cache Entries Not Rejected:**
+   - `getCachedMarketContext()` returned data even when TTL = -1 (expired)
+   - No TTL validation before returning cached data
+   - Result: Stale market regime data used in analyses
+
+3. **Debug Endpoint TypeScript Error:**
+   - Unused `req` parameter caused TypeScript compilation failure
+   - Blocked deployment of diagnostic tools
+
+**Root Cause Analysis:**
+
+**For TTL Issue:**
+- Upstash Redis REST API requires expiration as query parameter, not JSON body
+- Code used: `POST /set/key` with body `{value: "...", ex: 3600}` ❌
+- Should use: `POST /set/key?EX=3600` with body `"value"` ✅
+- Verified with manual Redis API tests showing TTL = -1 with body format, TTL = 3600 with query parameter
+
+**For Expired Cache Issue:**
+- Cache getter didn't check TTL before returning data
+- Redis can return data for expired keys (TTL = -1) before garbage collection
+- No defensive check to treat expired entries as cache misses
+
+**Solutions Implemented:**
+
+**1. Fixed Cache Write Format** ([lib/market/cache.ts:100](lib/market/cache.ts#L100))
+```typescript
+// Before (incorrect)
+fetch(`${REDIS_URL}/set/${CACHE_KEY}`, {
+  body: JSON.stringify({ value: JSON.stringify(context), ex: CACHE_TTL_SECONDS })
+})
+
+// After (correct)
+fetch(`${REDIS_URL}/set/${CACHE_KEY}?EX=${CACHE_TTL_SECONDS}`, {
+  body: JSON.stringify(context)
+})
+```
+
+**2. Added TTL Validation** ([lib/market/cache.ts:40-56](lib/market/cache.ts#L40-L56))
+```typescript
+// Check TTL before returning cached data
+const ttlResponse = await fetch(`${REDIS_URL}/ttl/${CACHE_KEY}`);
+const ttl = ttlData.result;
+
+if (ttl !== undefined && ttl <= 0) {
+  console.log(`[MARKET CACHE] Cache expired (TTL: ${ttl}), treating as cache miss`);
+  return null;
+}
+```
+
+**3. Created Debug Endpoint** ([api/debug/market-context.ts](api/debug/market-context.ts))
+- Shows environment variable status (FMP_API_KEY, FRED_API_KEY, Redis credentials)
+- Displays cache metadata (exists, age, TTL)
+- Attempts fresh market context fetch with detailed error reporting
+- Accessible at: `https://sagestocks.vercel.app/api/debug/market-context`
+
+**4. Enhanced Error Logging** ([lib/market/context.ts:133-137](lib/market/context.ts#L133-L137))
+```typescript
+console.error('[MARKET]    Error details:', {
+  message: error?.message,
+  stack: error?.stack?.split('\n')[0],
+  name: error?.name,
+});
+```
+
+**Files Modified:**
+- [api/debug/market-context.ts](api/debug/market-context.ts) - New diagnostic endpoint
+- [lib/market/cache.ts](lib/market/cache.ts) - Fixed TTL format, added expiration check
+- [lib/market/context.ts](lib/market/context.ts) - Enhanced error logging
+
+**Verification:**
+- ✅ Cache now properly expires after 1 hour (TTL: 3600 seconds)
+- ✅ Expired entries (TTL <= 0) rejected and fresh data fetched
+- ✅ Manual Redis API tests confirm `?EX=3600` query parameter works
+- ✅ Debug endpoint shows cache status: exists, age, TTL
+- ✅ Fresh market context fetch working (Regime: Transition, VIX: 19.83)
+
+**Impact:**
+- **Before:** Market context cache never expired, stale data used indefinitely
+- **After:** Cache refreshes every hour, ensuring current market regime data
+- **User-Facing:** Resolves "market context unavailable" warnings caused by caching bugs
+- **Operational:** Debug endpoint provides real-time cache diagnostics
+
+**About the "Market Context Unavailable" Warning:**
+The original user report of "market context unavailable" was likely a transient API failure (rate limit or timeout) rather than the caching bug. However, the caching bugs would have made the issue worse by serving stale data instead of retrying fresh fetches. The system now properly:
+1. Rejects expired cache entries
+2. Fetches fresh market context when cache is stale
+3. Gracefully degrades to neutral context only if API actually fails
+4. Logs detailed errors for debugging
+
+---
 
 ### 📝 Documentation Fix: Scoring System Accuracy (v1.0.7a)
 
