@@ -10,7 +10,7 @@ import { createFREDClient } from '../../lib/fred-client';
 import { getMarketContext } from '../../lib/market';
 import { getCacheMetadata, getCachedMarketContext } from '../../lib/market/cache';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(_req: VercelRequest, res: VercelResponse) {
   try {
     // Check environment variables
     const envStatus = {
