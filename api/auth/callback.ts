@@ -147,84 +147,110 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const existingUser = await getUserByNotionId(userId);
 
     // Step 4: Clean up duplicate templates for EXISTING users
-    if (existingUser && existingUser.sageStocksPageId && sageStocksPages.length > 1) {
+    if (existingUser && sageStocksPages.length > 1) {
       log(LogLevel.WARN, 'Duplicate Sage Stocks templates detected for existing user', {
         userId: existingUser.id,
         email: userEmail,
         existingSageStocksPageId: existingUser.sageStocksPageId,
         foundSageStocksPages: sageStocksPages.length,
         pageIds: sageStocksPages.map((p: any) => p.id),
+        createdTimes: sageStocksPages.map((p: any) => ({ id: p.id, created: p.created_time })),
       });
 
-      // Find the correct page (matches saved ID) and delete all others
-      const correctPage = sageStocksPages.find((p: any) => p.id === existingUser.sageStocksPageId);
-      const duplicatePages = sageStocksPages.filter((p: any) => p.id !== existingUser.sageStocksPageId);
+      let pageToKeep: any = null;
+      let duplicatePages: any[] = [];
 
-      if (correctPage && duplicatePages.length > 0) {
-        log(LogLevel.INFO, 'Deleting duplicate Sage Stocks templates', {
-          keepingPageId: correctPage.id,
-          deletingPageIds: duplicatePages.map((p: any) => p.id),
-          duplicateCount: duplicatePages.length,
-        });
+      // Strategy 1: If user has a saved page ID, verify it still exists
+      if (existingUser.sageStocksPageId) {
+        pageToKeep = sageStocksPages.find((p: any) => p.id === existingUser.sageStocksPageId);
 
-        // Delete duplicate pages
-        for (const dupPage of duplicatePages) {
-          try {
-            await userNotion.blocks.delete({ block_id: dupPage.id });
-            log(LogLevel.INFO, 'Deleted duplicate Sage Stocks page', {
-              pageId: dupPage.id,
-            });
-          } catch (deleteError) {
-            log(LogLevel.ERROR, 'Failed to delete duplicate page', {
-              pageId: dupPage.id,
-              error: deleteError instanceof Error ? deleteError.message : String(deleteError),
-            });
-          }
-        }
-      } else if (!correctPage && duplicatePages.length > 0) {
-        // User's saved page ID doesn't exist anymore - keep the first one found
-        log(LogLevel.WARN, 'User saved page ID not found - keeping first Sage Stocks page and deleting rest', {
-          savedPageId: existingUser.sageStocksPageId,
-          keepingPageId: sageStocksPages[0].id,
-          deletingCount: duplicatePages.length - 1,
-        });
-
-        for (let i = 1; i < sageStocksPages.length; i++) {
-          try {
-            await userNotion.blocks.delete({ block_id: sageStocksPages[i].id });
-            log(LogLevel.INFO, 'Deleted extra Sage Stocks page', {
-              pageId: sageStocksPages[i].id,
-            });
-          } catch (deleteError) {
-            log(LogLevel.ERROR, 'Failed to delete extra page', {
-              pageId: sageStocksPages[i].id,
-              error: deleteError instanceof Error ? deleteError.message : String(deleteError),
-            });
-          }
+        if (pageToKeep) {
+          duplicatePages = sageStocksPages.filter((p: any) => p.id !== existingUser.sageStocksPageId);
+          log(LogLevel.INFO, 'Using saved page ID from user record', {
+            savedPageId: existingUser.sageStocksPageId,
+            pageStillExists: true,
+          });
+        } else {
+          // Saved page ID doesn't exist - fall back to oldest page
+          log(LogLevel.WARN, 'Saved page ID not found in workspace - falling back to oldest page', {
+            savedPageId: existingUser.sageStocksPageId,
+            willUseOldestPage: true,
+          });
         }
       }
-    } else if (existingUser && !existingUser.sageStocksPageId && sageStocksPages.length > 1) {
-      // User exists but hasn't completed setup yet, and there are multiple templates
-      // Keep only the first one
-      log(LogLevel.WARN, 'Multiple Sage Stocks templates found for user without setup complete', {
-        userId: existingUser.id,
-        email: userEmail,
-        foundSageStocksPages: sageStocksPages.length,
-        keepingPageId: sageStocksPages[0].id,
-      });
 
-      for (let i = 1; i < sageStocksPages.length; i++) {
-        try {
-          await userNotion.blocks.delete({ block_id: sageStocksPages[i].id });
-          log(LogLevel.INFO, 'Deleted duplicate Sage Stocks page for incomplete setup', {
-            pageId: sageStocksPages[i].id,
-          });
-        } catch (deleteError) {
-          log(LogLevel.ERROR, 'Failed to delete duplicate page', {
-            pageId: sageStocksPages[i].id,
-            error: deleteError instanceof Error ? deleteError.message : String(deleteError),
-          });
+      // Strategy 2: No saved page ID or saved page doesn't exist - keep oldest by creation timestamp
+      if (!pageToKeep) {
+        // Sort by creation time (oldest first)
+        const sortedPages = [...sageStocksPages].sort((a: any, b: any) => {
+          const timeA = new Date(a.created_time).getTime();
+          const timeB = new Date(b.created_time).getTime();
+          return timeA - timeB;
+        });
+
+        pageToKeep = sortedPages[0];
+        duplicatePages = sortedPages.slice(1);
+
+        log(LogLevel.INFO, 'Keeping oldest Sage Stocks page by creation timestamp', {
+          keepingPageId: pageToKeep.id,
+          keepingPageCreated: pageToKeep.created_time,
+          duplicatesCount: duplicatePages.length,
+          duplicateCreatedTimes: duplicatePages.map((p: any) => p.created_time),
+        });
+      }
+
+      // Archive (not delete) duplicate pages for safety
+      if (duplicatePages.length > 0) {
+        log(LogLevel.INFO, 'Archiving duplicate Sage Stocks templates (reversible)', {
+          keepingPageId: pageToKeep.id,
+          keepingPageCreated: pageToKeep.created_time,
+          archivingPageIds: duplicatePages.map((p: any) => p.id),
+          duplicateCount: duplicatePages.length,
+          reason: 're-authentication-cleanup',
+          userId: existingUser.id,
+          userEmail,
+        });
+
+        // Archive each duplicate
+        for (const dupPage of duplicatePages) {
+          try {
+            await userNotion.pages.update({
+              page_id: dupPage.id,
+              archived: true,
+            });
+
+            log(LogLevel.INFO, 'Archived duplicate Sage Stocks page', {
+              pageId: dupPage.id,
+              createdTime: dupPage.created_time,
+              keptPageId: pageToKeep.id,
+              reversible: true,
+            });
+          } catch (archiveError) {
+            log(LogLevel.ERROR, 'Failed to archive duplicate page', {
+              pageId: dupPage.id,
+              error: archiveError instanceof Error ? archiveError.message : String(archiveError),
+              willRetryOnNextAuth: true,
+            });
+          }
         }
+
+        // Audit log for tracking
+        log(LogLevel.INFO, 'Duplicate cleanup audit summary', {
+          action: 'archive_duplicates',
+          userId: existingUser.id,
+          userEmail,
+          keptPage: {
+            id: pageToKeep.id,
+            created: pageToKeep.created_time,
+            reason: existingUser.sageStocksPageId === pageToKeep.id ? 'saved_page_id' : 'oldest_by_timestamp',
+          },
+          archivedPages: duplicatePages.map((p: any) => ({
+            id: p.id,
+            created: p.created_time,
+          })),
+          totalArchived: duplicatePages.length,
+          reversible: true,
+        });
       }
     }
 
