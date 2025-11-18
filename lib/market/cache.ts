@@ -27,6 +27,7 @@ function isRedisConfigured(): boolean {
  * Returns null if:
  * - Redis not configured
  * - Cache miss
+ * - Cache expired (TTL <= 0)
  * - Error fetching from Redis
  */
 export async function getCachedMarketContext(): Promise<MarketContext | null> {
@@ -36,6 +37,24 @@ export async function getCachedMarketContext(): Promise<MarketContext | null> {
   }
 
   try {
+    // Check TTL first to ensure cache is not expired
+    const ttlResponse = await fetch(`${REDIS_URL}/ttl/${CACHE_KEY}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${REDIS_TOKEN}`,
+      },
+    });
+
+    if (ttlResponse.ok) {
+      const ttlData = await ttlResponse.json() as { result?: number };
+      const ttl = ttlData.result;
+
+      if (ttl !== undefined && ttl <= 0) {
+        console.log(`[MARKET CACHE] Cache expired (TTL: ${ttl}), treating as cache miss`);
+        return null;
+      }
+    }
+
     const response = await fetch(`${REDIS_URL}/get/${CACHE_KEY}`, {
       method: 'GET',
       headers: {
