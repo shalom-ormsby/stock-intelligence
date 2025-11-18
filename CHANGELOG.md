@@ -97,6 +97,47 @@ All development versions are documented below with full technical details.
 
 ## [Unreleased]
 
+### 📝 Documentation Fix: Scoring System Accuracy (v1.0.7a)
+
+**Date:** November 17, 2025
+
+**Problem:**
+Multiple documentation files contained inaccurate scoring system descriptions that didn't match the actual working code:
+
+1. **ARCHITECTURE.md line 42:**
+   - Claimed: "7-dimension composite scoring - Technical (30%), Fundamental (35%), Macro (20%), Risk (10%), Sentiment (5%), Market Alignment (5%)"
+   - Issues:
+     - Said 7 dimensions (actually 6)
+     - Weights added to 105% (impossible)
+     - All weights incorrect except Market Alignment
+
+2. **lib/scoring.ts header comment (lines 4-9):**
+   - Showed outdated weights from before Market Alignment was added
+   - Missing Market Alignment dimension entirely
+
+3. **CHANGELOG.md v1.0.7 entry:**
+   - Called Market Alignment the "7th scoring dimension" (actually 6th)
+
+**Actual Implementation** (verified from [lib/scoring.ts:75-81](lib/scoring.ts#L75-L81)):
+- **6 dimensions total:**
+  - 5 weighted (sum to 100%):
+    - Technical: 28.5%
+    - Fundamental: 33%
+    - Macro: 19%
+    - Risk: 14.5%
+    - Market Alignment: 5%
+  - 1 reference-only (0% weight):
+    - Sentiment: 0% (calculated but not weighted in composite)
+- **No "Sector" dimension exists** (Notion AI incorrectly assumed one existed)
+
+**Files Corrected:**
+- [ARCHITECTURE.md:42](ARCHITECTURE.md#L42) - Corrected to "6-dimension scoring system" with accurate weights
+- [lib/scoring.ts:4-10](lib/scoring.ts#L4-L10) - Updated header comment to show current weights and Market Alignment
+- [CHANGELOG.md:118,158](CHANGELOG.md#L118) - (will correct "7th" to "6th" in v1.0.7 entry below)
+
+**Verification Method:**
+All corrections based on actual working code in [lib/scoring.ts](lib/scoring.ts), specifically the `weights` object and composite calculation logic.
+
 ---
 
 ## [v1.0.7] - 2025-11-17
@@ -115,7 +156,7 @@ Completed integration of market context awareness into the `/api/analyze` endpoi
    - Graceful degradation if APIs unavailable
 
 2. **Market Alignment Scoring** ([api/analyze.ts:451-461](api/analyze.ts))
-   - 7th scoring dimension (5% weight in composite score)
+   - 6th scoring dimension (5% weight in composite score)
    - Evaluates stock alignment with current market regime
    - Considers sector performance (leaders vs. laggards)
    - Adjusts risk assessment based on regime
@@ -155,7 +196,7 @@ Market context is **not** a separate section. Instead, it's integrated throughou
 
 **Impact:**
 - ✅ Manual analyses now market-aware (parity with automated analyses)
-- ✅ 7th scoring dimension active (Market Alignment)
+- ✅ 6th scoring dimension active (Market Alignment - 5% weight)
 - ✅ LLM generates regime-appropriate recommendations
 - ✅ Graceful degradation if market data unavailable
 

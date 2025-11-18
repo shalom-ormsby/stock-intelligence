@@ -1,12 +1,13 @@
 /**
  * Stock Scoring Engine
  *
- * Multi-factor scoring system that evaluates stocks across 5 dimensions:
- * - Technical (30%): Price action, momentum, volume
- * - Fundamental (35%): Financials, valuation, profitability
- * - Macro (20%): Economic conditions, Fed policy
- * - Risk (15%): Volatility, beta, market cap
- * - Sentiment: Standalone score (not weighted in composite)
+ * Multi-factor scoring system that evaluates stocks across 6 dimensions:
+ * - Technical (28.5%): Price action, momentum, volume
+ * - Fundamental (33%): Financials, valuation, profitability
+ * - Macro (19%): Economic conditions, Fed policy
+ * - Risk (14.5%): Volatility, beta, market cap
+ * - Market Alignment (5%): Regime fit, sector rotation (v1.0.7)
+ * - Sentiment (0%): Reference-only score (not weighted in composite)
  *
  * Features:
  * - Graceful degradation when data is missing

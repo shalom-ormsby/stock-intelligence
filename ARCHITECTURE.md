@@ -39,7 +39,7 @@ Sage Stocks is a **serverless stock analysis platform** that delivers automated 
 **Core Capabilities:**
 - **Multi-user OAuth authentication** - Notion OAuth with session-based access control (v1.1.x)
 - **Real-time stock analysis** - Technical + fundamental indicators from FMP and FRED APIs
-- **7-dimension composite scoring** - Technical (30%), Fundamental (35%), Macro (20%), Risk (10%), Sentiment (5%), Market Alignment (5% - v1.0.7)
+- **6-dimension scoring system** - 5 weighted (Technical 28.5%, Fundamental 33%, Macro 19%, Risk 14.5%, Market Alignment 5%) + Sentiment (reference-only, 0% weight in composite)
 - **Market context awareness** - Regime detection (Risk-On, Risk-Off, Transition) with sector rotation tracking (v1.0.7)
 - **LLM-generated analysis** - 7-section regime-aware analysis narratives (Google Gemini Flash 2.5, $0.013/analysis)
 - **Historical context tracking** - Delta tracking across previous analyses
