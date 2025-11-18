@@ -349,18 +349,18 @@ export function buildDeltaFirstPrompt(context: AnalysisContext): string {
   prompt += `**${currentMetrics.recommendation.toUpperCase()}** | Entry: [range] | Target: [range] | Stop: [price]\n\n`;
 
   if (previousAnalysis && deltas) {
-    prompt += `### What Changed (${deltas.daysElapsed || '?'} days)\n`;
+    prompt += `\n**What Changed (${deltas.daysElapsed || '?'} days)**\n`;
     prompt += `- Score: ${deltas.trendEmoji} ${formatDelta(deltas.scoreChange)} (${deltas.trendDirection})\n`;
     prompt += `- Price: ${formatPercent(deltas.priceDeltas?.priceChangePercent || 0)}\n`;
     prompt += `- [Biggest category change with interpretation]\n\n`;
   }
 
-  prompt += `### Why Now?\n`;
+  prompt += `\n**Why Now?**\n`;
   prompt += `- [Time-sensitive catalyst or setup]\n`;
   prompt += `- [Key technical/fundamental confirmation]\n`;
   prompt += `- [Risk/reward or timing element]\n\n`;
 
-  prompt += `### Key Risks\n`;
+  prompt += `\n**Key Risks**\n`;
   prompt += `⚠️ [Risk 1]\n`;
   prompt += `⚠️ [Risk 2]\n`;
   prompt += `⚠️ [Risk 3]\n\n`;

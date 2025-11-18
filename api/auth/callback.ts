@@ -105,41 +105,130 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       workspaceId,
     });
 
-    // v1.2.3 Diagnostic: Check if user has access to any pages (template should have been duplicated)
+    // v1.2.6 Bug Fix: Detect and clean up duplicate Sage Stocks templates for existing users
+    let sageStocksPages: any[] = [];
+    let userNotion: any = null;
+
     try {
       const { Client } = await import('@notionhq/client');
-      const userNotion = new Client({ auth: accessToken, notionVersion: '2025-09-03' });
+      userNotion = new Client({ auth: accessToken, notionVersion: '2025-09-03' });
       const searchResults = await userNotion.search({
         filter: { property: 'object', value: 'page' },
-        page_size: 10,
+        page_size: 100, // Increased to catch all pages
       });
 
-      const pageCount = searchResults.results.length;
-      const sageStocksPage = searchResults.results.find((p: any) =>
+      // Find ALL Sage Stocks pages
+      sageStocksPages = searchResults.results.filter((p: any) =>
         p.object === 'page' &&
         p.properties?.title?.title?.[0]?.plain_text?.includes('Sage Stocks')
       );
 
       log(LogLevel.INFO, 'Post-OAuth template check', {
-        totalPagesAccessible: pageCount,
-        sageStocksFound: !!sageStocksPage,
-        sageStocksId: sageStocksPage?.id,
+        totalPagesAccessible: searchResults.results.length,
+        sageStocksFoundCount: sageStocksPages.length,
+        sageStocksIds: sageStocksPages.map((p: any) => p.id),
         templateIdWasSet: !!process.env.SAGE_STOCKS_TEMPLATE_ID,
       });
 
-      if (!sageStocksPage && process.env.SAGE_STOCKS_TEMPLATE_ID) {
+      if (sageStocksPages.length === 0 && process.env.SAGE_STOCKS_TEMPLATE_ID) {
         log(LogLevel.WARN, 'Template was NOT duplicated during OAuth despite template_id being set', {
           templateId: process.env.SAGE_STOCKS_TEMPLATE_ID,
-          pagesFound: pageCount,
+          pagesFound: searchResults.results.length,
         });
       }
     } catch (diagError) {
-      log(LogLevel.ERROR, 'Diagnostic search failed (non-critical)', {
+      log(LogLevel.ERROR, 'Template check failed (non-critical)', {
         error: diagError instanceof Error ? diagError.message : String(diagError),
       });
     }
 
-    // Step 3: Create or update user in Beta Users database
+    // Step 3: Check if user already exists (BEFORE creating/updating)
+    const { getUserByNotionId } = await import('../../lib/auth');
+    const existingUser = await getUserByNotionId(userId);
+
+    // Step 4: Clean up duplicate templates for EXISTING users
+    if (existingUser && existingUser.sageStocksPageId && sageStocksPages.length > 1) {
+      log(LogLevel.WARN, 'Duplicate Sage Stocks templates detected for existing user', {
+        userId: existingUser.id,
+        email: userEmail,
+        existingSageStocksPageId: existingUser.sageStocksPageId,
+        foundSageStocksPages: sageStocksPages.length,
+        pageIds: sageStocksPages.map((p: any) => p.id),
+      });
+
+      // Find the correct page (matches saved ID) and delete all others
+      const correctPage = sageStocksPages.find((p: any) => p.id === existingUser.sageStocksPageId);
+      const duplicatePages = sageStocksPages.filter((p: any) => p.id !== existingUser.sageStocksPageId);
+
+      if (correctPage && duplicatePages.length > 0) {
+        log(LogLevel.INFO, 'Deleting duplicate Sage Stocks templates', {
+          keepingPageId: correctPage.id,
+          deletingPageIds: duplicatePages.map((p: any) => p.id),
+          duplicateCount: duplicatePages.length,
+        });
+
+        // Delete duplicate pages
+        for (const dupPage of duplicatePages) {
+          try {
+            await userNotion.blocks.delete({ block_id: dupPage.id });
+            log(LogLevel.INFO, 'Deleted duplicate Sage Stocks page', {
+              pageId: dupPage.id,
+            });
+          } catch (deleteError) {
+            log(LogLevel.ERROR, 'Failed to delete duplicate page', {
+              pageId: dupPage.id,
+              error: deleteError instanceof Error ? deleteError.message : String(deleteError),
+            });
+          }
+        }
+      } else if (!correctPage && duplicatePages.length > 0) {
+        // User's saved page ID doesn't exist anymore - keep the first one found
+        log(LogLevel.WARN, 'User saved page ID not found - keeping first Sage Stocks page and deleting rest', {
+          savedPageId: existingUser.sageStocksPageId,
+          keepingPageId: sageStocksPages[0].id,
+          deletingCount: duplicatePages.length - 1,
+        });
+
+        for (let i = 1; i < sageStocksPages.length; i++) {
+          try {
+            await userNotion.blocks.delete({ block_id: sageStocksPages[i].id });
+            log(LogLevel.INFO, 'Deleted extra Sage Stocks page', {
+              pageId: sageStocksPages[i].id,
+            });
+          } catch (deleteError) {
+            log(LogLevel.ERROR, 'Failed to delete extra page', {
+              pageId: sageStocksPages[i].id,
+              error: deleteError instanceof Error ? deleteError.message : String(deleteError),
+            });
+          }
+        }
+      }
+    } else if (existingUser && !existingUser.sageStocksPageId && sageStocksPages.length > 1) {
+      // User exists but hasn't completed setup yet, and there are multiple templates
+      // Keep only the first one
+      log(LogLevel.WARN, 'Multiple Sage Stocks templates found for user without setup complete', {
+        userId: existingUser.id,
+        email: userEmail,
+        foundSageStocksPages: sageStocksPages.length,
+        keepingPageId: sageStocksPages[0].id,
+      });
+
+      for (let i = 1; i < sageStocksPages.length; i++) {
+        try {
+          await userNotion.blocks.delete({ block_id: sageStocksPages[i].id });
+          log(LogLevel.INFO, 'Deleted duplicate Sage Stocks page for incomplete setup', {
+            pageId: sageStocksPages[i].id,
+          });
+        } catch (deleteError) {
+          log(LogLevel.ERROR, 'Failed to delete duplicate page', {
+            pageId: sageStocksPages[i].id,
+            error: deleteError instanceof Error ? deleteError.message : String(deleteError),
+          });
+        }
+      }
+    }
+
+    // Step 5: Create or update user in Beta Users database
     const user = await createOrUpdateUser({
       notionUserId: userId,
       email: userEmail,
@@ -151,6 +240,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     log(LogLevel.INFO, 'User record saved', {
       userId: user.id,
       status: user.status,
+      isExistingUser: !!existingUser,
     });
 
     // Auto-approve admin email
