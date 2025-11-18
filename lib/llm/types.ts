@@ -23,22 +23,32 @@ export interface AnalysisContext {
     recommendation: string;
   }>;
   deltas?: {
+    daysElapsed: number;
     scoreChange: number;
-    recommendationChange: string;
     trendDirection: 'improving' | 'declining' | 'stable';
-    categoryDeltas?: {
+    trendEmoji: string; // NEW v1.0.8: ⬆️ ⬇️ ⏸️ 🔄
+    significance: 'Major' | 'Notable' | 'Minor'; // NEW v1.0.8
+    categoryDeltas: {
       technical: number;
       fundamental: number;
       macro: number;
       risk: number;
       sentiment: number;
-      marketAlignment?: number; // NEW: Market alignment score delta
+      marketAlignment?: number;
     };
-    priceDeltas?: {
+    priceDeltas: {
+      priceChange: number; // NEW v1.0.8: Absolute price change
       priceChangePercent: number;
       volumeChangePercent: number;
-      daysElapsed: number;
       annualizedReturn?: number;
+    };
+    recommendationChanged: boolean; // NEW v1.0.8
+    recommendationDelta: string; // NEW v1.0.8: "Buy → Strong Buy"
+    regimeTransition?: { // NEW v1.0.8: Market regime shift detection
+      occurred: boolean;
+      from?: string;
+      to?: string;
+      message?: string;
     };
   };
 }

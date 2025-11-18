@@ -35,6 +35,7 @@ import { validateTimezone, getTimezoneFromEnv, getSecondsUntilMidnight } from '.
 import { assertDatabasesValid } from '../lib/database-validator';
 import { reportAPIError } from '../lib/bug-reporter';
 import { getMarketContext, MarketContext } from '../lib/market'; // v1.1.0: Market context
+import { calculateDeltas } from '../lib/analysis/deltas'; // v1.0.8: Delta-first analysis
 
 interface AnalyzeRequest {
   ticker: string;
@@ -540,67 +541,44 @@ export default async function handler(
     let deltas: any = null;
 
     try {
-      historicalAnalyses = await notionClient.queryHistoricalAnalyses(tickerUpper, 5);
+      // v1.0.8: Query 90 days of history (was 5 analyses)
+      historicalAnalyses = await notionClient.queryHistoricalAnalyses(tickerUpper, 90);
       notionCalls += 1;
 
       if (historicalAnalyses.length > 0) {
         previousAnalysis = historicalAnalyses[0];
 
-        // Compute composite score deltas
-        const scoreChange = scores.composite - previousAnalysis.compositeScore;
-        let trendDirection: 'improving' | 'declining' | 'stable' = 'stable';
-
-        if (scoreChange > 0.2) trendDirection = 'improving';
-        else if (scoreChange < -0.2) trendDirection = 'declining';
-
-        // Compute category score deltas (Priority 1)
-        const categoryDeltas = {
-          technical: scores.technical - (previousAnalysis.technicalScore || 0),
-          fundamental: scores.fundamental - (previousAnalysis.fundamentalScore || 0),
-          macro: scores.macro - (previousAnalysis.macroScore || 0),
-          risk: scores.risk - (previousAnalysis.riskScore || 0),
-          sentiment: scores.sentiment - (previousAnalysis.sentimentScore || 0),
+        // v1.0.8: Use unified delta module instead of inline calculation
+        const currentMetrics = {
+          compositeScore: scores.composite,
+          recommendation: scores.recommendation,
+          technicalScore: scores.technical,
+          fundamentalScore: scores.fundamental,
+          macroScore: scores.macro,
+          riskScore: scores.risk,
+          sentimentScore: scores.sentiment,
+          marketAlignment: scores.marketAlignment || 3.0,
+          price: fmpData.quote.price,
+          volume: fmpData.quote.volume,
         };
 
-        // Compute price & volume deltas (Priority 2)
-        const previousPrice = previousAnalysis.price || fmpData.quote.previousClose;
-        const previousVolume = previousAnalysis.volume || fmpData.quote.avgVolume;
+        deltas = calculateDeltas(
+          currentMetrics,
+          previousAnalysis,
+          marketContext, // Current market context
+          previousAnalysis.marketRegime // Previous regime for transition detection
+        );
 
-        const priceChangePercent = ((fmpData.quote.price - previousPrice) / previousPrice) * 100;
-        const volumeChangePercent = ((fmpData.quote.volume - previousVolume) / previousVolume) * 100;
-
-        // Calculate days elapsed
-        const previousDate = new Date(previousAnalysis.date);
-        const currentDate = new Date();
-        const daysElapsed = Math.ceil((currentDate.getTime() - previousDate.getTime()) / (1000 * 60 * 60 * 24));
-
-        // Calculate annualized return (if significant time has passed)
-        let annualizedReturn: number | undefined;
-        if (daysElapsed > 0) {
-          const dailyReturn = priceChangePercent / daysElapsed;
-          annualizedReturn = dailyReturn * 365;
-        }
-
-        const priceDeltas = {
-          priceChangePercent,
-          volumeChangePercent,
-          daysElapsed,
-          annualizedReturn,
-        };
-
-        deltas = {
-          scoreChange,
-          recommendationChange: `${previousAnalysis.recommendation} → ${scores.recommendation}`,
-          trendDirection,
-          categoryDeltas,
-          priceDeltas,
-        };
-
-        console.log(`✅ Found ${historicalAnalyses.length} historical analyses`);
+        console.log(`✅ Found ${historicalAnalyses.length} historical analyses (90 days)`);
         console.log(`   Previous: ${previousAnalysis.compositeScore}/5.0 (${previousAnalysis.date})`);
-        console.log(`   Score Change: ${scoreChange > 0 ? '+' : ''}${scoreChange.toFixed(2)} (${trendDirection})`);
-        console.log(`   Price Change: ${priceChangePercent > 0 ? '+' : ''}${priceChangePercent.toFixed(2)}% over ${daysElapsed} days`);
-        console.log(`   Category Deltas: Tech ${categoryDeltas.technical > 0 ? '+' : ''}${categoryDeltas.technical.toFixed(2)} | Fund ${categoryDeltas.fundamental > 0 ? '+' : ''}${categoryDeltas.fundamental.toFixed(2)} | Macro ${categoryDeltas.macro > 0 ? '+' : ''}${categoryDeltas.macro.toFixed(2)}`);
+        console.log(`   Score Change: ${deltas.trendEmoji} ${deltas.scoreChange > 0 ? '+' : ''}${deltas.scoreChange.toFixed(2)} (${deltas.significance}, ${deltas.trendDirection})`);
+        console.log(`   Price Change: ${deltas.priceDeltas.priceChangePercent > 0 ? '+' : ''}${deltas.priceDeltas.priceChangePercent.toFixed(2)}% over ${deltas.daysElapsed} days`);
+        if (deltas.regimeTransition?.occurred) {
+          console.log(`   🔥 Regime Transition: ${deltas.regimeTransition.from} → ${deltas.regimeTransition.to}`);
+        }
+        if (deltas.categoryDeltas) {
+          console.log(`   Category Deltas: Tech ${deltas.categoryDeltas.technical > 0 ? '+' : ''}${deltas.categoryDeltas.technical.toFixed(2)} | Fund ${deltas.categoryDeltas.fundamental > 0 ? '+' : ''}${deltas.categoryDeltas.fundamental.toFixed(2)} | Macro ${deltas.categoryDeltas.macro > 0 ? '+' : ''}${deltas.categoryDeltas.macro.toFixed(2)}`);
+        }
       } else {
         console.log('ℹ️  No historical analyses found (first analysis for this ticker)');
       }
@@ -764,8 +742,9 @@ export default async function handler(
     const archiveStartTime = Date.now();
 
     try {
-      // Archive to Stock History database with LLM content
-      archivedPageId = await notionClient.archiveToHistory(analysesPageId);
+      // v1.0.8: Archive to Stock History with market regime for pattern recognition
+      const currentRegime = marketContext?.regime;
+      archivedPageId = await notionClient.archiveToHistory(analysesPageId, currentRegime);
       archived = !!archivedPageId;
       notionCalls += 3; // read + create + update
 
@@ -775,6 +754,9 @@ export default async function handler(
         notionCalls += 1;
         const archiveDuration = Date.now() - archiveStartTime;
         console.log(`✅ Archived to Stock History: ${archivedPageId} (${archiveDuration}ms)`);
+        if (currentRegime) {
+          console.log(`   Market Regime: ${currentRegime}`);
+        }
       } else {
         console.log('⚠️  Archive to Stock History failed');
       }

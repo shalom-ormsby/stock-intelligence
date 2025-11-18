@@ -649,11 +649,12 @@ export class NotionClient {
    * analysis is complete.
    *
    * @param pageId - Notion page ID of the Stock Analyses page to archive
+   * @param marketRegime - Market regime at time of analysis (for pattern recognition in v1.0.8)
    * @returns Page ID of the newly created Stock History entry, or null if failed
    *
    * @example
    * ```typescript
-   * const historyId = await notionClient.archiveToHistory(analysesPageId);
+   * const historyId = await notionClient.archiveToHistory(analysesPageId, 'Risk-On');
    * if (historyId) {
    *   console.log('Archived to history:', historyId);
    * }
@@ -662,11 +663,12 @@ export class NotionClient {
    * @remarks
    * - Creates a new page in Stock History (append-only, never updates)
    * - Excludes Stock Analyses-specific properties (Owner, etc.)
+   * - Includes Market Regime for delta-first pattern recognition (v1.0.8)
    * - Does NOT update Content Status (already set to "Complete" by /api/analyze)
    * - Stock History pages don't use Content Status (simplified in v1.0.2)
    * - Copies all content blocks (except synced blocks)
    */
-  async archiveToHistory(pageId: string): Promise<string | null> {
+  async archiveToHistory(pageId: string, marketRegime?: string): Promise<string | null> {
     console.log('📦 Archiving analysis to Stock History...');
 
     try {
@@ -732,6 +734,14 @@ export class NotionClient {
       propertiesToCopy['Name'] = {
         title: [{ text: { content: `${ticker} - ${formattedDate}` } }],
       };
+
+      // Add market regime for pattern recognition (v1.0.8)
+      if (marketRegime) {
+        propertiesToCopy['Market Regime'] = {
+          select: { name: marketRegime },
+        };
+        console.log(`ℹ️  Including Market Regime: ${marketRegime}`);
+      }
       // Note: Stock History doesn't use Content Status in v1.0.2
 
       // Create Stock History page
@@ -955,12 +965,14 @@ export class NotionClient {
   /**
    * Query historical analyses from Stock History database
    * @param ticker - Stock ticker symbol
-   * @param limit - Number of historical analyses to retrieve (default: 5)
+   * @param daysBack - Number of days of history to retrieve (default: 90)
    * @returns Array of historical analyses sorted by date (newest first)
+   *
+   * v1.0.8: Changed from limit-based to date-based query for pattern recognition
    */
   async queryHistoricalAnalyses(
     ticker: string,
-    limit: number = 5
+    daysBack: number = 90
   ): Promise<Array<{
     date: string;
     compositeScore: number;
@@ -970,20 +982,38 @@ export class NotionClient {
     macroScore?: number;
     riskScore?: number;
     sentimentScore?: number;
-    sectorScore?: number;
+    marketAlignment?: number;
+    marketRegime?: string;
+    price?: number;
+    volume?: number;
     metrics?: Record<string, any>;
   }>> {
     try {
       // Get data source ID for API v2025-09-03
       const dataSourceId = await this.getDataSourceId(this.stockHistoryDbId);
 
+      // Calculate cutoff date (daysBack from now)
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+      const cutoffISO = cutoffDate.toISOString().split('T')[0]; // YYYY-MM-DD
+
       const response = await this.client.dataSources.query({
         data_source_id: dataSourceId,
         filter: {
-          property: 'Ticker',
-          title: {
-            equals: ticker,
-          },
+          and: [
+            {
+              property: 'Ticker',
+              title: {
+                equals: ticker,
+              },
+            },
+            {
+              property: 'Analysis Date',
+              date: {
+                on_or_after: cutoffISO,
+              },
+            },
+          ],
         },
         sorts: [
           {
@@ -991,7 +1021,7 @@ export class NotionClient {
             direction: 'descending',
           },
         ],
-        page_size: limit,
+        page_size: 100, // Max allowed, but date filter is primary limiter
       });
 
       return response.results.map((page: any) => {
@@ -1005,7 +1035,10 @@ export class NotionClient {
           macroScore: props['Macro Score']?.number,
           riskScore: props['Risk Score']?.number,
           sentimentScore: props['Sentiment Score']?.number,
-          sectorScore: props['Sector Score']?.number,
+          marketAlignment: props['Market Alignment']?.number,
+          marketRegime: props['Market Regime']?.select?.name, // NEW in v1.0.8
+          price: props['Current Price']?.number,
+          volume: props['Volume']?.number,
           metrics: {
             pattern: props['Pattern']?.select?.name,
             confidence: props['Confidence']?.number,

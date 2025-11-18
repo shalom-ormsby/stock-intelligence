@@ -136,12 +136,22 @@ export const STOCK_ANALYSES_SCHEMA: NotionProperty[] = [
 /**
  * Stock History Database Schema
  * Historical record of all analyses (new row per analysis, append-only)
+ *
+ * v1.0.8: Added Market Regime property for delta-first analysis and pattern recognition
  */
 export const STOCK_HISTORY_SCHEMA: NotionProperty[] = [
   // Primary fields (different from Analyses)
   { name: 'Name', type: 'title', required: true, description: 'Ticker - Date Time' },
   { name: 'Ticker', type: 'rich_text', required: true, description: 'Stock ticker symbol' },
   { name: 'Analysis Date', type: 'date', required: true, description: 'Date and time of analysis' },
+
+  // Market Context (v1.0.8 - NEW for delta-first analysis)
+  {
+    name: 'Market Regime',
+    type: 'select',
+    options: ['Risk-On', 'Risk-Off', 'Transition'],
+    description: 'Market regime at time of analysis (for pattern recognition)'
+  },
 
   // All other fields same as Stock Analyses (except Owner and Status)
   // Status removed in v1.0.2 (Stock History is append-only, no workflow tracking needed)
