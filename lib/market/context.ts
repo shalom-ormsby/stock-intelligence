@@ -128,10 +128,16 @@ export async function getMarketContext(
     console.log(`[MARKET] ✓ Market context fetched and cached (${duration}ms)`);
 
     return marketContext;
-  } catch (error) {
-    console.error('[MARKET] Failed to fetch market context:', error);
+  } catch (error: any) {
+    console.error('[MARKET] ❌ Failed to fetch market context:', error);
+    console.error('[MARKET]    Error details:', {
+      message: error?.message,
+      stack: error?.stack?.split('\n')[0], // First line of stack trace
+      name: error?.name,
+    });
 
     // Graceful degradation: return neutral context
+    console.warn('[MARKET] ⚠️  Returning neutral market context as fallback');
     return getNeutralMarketContext();
   }
 }
