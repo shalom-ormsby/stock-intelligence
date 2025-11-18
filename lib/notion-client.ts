@@ -745,10 +745,32 @@ export class NotionClient {
       // Note: Stock History doesn't use Content Status in v1.0.2
 
       // Create Stock History page
-      const historyPage = await this.client.pages.create({
-        parent: { database_id: this.stockHistoryDbId },
-        properties: propertiesToCopy,
-      });
+      let historyPage;
+      try {
+        historyPage = await this.client.pages.create({
+          parent: { database_id: this.stockHistoryDbId },
+          properties: propertiesToCopy,
+        });
+      } catch (error: any) {
+        // If Market Regime property doesn't exist, retry without it
+        if (error.code === 'validation_error' &&
+            error.message?.includes('Market Regime') &&
+            marketRegime) {
+          console.warn('⚠️  Market Regime property not found in Stock History database - skipping');
+          console.warn('   💡 To enable regime tracking, add a "Market Regime" select property to Stock History');
+          console.warn('      Options: Risk-On, Risk-Off, Transition');
+
+          // Remove Market Regime and retry
+          delete propertiesToCopy['Market Regime'];
+          historyPage = await this.client.pages.create({
+            parent: { database_id: this.stockHistoryDbId },
+            properties: propertiesToCopy,
+          });
+        } else {
+          // Re-throw other errors
+          throw error;
+        }
+      }
 
       console.log(`✅ Created Stock History page: ${ticker} - ${formattedDate}`);
 
