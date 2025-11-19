@@ -70,12 +70,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // v1.2.4: Auto-save database IDs when template is found
     // CRITICAL: This must succeed or the first analysis will fail!
-    if (!detection.needsManual && detection.sageStocksPage) {
+    // v1.2.9 Fix: Only save if ALL required databases are detected (not just the page)
+    if (!detection.needsManual &&
+        detection.sageStocksPage &&
+        detection.stockAnalysesDb &&
+        detection.stockHistoryDb) {
       // Store IDs for use in retry closure
       const detectedIds = {
         sageStocksPageId: detection.sageStocksPage.id,
-        stockAnalysesDbId: detection.stockAnalysesDb?.id,
-        stockHistoryDbId: detection.stockHistoryDb?.id,
+        stockAnalysesDbId: detection.stockAnalysesDb.id,  // No longer optional
+        stockHistoryDbId: detection.stockHistoryDb.id,    // No longer optional
       };
 
       try {
@@ -95,6 +99,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Re-throw the error - database IDs MUST be saved for analysis to work
         throw new Error('Failed to save database configuration. Please try the setup again.');
       }
+    } else if (detection.sageStocksPage && (!detection.stockAnalysesDb || !detection.stockHistoryDb)) {
+      // v1.2.9: Partial detection - page found but databases missing
+      log(LogLevel.WARN, 'Partial template detection - page found but databases missing', {
+        userId: user.id,
+        sageStocksPage: !!detection.sageStocksPage,
+        stockAnalysesDb: !!detection.stockAnalysesDb,
+        stockHistoryDb: !!detection.stockHistoryDb,
+      });
     }
 
     // Update setup progress in session

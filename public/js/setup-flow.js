@@ -367,7 +367,20 @@ function renderStepContent() {
 function createStep1Content() {
   const section = document.createElement('div');
   section.className = 'slide-in';
+
+  // v1.2.9: Detect mobile/tablet devices
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const mobileWarning = isMobile ? `
+    <div class="mb-4 p-4 bg-yellow-50 border-2 border-yellow-300 rounded-lg">
+      <p class="text-yellow-800 font-medium mb-2">📱 Mobile Device Detected</p>
+      <p class="text-sm text-yellow-700">
+        <strong>Important:</strong> Setup works best on desktop. If you encounter issues, please visit this page on a desktop computer for the smoothest experience.
+      </p>
+    </div>
+  ` : '';
+
   section.innerHTML = `
+    ${mobileWarning}
     <div class="mb-6 p-6 rounded-lg border bg-blue-50 border-blue-200">
       <div class="flex items-start">
         <div class="text-3xl mr-4">🔗</div>
@@ -609,10 +622,14 @@ function createStep2Content() {
 
         const data = await response.json();
 
-        if (response.ok && data.detection && data.detection.sageStocksPage) {
-          // Template found! Show success UI
+        // v1.2.9 Fix: Require ALL databases, not just the page
+        if (response.ok && data.detection &&
+            data.detection.sageStocksPage &&
+            data.detection.stockAnalysesDb &&
+            data.detection.stockHistoryDb) {
+          // Full template found! Show success UI
           isChecking = false;
-          console.log('✅ Template detected!', data.detection);
+          console.log('✅ Complete template detected!', data.detection);
 
           // Update completion time
           const completionTimeEl = section.querySelector('#step2-completion-time');
@@ -639,6 +656,45 @@ function createStep2Content() {
               await advanceToStep(3, { skipVerification: true });
             });
           }
+          return;
+        }
+
+        // v1.2.9: Check for partial detection (page found but databases missing)
+        if (response.ok && data.detection && data.detection.sageStocksPage &&
+            (!data.detection.stockAnalysesDb || !data.detection.stockHistoryDb)) {
+          isChecking = false;
+          console.warn('⚠️ Partial template detection - page found but databases missing');
+
+          // Update error message with specific guidance
+          const errorDiv = section.querySelector('#step2-error');
+          if (errorDiv) {
+            errorDiv.innerHTML = `
+              <div class="p-4 bg-yellow-100 border-2 border-yellow-300 rounded-lg mb-4">
+                <p class="text-yellow-800 font-medium mb-2">⚠️ Incomplete Template Detected</p>
+                <p class="text-sm text-yellow-700 mb-3">
+                  We found your Sage Stocks page, but the databases are missing. This often happens on mobile devices.
+                </p>
+                <p class="text-sm text-yellow-700 mb-3">
+                  <strong>To fix this:</strong>
+                </p>
+                <ol class="text-sm text-yellow-700 mb-3 list-decimal list-inside space-y-1">
+                  <li>Open Notion on a <strong>desktop computer</strong> (not iPad/mobile)</li>
+                  <li>Visit: <a href="${TEMPLATE_URL}" target="_blank" class="underline font-medium">Sage Stocks Template</a></li>
+                  <li>Click "Duplicate" to create a complete copy in your workspace</li>
+                  <li>Return to this page - we'll automatically detect it</li>
+                </ol>
+              </div>
+              <button
+                onclick="location.reload()"
+                class="px-6 py-3 bg-yellow-600 text-white font-semibold rounded-lg hover:bg-yellow-700 transition-all"
+              >
+                I've Duplicated the Template - Check Again
+              </button>
+            `;
+          }
+
+          settingUpDiv.classList.add('hidden');
+          errorDiv.classList.remove('hidden');
           return;
         }
 
