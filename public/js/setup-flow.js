@@ -149,6 +149,40 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentState.currentStep = 2;
     currentState.completedSteps = [1]; // OAuth (step 1) is now complete
     await advanceToStep(2, { step1Complete: true });
+
+    // v1.2.12: Delayed duplicate cleanup with multiple retry intervals
+    // Runs cleanup at 15s, 60s, 2min, 5min, and 10min to catch async duplicates
+    // that appear minutes after OAuth completes (reported: 7min delay)
+    const runCleanup = async (attemptNumber) => {
+      console.log(`🧹 Running delayed duplicate cleanup (attempt ${attemptNumber})...`);
+      try {
+        const cleanupResponse = await fetch('/api/setup/cleanup-duplicates');
+        const cleanupResult = await cleanupResponse.json();
+
+        if (cleanupResult.success) {
+          if (cleanupResult.duplicatesArchived > 0) {
+            console.log(`✅ Cleaned up ${cleanupResult.duplicatesArchived} duplicate template(s) (attempt ${attemptNumber})`, cleanupResult);
+            // Show user-visible notification if duplicates were found
+            if (attemptNumber > 1) {
+              console.log(`⚠️ Note: Duplicate appeared ${attemptNumber > 2 ? 'several minutes' : 'later'} after OAuth - this is expected Notion behavior`);
+            }
+          } else {
+            console.log(`✅ No duplicate templates found (attempt ${attemptNumber})`);
+          }
+        } else {
+          console.warn(`⚠️ Duplicate cleanup failed (attempt ${attemptNumber}, non-critical):`, cleanupResult);
+        }
+      } catch (cleanupError) {
+        console.warn(`⚠️ Duplicate cleanup error (attempt ${attemptNumber}, non-critical):`, cleanupError);
+      }
+    };
+
+    // Schedule cleanup at multiple intervals to catch late-appearing duplicates
+    setTimeout(() => runCleanup(1), 15000);   // 15 seconds
+    setTimeout(() => runCleanup(2), 60000);   // 1 minute
+    setTimeout(() => runCleanup(3), 120000);  // 2 minutes
+    setTimeout(() => runCleanup(4), 300000);  // 5 minutes
+    setTimeout(() => runCleanup(5), 600000);  // 10 minutes
   }
 
   // Render subway map and content

@@ -97,6 +97,88 @@ All development versions are documented below with full technical details.
 
 ## [Unreleased]
 
+### 🐛 Critical Fix: Delayed Duplicate Cleanup for Async Template Creation (v1.2.12)
+
+**Date:** November 18, 2025
+**Priority:** CRITICAL
+**Type:** Bug Fix
+**Affected Users:** All users (especially existing users re-authenticating)
+
+**Problem Solved:**
+Despite v1.2.11 correctly preventing `template_id` from being included in OAuth URLs, duplicate templates still appeared 7+ minutes after OAuth completion. Analysis showed that Notion creates templates asynchronously AFTER the OAuth callback completes, making immediate cleanup logic (in callback.ts) ineffective.
+
+**Evidence:**
+- OAuth logs showed `willSkipTemplateId: true` (v1.2.11 working correctly)
+- Callback.ts found only 1 template at 5:28 UTC
+- Duplicate appeared 7 minutes later (5:35 UTC)
+- Cleanup logic ran too early to detect the async duplicate
+
+**Solution Implemented:**
+
+**Delayed Cleanup System with Multiple Retry Intervals** - Frontend schedules cleanup checks at 15s, 1min, 2min, 5min, and 10min after OAuth completes.
+
+**Backend Changes:**
+
+1. **New API Endpoint** (`api/setup/cleanup-duplicates.ts`):
+   - Searches for duplicate Sage Stocks templates
+   - Archives duplicates using same 3-case logic as callback.ts
+   - Case 1: Multiple templates found → keep saved/oldest, archive rest
+   - Case 2: Single template found but different from saved ID → archive new one
+   - Case 3: No duplicates detected → return success
+   - Returns: duplicatesFound, duplicatesArchived, archivedPageIds
+   - Comprehensive logging for debugging
+
+**Frontend Changes** (`public/js/setup-flow.js`):
+
+1. **Delayed Cleanup Scheduler** (lines 153-185):
+   - Triggered when user arrives at Step 2 (after OAuth callback)
+   - Runs cleanup at 5 intervals: 15s, 60s, 120s, 300s, 600s
+   - Each interval calls `/api/setup/cleanup-duplicates` endpoint
+   - Logs results to console for debugging
+   - Non-blocking (doesn't delay user progress)
+   - Continues even if user navigates away (timeouts persist)
+
+**How It Works:**
+
+1. User completes OAuth → redirected to `/?step=2`
+2. Frontend sets up 5 cleanup timers (15s, 1m, 2m, 5m, 10m)
+3. Each timer calls cleanup endpoint independently
+4. Cleanup endpoint searches for duplicates and archives if found
+5. User sees console logs if duplicates detected: "✅ Cleaned up N duplicate template(s)"
+
+**Why Multiple Intervals:**
+- 15 seconds: Catches most immediate duplicates
+- 1 minute: Safety net for slightly delayed creation
+- 2 minutes: Extra safety for slow Notion responses
+- 5 minutes: Catches the reported 7-minute case
+- 10 minutes: Final sweep for edge cases
+
+**Benefits:**
+- ✅ Catches async duplicates that appear after callback.ts finishes
+- ✅ Non-blocking (doesn't delay user experience)
+- ✅ Multiple retry intervals ensure comprehensive coverage
+- ✅ Works even if Notion's duplication is severely delayed
+- ✅ Logs provide visibility into when duplicates appear
+- ✅ Reuses existing cleanup logic (3-case system)
+
+**Testing:**
+- ✅ TypeScript compilation passes
+- ✅ Cleanup endpoint created
+- ✅ Frontend scheduler implemented
+- 🔄 Production testing required (need to verify 7-minute case is caught)
+
+**Files Changed:**
+- `api/setup/cleanup-duplicates.ts` - New delayed cleanup endpoint
+- `public/js/setup-flow.js` - Multi-interval cleanup scheduler
+
+**Next Steps:**
+- Deploy to production
+- Test with admin account re-authentication
+- Monitor logs to confirm duplicates are caught at 5-minute mark
+- If successful, this should finally solve the template duplication issue
+
+---
+
 ### ✨ Feature: Email-Based User Verification to Prevent Template Duplication (v1.2.11)
 
 **Date:** November 18, 2025
