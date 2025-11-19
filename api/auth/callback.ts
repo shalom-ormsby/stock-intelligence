@@ -269,8 +269,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       //   // Setup already complete - go to analyzer
       //   res.redirect('/analyze.html');
       // } else {
-        // New user or incomplete setup - go to single-page setup flow (Step 2 = Duplicate Template)
-        res.redirect('/?step=2'); // OAuth (step 1) just completed, now at step 2 (duplicate)
+        // New user or incomplete setup - go to single-page setup flow
+        // v1.2.14: Step 2 = Verify Template (check that user duplicated in Step 1.5)
+        res.redirect('/?step=2'); // OAuth (step 1) just completed, now verify workspace at step 2
       // }
       return;
     }

@@ -51,54 +51,77 @@ let currentState = {
 // ============================================================================
 
 /**
- * Handle Notion sign-in with email-based existing user detection
- * v1.2.11: Email-based verification with localStorage fallback
+ * Handle setup flow initiation with database check
+ * v1.2.14: Check database BEFORE OAuth to determine user path
  */
-async function handleNotionSignIn(emailInput = null) {
-  // Check if user has an existing session (cookie or localStorage)
+async function handleSetupStart(emailInput = null) {
+  // Check if user has an existing session
   const hasSessionCookie = document.cookie.includes('si_session=');
-  const hasLocalSetupFlag = localStorage.getItem('sage_stocks_setup_complete') === 'true';
   const savedEmail = localStorage.getItem('sage_stocks_user_email');
 
-  let authUrl = '/api/auth/authorize';
-
-  // Priority 1: Session cookie (no email needed)
-  if (hasSessionCookie) {
-    authUrl += '?existing_user=true';
-    console.log('🔍 Existing user detected (session cookie) - will skip template duplication');
-    window.location.href = authUrl;
-    return;
-  }
-
-  // Priority 2: Email from input or localStorage
   let userEmail = emailInput || savedEmail;
 
+  if (!userEmail && !hasSessionCookie) {
+    console.log('✨ No email provided - UI should show email input');
+    return;
+  }
+
+  // Normalize and save email
   if (userEmail) {
-    // Normalize email
     userEmail = userEmail.toLowerCase().trim();
-
-    // Save to localStorage for next time
     localStorage.setItem('sage_stocks_user_email', userEmail);
-
-    // Add email to auth URL for backend verification
-    authUrl += `?email=${encodeURIComponent(userEmail)}`;
-    console.log('📧 Email-based verification:', userEmail);
-
-    window.location.href = authUrl;
-    return;
   }
 
-  // Priority 3: localStorage setup flag (legacy)
-  if (hasLocalSetupFlag) {
-    authUrl += '?existing_user=true';
-    console.log('🔍 Existing user detected (localStorage flag) - will skip template duplication');
-    window.location.href = authUrl;
-    return;
+  // Check database: Does this user already have a template?
+  try {
+    console.log('🔍 Checking database for existing user...');
+
+    if (userEmail) {
+      const response = await fetch(`/api/auth/check-email?email=${encodeURIComponent(userEmail)}`);
+      const data = await response.json();
+
+      if (data.exists && data.hasTemplate) {
+        // Existing user with template: Go straight to OAuth
+        console.log('✅ Existing user detected - going to OAuth');
+        proceedToOAuth(userEmail);
+      } else {
+        // New user OR existing user without template: Show manual setup
+        console.log('📄 New user or no template - showing manual setup');
+        showManualSetupStep();
+      }
+    } else if (hasSessionCookie) {
+      // Has session: Go straight to OAuth
+      console.log('✅ Session detected - going to OAuth');
+      proceedToOAuth();
+    }
+  } catch (error) {
+    console.error('❌ Database check failed:', error);
+    // On error, go to OAuth and let backend handle it
+    proceedToOAuth(userEmail);
+  }
+}
+
+/**
+ * Proceed to OAuth (after database check or manual setup)
+ */
+function proceedToOAuth(email = null) {
+  let authUrl = '/api/auth/authorize';
+
+  if (email) {
+    authUrl += `?email=${encodeURIComponent(email)}`;
   }
 
-  // If we reach here without email, the UI should show email input
-  // This function will be called again when email is submitted
-  console.log('✨ New user - email verification required');
+  console.log('🚀 Proceeding to OAuth:', authUrl);
+  window.location.href = authUrl;
+}
+
+/**
+ * Show manual template setup step (for new users)
+ */
+function showManualSetupStep() {
+  console.log('📄 Showing manual template setup');
+  // Navigate to Step 1.5 (manual setup)
+  window.location.href = '/?step=1.5';
 }
 
 // ============================================================================
@@ -144,7 +167,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // If OAuth callback just completed (step=2 means OAuth succeeded, now on duplicate)
+  // v1.2.14: Step 1.5 = Manual template setup (BEFORE OAuth)
+  if (stepParam === '1.5') {
+    console.log('📄 Showing Step 1.5: Manual template setup');
+    currentState.currentStep = 1.5;
+    currentState.completedSteps = [];
+    renderSubwayMap();
+    renderStep1_5Content();
+    return;
+  }
+
+  // If OAuth callback just completed (step=2 means OAuth succeeded, now verify)
   if (stepParam === '2') {
     currentState.currentStep = 2;
     currentState.completedSteps = [1]; // OAuth (step 1) is now complete
@@ -504,11 +537,11 @@ function createStep1Content() {
           signinButton.disabled = true;
           signinButton.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Verifying...';
 
-          // Call handleNotionSignIn with email
-          await handleNotionSignIn(email);
+          // Call handleSetupStart with email (v1.2.14)
+          await handleSetupStart(email);
         } else {
-          // No email needed, proceed directly
-          await handleNotionSignIn();
+          // No email needed, proceed directly (v1.2.14)
+          await handleSetupStart();
         }
       });
 
@@ -527,9 +560,112 @@ function createStep1Content() {
 }
 
 // ============================================================================
+// Step 1.5: Manual Template Setup (BEFORE OAuth)
+// ============================================================================
+
+function renderStep1_5Content() {
+  const contentDiv = document.querySelector('#setup-content');
+  if (!contentDiv) return;
+
+  const savedEmail = localStorage.getItem('sage_stocks_user_email');
+
+  contentDiv.innerHTML = `
+    <div class="slide-in">
+      <div class="mb-6 p-6 rounded-lg border bg-blue-50 border-blue-200">
+        <div class="flex items-start">
+          <div class="text-3xl mr-4">📄</div>
+          <div class="flex-1">
+            <h3 class="font-bold text-gray-900 text-xl mb-2">Set Up Your Workspace</h3>
+            <p class="text-gray-700 mb-4">
+              Before connecting to Notion, let's set up your workspace template.
+            </p>
+
+            <div class="mb-4 p-4 bg-white border border-blue-200 rounded-lg">
+              <p class="text-sm font-medium text-gray-800 mb-3">
+                📖 <strong>Instructions:</strong>
+              </p>
+              <ol class="text-sm text-gray-700 space-y-2 ml-4 list-decimal">
+                <li>Click "Open Template in Notion" below</li>
+                <li>Notion will open in a new tab</li>
+                <li>Click the <strong>"Duplicate"</strong> button in the top-right corner of Notion</li>
+                <li>Return to this tab and click "Continue to Connect Notion"</li>
+              </ol>
+            </div>
+
+            ${savedEmail ? `
+              <p class="text-sm text-gray-600 mb-4">
+                Setting up for: <strong>${savedEmail}</strong>
+              </p>
+            ` : ''}
+
+            <div class="flex flex-col sm:flex-row gap-3">
+              <a
+                href="#"
+                id="open-template-button"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center justify-center px-6 py-3 bg-white border-2 border-blue-600 text-blue-600 font-semibold rounded-lg hover:bg-blue-50 transition-all"
+              >
+                📄 Open Template in Notion
+              </a>
+              <button
+                id="continue-to-oauth"
+                class="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl"
+              >
+                Continue to Connect Notion →
+              </button>
+            </div>
+
+            <div class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p class="text-xs text-yellow-800">
+                ⚠️ <strong>Important:</strong> Make sure you click "Duplicate" in Notion before continuing. We'll verify your workspace after you connect.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Setup event listeners
+  setTimeout(async () => {
+    const openTemplateButton = document.querySelector('#open-template-button');
+    const continueButton = document.querySelector('#continue-to-oauth');
+
+    // Get template URL
+    try {
+      const response = await fetch('/api/setup/template-url');
+      const data = await response.json();
+
+      if (data.success && openTemplateButton) {
+        openTemplateButton.href = data.url;
+      }
+    } catch (error) {
+      console.error('❌ Failed to get template URL:', error);
+    }
+
+    // Continue to OAuth button
+    if (continueButton) {
+      continueButton.addEventListener('click', () => {
+        console.log('✅ User says they duplicated template - proceeding to OAuth');
+        const email = localStorage.getItem('sage_stocks_user_email');
+        proceedToOAuth(email);
+      });
+    }
+  }, 0);
+}
+
+// ============================================================================
 // Step 2: Duplicate Template (Manual Flow)
 // ============================================================================
 
+/**
+ * Step 2: Verify Workspace (v1.2.14)
+ *
+ * Runs AFTER OAuth callback. Verifies that the user has a Sage Stocks template
+ * in their workspace (either from Step 1.5 manual duplication or from being
+ * an existing user).
+ */
 function createStep2Content() {
   const section = document.createElement('div');
   section.className = 'slide-in';
@@ -537,14 +673,14 @@ function createStep2Content() {
   section.innerHTML = `
     <div class="mb-6 p-6 rounded-lg border bg-green-50 border-green-200">
       <div class="flex items-start">
-        <div class="text-3xl mr-4">📄</div>
+        <div class="text-3xl mr-4">✅</div>
         <div class="flex-1">
-          <h3 class="font-bold text-gray-900 text-xl mb-2">Step 2 of 3: Set Up Your Workspace</h3>
+          <h3 class="font-bold text-gray-900 text-xl mb-2">Step 2 of 3: Verify Your Workspace</h3>
 
           <!-- Checking State -->
           <div id="step2-checking">
             <p class="text-gray-700 mb-4">
-              Checking your Notion workspace...
+              Verifying your Notion workspace...
             </p>
             <div class="flex items-center gap-2">
               <span class="inline-block spinner" style="width: 20px; height: 20px; border: 3px solid #3B82F6; border-top-color: transparent; border-radius: 50%;"></span>
@@ -552,82 +688,47 @@ function createStep2Content() {
             </div>
           </div>
 
-          <!-- Existing Template Found -->
-          <div id="step2-existing" class="hidden">
+          <!-- Workspace Verified -->
+          <div id="step2-verified" class="hidden">
             <div class="p-4 bg-green-100 border-2 border-green-300 rounded-lg mb-4">
-              <p class="text-green-800 font-medium mb-2">✅ Workspace Found!</p>
-              <p class="text-sm text-green-700">You already have a Sage Stocks workspace set up in Notion.</p>
+              <p class="text-green-800 font-medium mb-2">✅ Workspace Verified!</p>
+              <p class="text-sm text-green-700">Your Sage Stocks workspace is set up and ready to use.</p>
             </div>
             <button
-              id="step2-continue-existing"
+              id="step2-continue"
               class="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl"
             >
-              Continue with Existing Workspace →
+              Continue to Final Step →
             </button>
           </div>
 
-          <!-- No Template - Need to Duplicate -->
-          <div id="step2-new" class="hidden">
-            <p class="text-gray-700 mb-4">
-              Click the button below to set up your Sage Stocks workspace in Notion.
-            </p>
-
-            <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <p class="text-sm text-blue-800 mb-3">
-                📖 <strong>How it works:</strong>
+          <!-- Workspace Not Found (Error State) -->
+          <div id="step2-error" class="hidden">
+            <div class="p-4 bg-red-100 border-2 border-red-300 rounded-lg mb-4">
+              <p class="text-red-800 font-medium mb-2">❌ Workspace Not Found</p>
+              <p class="text-sm text-red-700 mb-3">
+                We couldn't find a Sage Stocks workspace in your Notion account. This may be because:
               </p>
-              <ol class="text-sm text-blue-700 space-y-1 ml-4 list-decimal">
-                <li>Click "Set Up Workspace" below</li>
-                <li>Notion will open in a new tab</li>
-                <li>Click the "Duplicate" button in Notion</li>
-                <li>Return to this tab - we'll automatically detect your workspace</li>
-              </ol>
+              <ul class="text-sm text-red-700 space-y-1 ml-4 list-disc">
+                <li>You didn't duplicate the template in the previous step</li>
+                <li>The duplication is still in progress (rare, but can take a moment)</li>
+                <li>You used a different Notion account than expected</li>
+              </ul>
             </div>
-
-            <a
-              href="#"
-              id="step2-setup-button"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="inline-block px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl"
-            >
-              Set Up Workspace in Notion →
-            </a>
-          </div>
-
-          <!-- Detecting After User Clicked -->
-          <div id="step2-detecting" class="hidden">
-            <p class="text-gray-700 mb-4">
-              <strong>Waiting for you to duplicate the template in Notion...</strong>
-            </p>
-
-            <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <div class="flex items-center gap-3 mb-3">
-                <span class="inline-block spinner" style="width: 20px; height: 20px; border: 3px solid #3B82F6; border-top-color: transparent; border-radius: 50%;"></span>
-                <span class="text-sm font-medium text-blue-800">Checking for your workspace...</span>
-              </div>
-              <p class="text-xs text-blue-700">
-                After you click "Duplicate" in Notion, we'll automatically detect your workspace and continue setup.
-              </p>
+            <div class="flex flex-col sm:flex-row gap-3">
+              <button
+                id="step2-retry"
+                class="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl"
+              >
+                🔄 Check Again
+              </button>
+              <button
+                id="step2-restart"
+                class="px-6 py-3 bg-white border-2 border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition-all"
+              >
+                ← Start Over
+              </button>
             </div>
-
-            <p class="text-xs text-gray-500">
-              Time elapsed: <span id="step2-detect-elapsed">0:00</span>
-            </p>
-          </div>
-
-          <!-- Detection Success -->
-          <div id="step2-success" class="hidden">
-            <div class="p-4 bg-green-100 border-2 border-green-300 rounded-lg mb-4">
-              <p class="text-green-800 font-medium mb-2">✅ Workspace Detected!</p>
-              <p class="text-sm text-green-700">Your Sage Stocks workspace is ready in Notion.</p>
-            </div>
-            <button
-              id="step2-continue-success"
-              class="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl"
-            >
-              Continue to Final Steps →
-            </button>
           </div>
 
         </div>
@@ -638,106 +739,63 @@ function createStep2Content() {
   // Setup event listeners after render
   setTimeout(async () => {
     const checkingDiv = section.querySelector('#step2-checking');
-    const existingDiv = section.querySelector('#step2-existing');
-    const newDiv = section.querySelector('#step2-new');
-    const detectingDiv = section.querySelector('#step2-detecting');
-    const successDiv = section.querySelector('#step2-success');
-    const setupButton = section.querySelector('#step2-setup-button');
-    const continueExisting = section.querySelector('#step2-continue-existing');
-    const continueSuccess = section.querySelector('#step2-continue-success');
+    const verifiedDiv = section.querySelector('#step2-verified');
+    const errorDiv = section.querySelector('#step2-error');
+    const continueButton = section.querySelector('#step2-continue');
+    const retryButton = section.querySelector('#step2-retry');
+    const restartButton = section.querySelector('#step2-restart');
 
-    // Check if user already has template
-    try {
-      console.log('🔍 Checking for existing Sage Stocks workspace...');
-      const response = await fetch('/api/setup/check-template');
-      const data = await response.json();
+    // Function to check for template
+    async function checkForTemplate() {
+      try {
+        console.log('🔍 Verifying Sage Stocks workspace...');
+        const response = await fetch('/api/setup/check-template');
+        const data = await response.json();
 
-      if (checkingDiv) checkingDiv.classList.add('hidden');
+        if (checkingDiv) checkingDiv.classList.add('hidden');
 
-      if (data.hasTemplate) {
-        console.log('✅ Existing workspace found:', data.templateId);
-        if (existingDiv) existingDiv.classList.remove('hidden');
-      } else {
-        console.log('📄 No workspace found - user needs to duplicate template');
-        if (newDiv) newDiv.classList.remove('hidden');
-
-        // Get template URL from backend
-        const templateResponse = await fetch('/api/setup/template-url');
-        const templateData = await templateResponse.json();
-
-        if (templateData.success && setupButton) {
-          setupButton.href = templateData.url;
+        if (data.hasTemplate) {
+          console.log('✅ Workspace verified:', data.templateId);
+          if (verifiedDiv) verifiedDiv.classList.remove('hidden');
+        } else {
+          console.warn('❌ No workspace found - user may not have duplicated template');
+          if (errorDiv) errorDiv.classList.remove('hidden');
         }
+      } catch (error) {
+        console.error('❌ Failed to verify workspace:', error);
+        if (checkingDiv) checkingDiv.classList.add('hidden');
+        if (errorDiv) errorDiv.classList.remove('hidden');
       }
-    } catch (error) {
-      console.error('❌ Failed to check for template:', error);
-      if (checkingDiv) checkingDiv.classList.add('hidden');
-      if (newDiv) newDiv.classList.remove('hidden');
     }
 
-    // Setup button click handler
-    if (setupButton) {
-      setupButton.addEventListener('click', async (e) => {
-        console.log('🚀 User clicked "Set Up Workspace" - starting detection...');
+    // Initial check
+    await checkForTemplate();
 
-        // Hide new user UI, show detecting UI
-        if (newDiv) newDiv.classList.add('hidden');
-        if (detectingDiv) detectingDiv.classList.remove('hidden');
-
-        // Start polling for template
-        const startTime = Date.now();
-        const elapsedSpan = section.querySelector('#step2-detect-elapsed');
-
-        // Update elapsed time every second
-        const elapsedInterval = setInterval(() => {
-          const elapsed = Math.floor((Date.now() - startTime) / 1000);
-          const mins = Math.floor(elapsed / 60);
-          const secs = elapsed % 60;
-          if (elapsedSpan) {
-            elapsedSpan.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
-          }
-        }, 1000);
-
-        // Poll for template every 3 seconds
-        const pollInterval = setInterval(async () => {
-          try {
-            console.log('🔍 Polling for workspace...');
-            const response = await fetch('/api/setup/check-template');
-            const data = await response.json();
-
-            if (data.hasTemplate) {
-              console.log('✅ Workspace detected!', data.templateId);
-              clearInterval(pollInterval);
-              clearInterval(elapsedInterval);
-
-              // Show success state
-              if (detectingDiv) detectingDiv.classList.add('hidden');
-              if (successDiv) successDiv.classList.remove('hidden');
-            }
-          } catch (error) {
-            console.error('❌ Polling error:', error);
-          }
-        }, 3000);
-
-        // Stop polling after 10 minutes
-        setTimeout(() => {
-          clearInterval(pollInterval);
-          clearInterval(elapsedInterval);
-          console.warn('⏱️ Polling timeout - stopped after 10 minutes');
-        }, 600000);
+    // Continue button
+    if (continueButton) {
+      continueButton.addEventListener('click', async () => {
+        await advanceToStep(3, { step2Complete: true });
       });
     }
 
-    // Continue buttons
-    if (continueExisting) {
-      continueExisting.addEventListener('click', async () => {
-        await advanceToStep(3, { step2Complete: true, existingTemplate: true });
+    // Retry button
+    if (retryButton) {
+      retryButton.addEventListener('click', async () => {
+        // Hide error, show checking
+        if (errorDiv) errorDiv.classList.add('hidden');
+        if (checkingDiv) checkingDiv.classList.remove('hidden');
+
+        // Check again
+        await checkForTemplate();
       });
     }
 
-    if (continueSuccess) {
-      continueSuccess.addEventListener('click', async () => {
-        await advanceToStep(3, { step2Complete: true, newTemplate: true });
+    // Restart button
+    if (restartButton) {
+      restartButton.addEventListener('click', () => {
+        // Clear everything and start over
+        localStorage.removeItem('sage_stocks_user_email');
+        window.location.href = '/';
       });
     }
   }, 0);

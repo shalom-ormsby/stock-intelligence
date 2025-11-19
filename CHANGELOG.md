@@ -97,6 +97,97 @@ All development versions are documented below with full technical details.
 
 ## [Unreleased]
 
+### 🔧 Critical Fix: Corrected Manual Template Flow Order (v1.2.14)
+
+**Date:** November 19, 2025
+**Priority:** CRITICAL
+**Type:** Bug Fix (Architectural)
+**Status:** ✅ Implemented
+
+**Problem:**
+v1.2.13 was documented as implementing manual template duplication, but the flow was in the wrong order:
+- **Actual v1.2.13 flow:** OAuth → Check template → Manual duplication
+- **Should have been:** Check template → Manual duplication → OAuth
+
+This meant template_id was still potentially included in OAuth (despite prevention code), and new users duplicated templates AFTER OAuth instead of BEFORE.
+
+**Evidence from logs:**
+```
+authorize.ts (12:53:57 PM): willSkipTemplateId: true
+callback.ts (12:54:15 PM): templateIdWasSet: true
+```
+Duplicate template still created 7 minutes after OAuth.
+
+**Root Cause:**
+Template duplication must happen BEFORE OAuth so that template_id parameter is never needed. v1.2.13 checked for templates after OAuth callback, which was too late.
+
+**Solution (v1.2.14):**
+
+**1. Frontend: New Pre-OAuth Database Check**
+- Created `handleSetupStart()` function that checks database BEFORE OAuth
+- Calls new `/api/auth/check-email` endpoint
+- Routes users based on existing template status:
+  - **Existing users with template:** Go directly to OAuth
+  - **New users / No template:** Go to Step 1.5 for manual setup
+
+**2. Frontend: New Step 1.5 - Manual Template Setup (BEFORE OAuth)**
+- Added `renderStep1_5Content()` function
+- Shows instructions for manual template duplication
+- "Open Template in Notion" button (fetches URL from `/api/setup/template-url`)
+- "Continue to Connect Notion" button (proceeds to OAuth AFTER user duplicates)
+- User duplicates template in Notion BEFORE granting OAuth permissions
+
+**3. Frontend: Step 2 Simplified to Verification**
+- Changed from "manual duplication UI" to "verification page"
+- Runs AFTER OAuth callback
+- Simply checks if template exists (from Step 1.5 or existing user)
+- Three states:
+  - ✅ Verified: Template found, continue to Step 3
+  - ❌ Error: Template not found (user didn't duplicate properly)
+  - 🔄 Retry: Check again
+
+**4. Backend: Updated Comments**
+- Updated `callback.ts` redirect comment to reflect Step 2 is now verification
+
+**Corrected User Flow:**
+
+**New Users:**
+1. **Step 1:** Email entry
+2. **Database Check:** System checks if user has template
+3. **Step 1.5:** Manual duplication BEFORE OAuth
+   - User opens template in Notion
+   - User clicks "Duplicate" button
+   - User returns and clicks "Continue to Connect Notion"
+4. **OAuth:** User grants permissions (NO template_id in URL)
+5. **Step 2:** Verify template exists (simple check)
+6. **Step 3:** Run first analysis
+
+**Existing Users:**
+1. **Step 1:** Email entry
+2. **Database Check:** System detects existing template
+3. **OAuth:** Skip directly to OAuth (NO template_id in URL)
+4. **Step 2:** Verify template exists (simple check)
+5. **Step 3:** Run first analysis
+
+**Files Modified:**
+- `public/js/setup-flow.js`:
+  - Lines 53-125: New `handleSetupStart()` with database pre-check
+  - Lines 118-125: New `showManualSetupStep()` function
+  - Lines 170-178: Step 1.5 routing
+  - Lines 566-656: New `renderStep1_5Content()` UI
+  - Lines 662-804: Simplified `createStep2Content()` (verification only)
+- `api/auth/callback.ts`: Updated Step 2 redirect comment
+
+**Why This Works:**
+- OAuth NEVER includes template_id (because template already exists)
+- New users create template BEFORE OAuth (manual, controlled)
+- Existing users skip duplication entirely
+- No automatic Notion duplication = No unwanted duplicates
+
+**Expected Result:** 99%+ success rate (eliminates async duplication issues entirely)
+
+---
+
 ### ✨ Major Change: Manual Template Duplication Flow (v1.2.13)
 
 **Date:** November 18, 2025
