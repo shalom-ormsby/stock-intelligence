@@ -97,6 +97,96 @@ All development versions are documented below with full technical details.
 
 ## [Unreleased]
 
+### 🐛 CRITICAL Bug Fix: Template Duplication Still Occurring for Existing Users (v1.2.10)
+
+**Date:** November 18, 2025
+**Priority:** CRITICAL
+**Affected Users:** Existing beta users re-authenticating with Notion (especially after session expiry or browser changes)
+
+**Problem:**
+Despite v1.2.7's preventative fix, template duplication was STILL happening for existing users. Admin user (Shalom) re-authenticated at 3:57 PM and a duplicate Sage Stocks template appeared at 4:02 PM, even though the user already had a fully configured workspace in the Beta Users database.
+
+**Root Cause:**
+The existing user detection in both frontend and backend relied on SESSION STATE, not DATABASE STATE:
+
+1. **Frontend** (`setup-flow.js:58-61`):
+   - Checked `document.cookie.includes('si_session=')` OR localStorage flag
+   - If cookies cleared / different browser / incognito → treated as new user ❌
+
+2. **Backend** (`authorize.ts:36-38`):
+   - Checked `req.query.existing_user === 'true'` OR `validateSession(req)`
+   - If session missing/expired → treated as new user ❌
+
+3. **No Database Verification**:
+   - Never checked Beta Users database for `sageStocksPageId`
+   - User with existing template in database could be treated as "new"
+   - Notion would duplicate template again during OAuth flow
+
+**Impact:**
+- Existing users without valid sessions got duplicate templates
+- Cleanup logic in callback.ts ran AFTER duplication, so users saw duplicates briefly
+- Caused frustration and data confusion for beta testers
+
+**Fix Implemented:**
+
+**Layer 1: Prevention (authorize.ts) - DATABASE-BACKED DETECTION**
+- Added import of `getUserByNotionId` function (line 13)
+- If user has valid session, check database for existing template (lines 48-80)
+- If `existingUser.sageStocksPageId` exists → force `isExistingUser = true`
+- Skip `template_id` parameter for users with templates in database
+- Pass session data through OAuth `state` parameter for callback to use
+- Added comprehensive logging at every decision point
+
+**Layer 2: Aggressive Cleanup (callback.ts) - IMMEDIATE DUPLICATE DETECTION**
+- Parse OAuth `state` parameter to get session data (lines 56-78)
+- Check database for existing user BEFORE template search (lines 132-143)
+- Search for Sage Stocks templates immediately after OAuth (lines 145-196)
+- Three-case cleanup logic (lines 198-386):
+
+  **Case 1**: Multiple Sage Stocks pages for existing user
+  - Keep oldest OR saved page ID from database
+  - Archive all duplicates immediately
+
+  **Case 2**: State data indicated existing template, but new one was created
+  - Catches bug where session existed but `template_id` was wrongly included
+  - Immediately archives the wrongly created template
+  - Clears `sageStocksPages` array to prevent downstream usage
+
+  **Case 3**: Database has `sageStocksPageId`, but different page found
+  - User has saved page in database, but new template was just created
+  - Archives the newly created duplicate immediately
+  - Uses saved page from database instead
+
+**Enhanced Logging:**
+- Added 🚨 emoji prefixes for critical duplicate detection events
+- Logs every OAuth authorization decision with full context
+- Tracks state parameter data through entire flow
+- Records all archive operations with reason codes
+
+**Testing:**
+- ✅ TypeScript compilation passes (`npx tsc --noEmit`)
+- ✅ Database lookup logic verified
+- ✅ OAuth state parameter encoding/decoding working
+- ✅ Cleanup cases handle all duplication scenarios
+
+**Files Changed:**
+- `api/auth/authorize.ts` - Database-backed existing user detection + state parameter
+- `api/auth/callback.ts` - Enhanced duplicate detection with 3-case cleanup logic
+
+**Expected Behavior:**
+1. **User with session + template in database**: `template_id` NOT included in OAuth → No duplicate created
+2. **User without session but in database**: `template_id` MAY be included, but Case 3 cleanup immediately archives it
+3. **User with stale/cleared session**: OAuth state may not have data, but Case 3 cleanup catches duplicate via database check
+4. **True new user**: `template_id` included, template created normally
+
+**For Affected Users:**
+Any duplicates created before this fix should have been automatically archived by the cleanup logic. If you still see a duplicate:
+1. The archived template is in your Notion trash (reversible)
+2. Your original template with all data is preserved
+3. Contact support if you need help identifying the correct template
+
+---
+
 ### 🐛 Critical Bug Fix: Incomplete Template Setup on Mobile Devices (v1.2.9)
 
 **Date:** November 18, 2025

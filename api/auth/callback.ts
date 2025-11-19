@@ -37,7 +37,7 @@ interface NotionOAuthTokenResponse {
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
-    const { code, error: oauthError } = req.query;
+    const { code, error: oauthError, state } = req.query;
 
     // Handle OAuth errors (user denied access, etc.)
     if (oauthError) {
@@ -51,6 +51,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       log(LogLevel.WARN, 'Missing authorization code');
       res.redirect('/?error=missing_code');
       return;
+    }
+
+    // v1.2.10: Parse OAuth state parameter (contains session data from authorize.ts)
+    let stateData: { userId?: string; notionUserId?: string; hasExistingTemplate?: boolean; timestamp?: number } | null = null;
+    if (state && typeof state === 'string') {
+      try {
+        stateData = JSON.parse(Buffer.from(state, 'base64').toString('utf-8'));
+        log(LogLevel.INFO, 'OAuth state parameter received', {
+          userId: stateData?.userId,
+          notionUserId: stateData?.notionUserId,
+          hasExistingTemplate: stateData?.hasExistingTemplate,
+          timestamp: stateData?.timestamp,
+          ageSeconds: stateData?.timestamp ? Math.floor((Date.now() - stateData.timestamp) / 1000) : undefined,
+        });
+      } catch (stateError) {
+        log(LogLevel.WARN, 'Failed to parse OAuth state parameter (non-critical)', {
+          error: stateError instanceof Error ? stateError.message : String(stateError),
+          state,
+        });
+      }
+    } else {
+      log(LogLevel.INFO, 'No OAuth state parameter (user likely started OAuth without session)', {
+        hasState: !!state,
+      });
     }
 
     const clientId = process.env.NOTION_OAUTH_CLIENT_ID;
@@ -105,13 +129,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       workspaceId,
     });
 
-    // v1.2.6 Bug Fix: Detect and clean up duplicate Sage Stocks templates for existing users
+    // STEP 3: Check if user already exists (BEFORE template check)
+    const { getUserByNotionId } = await import('../../lib/auth');
+    const existingUser = await getUserByNotionId(userId);
+
+    log(LogLevel.INFO, 'Existing user check', {
+      userId,
+      email: userEmail,
+      isExistingUser: !!existingUser,
+      existingUserId: existingUser?.id,
+      existingSageStocksPageId: existingUser?.sageStocksPageId,
+      stateDataHasExistingTemplate: stateData?.hasExistingTemplate,
+    });
+
+    // v1.2.10 CRITICAL FIX: AGGRESSIVE duplicate template detection and cleanup
+    // This runs IMMEDIATELY after OAuth to catch and archive duplicates before user sees them
     let sageStocksPages: any[] = [];
     let userNotion: any = null;
 
     try {
       const { Client } = await import('@notionhq/client');
       userNotion = new Client({ auth: accessToken, notionVersion: '2025-09-03' });
+
+      log(LogLevel.INFO, 'Searching for Sage Stocks templates in workspace...', {
+        userId,
+        email: userEmail,
+        isExistingUser: !!existingUser,
+        stateDataIndicatesExistingTemplate: stateData?.hasExistingTemplate,
+      });
+
       const searchResults = await userNotion.search({
         filter: { property: 'object', value: 'page' },
         page_size: 100, // Increased to catch all pages
@@ -123,38 +169,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         p.properties?.title?.title?.[0]?.plain_text?.includes('Sage Stocks')
       );
 
-      log(LogLevel.INFO, 'Post-OAuth template check', {
+      log(LogLevel.WARN, 'Template search complete', {
         totalPagesAccessible: searchResults.results.length,
         sageStocksFoundCount: sageStocksPages.length,
         sageStocksIds: sageStocksPages.map((p: any) => p.id),
+        sageStocksCreatedTimes: sageStocksPages.map((p: any) => ({ id: p.id, created: p.created_time })),
         templateIdWasSet: !!process.env.SAGE_STOCKS_TEMPLATE_ID,
+        userIsExisting: !!existingUser,
+        userHasSavedPageId: !!existingUser?.sageStocksPageId,
+        stateDataHasExistingTemplate: stateData?.hasExistingTemplate,
       });
 
       if (sageStocksPages.length === 0 && process.env.SAGE_STOCKS_TEMPLATE_ID) {
         log(LogLevel.WARN, 'Template was NOT duplicated during OAuth despite template_id being set', {
           templateId: process.env.SAGE_STOCKS_TEMPLATE_ID,
           pagesFound: searchResults.results.length,
+          userEmail,
+          isExistingUser: !!existingUser,
         });
       }
     } catch (diagError) {
-      log(LogLevel.ERROR, 'Template check failed (non-critical)', {
+      log(LogLevel.ERROR, 'Template search failed (non-critical)', {
         error: diagError instanceof Error ? diagError.message : String(diagError),
+        userEmail,
       });
     }
 
-    // Step 3: Check if user already exists (BEFORE creating/updating)
-    const { getUserByNotionId } = await import('../../lib/auth');
-    const existingUser = await getUserByNotionId(userId);
+    // STEP 4: AGGRESSIVE cleanup for duplicate templates
+    // v1.2.10: Enhanced logic - archive duplicates OR wrongly created templates for existing users
 
-    // Step 4: Clean up duplicate templates for EXISTING users
+    // Case 1: Multiple Sage Stocks pages detected for existing user
     if (existingUser && sageStocksPages.length > 1) {
-      log(LogLevel.WARN, 'Duplicate Sage Stocks templates detected for existing user', {
+      log(LogLevel.ERROR, '🚨 DUPLICATE DETECTED: Multiple Sage Stocks templates found for existing user', {
         userId: existingUser.id,
         email: userEmail,
         existingSageStocksPageId: existingUser.sageStocksPageId,
         foundSageStocksPages: sageStocksPages.length,
         pageIds: sageStocksPages.map((p: any) => p.id),
         createdTimes: sageStocksPages.map((p: any) => ({ id: p.id, created: p.created_time })),
+        stateDataHadExistingTemplateFlag: stateData?.hasExistingTemplate,
       });
 
       let pageToKeep: any = null;
@@ -250,6 +303,84 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
           })),
           totalArchived: duplicatePages.length,
           reversible: true,
+        });
+      }
+    }
+
+    // Case 2: State data indicated existing template, but a new page was created anyway
+    // This catches the bug where session exists but template_id was wrongly included
+    if (!existingUser && stateData?.hasExistingTemplate && sageStocksPages.length === 1) {
+      log(LogLevel.ERROR, '🚨 WRONGLY CREATED TEMPLATE DETECTED: State data said user had template, but new one was created', {
+        stateUserId: stateData.userId,
+        stateNotionUserId: stateData.notionUserId,
+        newPageId: sageStocksPages[0].id,
+        newPageCreated: sageStocksPages[0].created_time,
+        templateShouldNotHaveBeenDuplicated: true,
+        willArchiveImmediately: true,
+      });
+
+      // Archive the wrongly created template
+      try {
+        await userNotion.pages.update({
+          page_id: sageStocksPages[0].id,
+          archived: true,
+        });
+
+        log(LogLevel.WARN, 'Archived wrongly created template', {
+          pageId: sageStocksPages[0].id,
+          reason: 'state_data_indicated_existing_template',
+          userEmail,
+        });
+
+        // Clear the array so downstream logic doesn't use this page
+        sageStocksPages = [];
+      } catch (archiveError) {
+        log(LogLevel.ERROR, 'Failed to archive wrongly created template', {
+          pageId: sageStocksPages[0].id,
+          error: archiveError instanceof Error ? archiveError.message : String(archiveError),
+        });
+      }
+    }
+
+    // Case 3: Database check - if existingUser has sageStocksPageId but a new template was just created
+    if (existingUser && existingUser.sageStocksPageId && sageStocksPages.length === 1) {
+      const foundPage = sageStocksPages[0];
+      // Check if the found page is DIFFERENT from the saved one
+      if (foundPage.id !== existingUser.sageStocksPageId) {
+        log(LogLevel.ERROR, '🚨 DUPLICATE DETECTED: User has saved page ID, but found different Sage Stocks page', {
+          userId: existingUser.id,
+          email: userEmail,
+          savedPageId: existingUser.sageStocksPageId,
+          foundPageId: foundPage.id,
+          foundPageCreated: foundPage.created_time,
+          willArchiveNewPage: true,
+        });
+
+        // Archive the newly created duplicate
+        try {
+          await userNotion.pages.update({
+            page_id: foundPage.id,
+            archived: true,
+          });
+
+          log(LogLevel.WARN, 'Archived newly created duplicate (user already has saved page)', {
+            archivedPageId: foundPage.id,
+            keptPageId: existingUser.sageStocksPageId,
+            userEmail,
+          });
+
+          // Clear the array so downstream logic uses the saved page from database
+          sageStocksPages = [];
+        } catch (archiveError) {
+          log(LogLevel.ERROR, 'Failed to archive newly created duplicate', {
+            pageId: foundPage.id,
+            error: archiveError instanceof Error ? archiveError.message : String(archiveError),
+          });
+        }
+      } else {
+        log(LogLevel.INFO, 'Found page matches saved page ID - no duplicate', {
+          pageId: foundPage.id,
+          userEmail,
         });
       }
     }
