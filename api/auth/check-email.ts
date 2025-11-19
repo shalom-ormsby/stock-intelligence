@@ -1,21 +1,23 @@
 /**
- * Email Verification Endpoint
+ * Email Check Endpoint
  *
- * Checks if an email exists in the Beta Users database and whether
- * the user already has a Sage Stocks template set up.
+ * Checks if a user exists in the Beta Users database and if they have a template.
+ * This runs BEFORE OAuth to determine the correct user flow:
+ * - Existing user with template: Go straight to OAuth
+ * - New user / No template: Show manual template setup first
  *
- * v1.2.11: Email-based existing user detection for sessionless re-authentication
+ * v1.2.14: Pre-OAuth database check
  */
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { log, LogLevel } from '../../lib/logger';
+import { getUserByEmail } from '../../lib/auth';
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
     const { email } = req.query;
 
     if (!email || typeof email !== 'string') {
-      log(LogLevel.WARN, 'Email verification request missing email parameter');
       res.status(400).json({
         success: false,
         error: 'Email parameter required',
@@ -23,55 +25,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return;
     }
 
-    // Normalize email to lowercase for consistent lookups
     const normalizedEmail = email.toLowerCase().trim();
 
-    log(LogLevel.INFO, 'Email verification request', {
+    log(LogLevel.INFO, 'Email check requested (pre-OAuth)', {
       email: normalizedEmail,
     });
 
-    // Look up user by email in Beta Users database
-    const { getUserByEmail } = await import('../../lib/auth');
+    // Check if user exists in Beta Users database
     const existingUser = await getUserByEmail(normalizedEmail);
 
-    if (existingUser) {
-      const hasExistingTemplate = !!(existingUser.sageStocksPageId);
-
-      log(LogLevel.INFO, 'Email found in Beta Users database', {
-        email: normalizedEmail,
-        userId: existingUser.id,
-        notionUserId: existingUser.notionUserId,
-        hasSageStocksPageId: hasExistingTemplate,
-        sageStocksPageId: existingUser.sageStocksPageId,
-        status: existingUser.status,
-      });
-
-      res.status(200).json({
-        success: true,
-        exists: true,
-        hasTemplate: hasExistingTemplate,
-        status: existingUser.status,
-      });
-    } else {
-      log(LogLevel.INFO, 'Email not found in Beta Users database (new user)', {
+    if (!existingUser) {
+      log(LogLevel.INFO, 'User not found in database', {
         email: normalizedEmail,
       });
-
       res.status(200).json({
         success: true,
         exists: false,
         hasTemplate: false,
       });
+      return;
     }
+
+    // User exists - check if they have a template set up
+    const hasTemplate = Boolean(existingUser.sageStocksPageId);
+
+    log(LogLevel.INFO, 'User found in database', {
+      email: normalizedEmail,
+      userId: existingUser.id,
+      notionUserId: existingUser.notionUserId,
+      hasTemplate,
+      sageStocksPageId: existingUser.sageStocksPageId,
+    });
+
+    res.status(200).json({
+      success: true,
+      exists: true,
+      hasTemplate,
+      userId: existingUser.id,
+      notionUserId: existingUser.notionUserId,
+    });
   } catch (error) {
-    log(LogLevel.ERROR, 'Email verification endpoint error', {
+    log(LogLevel.ERROR, 'Email check error', {
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     });
 
     res.status(500).json({
       success: false,
-      error: 'Internal server error',
+      error: 'Failed to check email',
     });
   }
 }

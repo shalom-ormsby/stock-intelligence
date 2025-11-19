@@ -123,21 +123,34 @@ Template duplication must happen BEFORE OAuth so that template_id parameter is n
 
 **Solution (v1.2.14):**
 
-**1. Frontend: New Pre-OAuth Database Check**
+**1. Backend: New Email Check Endpoint (CRITICAL)**
+- Created `api/auth/check-email.ts` endpoint
+- Checks Beta Users database by email BEFORE OAuth
+- Returns: `{ exists: boolean, hasTemplate: boolean }`
+- This was MISSING in initial v1.2.14 implementation (frontend was calling non-existent endpoint)
+
+**2. Backend: Simplified authorize.ts (CRITICAL)**
+- Removed all database checking logic (100+ lines deleted)
+- Database checks now happen in frontend via check-email endpoint
+- authorize.ts just builds OAuth URL and redirects
+- **NEVER includes template_id under any circumstances**
+- Crystal clear comments: "Do NOT add template_id to authUrl under ANY circumstances"
+
+**3. Frontend: New Pre-OAuth Database Check**
 - Created `handleSetupStart()` function that checks database BEFORE OAuth
-- Calls new `/api/auth/check-email` endpoint
+- Calls `/api/auth/check-email` endpoint (now exists!)
 - Routes users based on existing template status:
   - **Existing users with template:** Go directly to OAuth
   - **New users / No template:** Go to Step 1.5 for manual setup
 
-**2. Frontend: New Step 1.5 - Manual Template Setup (BEFORE OAuth)**
+**4. Frontend: New Step 1.5 - Manual Template Setup (BEFORE OAuth)**
 - Added `renderStep1_5Content()` function
 - Shows instructions for manual template duplication
 - "Open Template in Notion" button (fetches URL from `/api/setup/template-url`)
 - "Continue to Connect Notion" button (proceeds to OAuth AFTER user duplicates)
 - User duplicates template in Notion BEFORE granting OAuth permissions
 
-**3. Frontend: Step 2 Simplified to Verification**
+**5. Frontend: Step 2 Simplified to Verification**
 - Changed from "manual duplication UI" to "verification page"
 - Runs AFTER OAuth callback
 - Simply checks if template exists (from Step 1.5 or existing user)
@@ -146,7 +159,7 @@ Template duplication must happen BEFORE OAuth so that template_id parameter is n
   - ❌ Error: Template not found (user didn't duplicate properly)
   - 🔄 Retry: Check again
 
-**4. Backend: Updated Comments**
+**6. Backend: Updated Comments**
 - Updated `callback.ts` redirect comment to reflect Step 2 is now verification
 
 **Corrected User Flow:**
@@ -170,13 +183,15 @@ Template duplication must happen BEFORE OAuth so that template_id parameter is n
 5. **Step 3:** Run first analysis
 
 **Files Modified:**
+- `api/auth/check-email.ts` (NEW): Pre-OAuth email/template check endpoint
+- `api/auth/authorize.ts`: Simplified (removed 100+ lines of redundant database checking)
+- `api/auth/callback.ts`: Updated Step 2 redirect comment
 - `public/js/setup-flow.js`:
   - Lines 53-125: New `handleSetupStart()` with database pre-check
   - Lines 118-125: New `showManualSetupStep()` function
   - Lines 170-178: Step 1.5 routing
   - Lines 566-656: New `renderStep1_5Content()` UI
   - Lines 662-804: Simplified `createStep2Content()` (verification only)
-- `api/auth/callback.ts`: Updated Step 2 redirect comment
 
 **Why This Works:**
 - OAuth NEVER includes template_id (because template already exists)

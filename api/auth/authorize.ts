@@ -4,19 +4,18 @@
  * Initiates the Notion OAuth flow by redirecting to Notion's authorization page.
  * User will be prompted to select which pages to share with the integration.
  *
- * v1.2.10 Fix: Database-backed existing user detection to prevent duplicate templates
- * even when session is missing. Uses OAuth state parameter to pass session data.
+ * v1.2.14: Simplified - template checking happens in frontend before OAuth.
+ * This endpoint NEVER includes template_id parameter (manual duplication only).
  */
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { log, LogLevel } from '../../lib/logger';
-import { validateSession, getUserByNotionId } from '../../lib/auth';
+import { validateSession } from '../../lib/auth';
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
     const clientId = process.env.NOTION_OAUTH_CLIENT_ID;
     const redirectUri = process.env.NOTION_OAUTH_REDIRECT_URI;
-    const templateId = process.env.SAGE_STOCKS_TEMPLATE_ID;
 
     if (!clientId || !redirectUri) {
       log(LogLevel.ERROR, 'OAuth configuration missing', {
@@ -32,90 +31,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return;
     }
 
-    // Check if user is existing (from frontend query param or session cookie)
-    const existingUserParam = req.query.existing_user === 'true';
     const emailParam = req.query.email as string | undefined;
     const session = await validateSession(req);
-    let isExistingUser = existingUserParam || !!session;
 
-    log(LogLevel.INFO, 'OAuth authorization request received', {
-      existingUserParam,
+    log(LogLevel.INFO, 'OAuth authorization request', {
       hasSession: !!session,
       hasEmailParam: !!emailParam,
       sessionUserId: session?.userId,
       sessionNotionUserId: session?.notionUserId,
-      isExistingUser,
     });
-
-    // v1.2.11: ENHANCED - Email-based existing user detection (works without session)
-    // Priority order: 1) Session lookup, 2) Email lookup, 3) Query param
-    let hasExistingTemplate = false;
-
-    // Method 1: Check by session (if user has active session)
-    if (session?.notionUserId) {
-      try {
-        const existingUser = await getUserByNotionId(session.notionUserId);
-        hasExistingTemplate = !!(existingUser?.sageStocksPageId);
-
-        log(LogLevel.INFO, 'Database check by session (Notion ID)', {
-          notionUserId: session.notionUserId,
-          userId: existingUser?.id,
-          hasSageStocksPageId: hasExistingTemplate,
-          sageStocksPageId: existingUser?.sageStocksPageId,
-        });
-
-        if (hasExistingTemplate) {
-          isExistingUser = true;
-          log(LogLevel.WARN, 'FORCING existing user flag based on session database check', {
-            reason: 'user_has_sage_stocks_page_in_database',
-            method: 'session_notion_id',
-            notionUserId: session.notionUserId,
-            sageStocksPageId: existingUser?.sageStocksPageId,
-            willSkipTemplateId: true,
-          });
-        }
-      } catch (dbError) {
-        log(LogLevel.ERROR, 'Session-based database check failed (non-critical)', {
-          error: dbError instanceof Error ? dbError.message : String(dbError),
-          notionUserId: session.notionUserId,
-        });
-      }
-    }
-
-    // Method 2: Check by email (if no session but email provided)
-    if (!hasExistingTemplate && emailParam) {
-      try {
-        const { getUserByEmail } = await import('../../lib/auth');
-        const normalizedEmail = emailParam.toLowerCase().trim();
-        const existingUser = await getUserByEmail(normalizedEmail);
-        hasExistingTemplate = !!(existingUser?.sageStocksPageId);
-
-        log(LogLevel.INFO, 'Database check by email', {
-          email: normalizedEmail,
-          userId: existingUser?.id,
-          notionUserId: existingUser?.notionUserId,
-          hasSageStocksPageId: hasExistingTemplate,
-          sageStocksPageId: existingUser?.sageStocksPageId,
-        });
-
-        if (hasExistingTemplate) {
-          isExistingUser = true;
-          log(LogLevel.WARN, 'FORCING existing user flag based on email database check', {
-            reason: 'user_has_sage_stocks_page_in_database',
-            method: 'email_lookup',
-            email: normalizedEmail,
-            notionUserId: existingUser?.notionUserId,
-            sageStocksPageId: existingUser?.sageStocksPageId,
-            willSkipTemplateId: true,
-          });
-        }
-      } catch (dbError) {
-        log(LogLevel.ERROR, 'Email-based database check failed (non-critical)', {
-          error: dbError instanceof Error ? dbError.message : String(dbError),
-          email: emailParam,
-        });
-      }
-    }
 
     // Build Notion OAuth authorization URL
     const authUrl = new URL('https://api.notion.com/v1/oauth/authorize');
@@ -125,34 +49,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     authUrl.searchParams.set('owner', 'user');
 
     // Pass session data through OAuth state parameter (for callback to use)
-    // This allows callback to immediately detect existing users even if template_id was wrongly included
     if (session) {
       const stateData = {
         userId: session.userId,
         notionUserId: session.notionUserId,
-        hasExistingTemplate,
         timestamp: Date.now(),
       };
       authUrl.searchParams.set('state', Buffer.from(JSON.stringify(stateData)).toString('base64'));
-      log(LogLevel.INFO, 'Passing session data through OAuth state parameter', {
+      log(LogLevel.INFO, 'OAuth state parameter set', {
         userId: session.userId,
         notionUserId: session.notionUserId,
-        hasExistingTemplate,
       });
     }
 
-    // v1.2.13: NEVER include template_id (manual duplication only)
-    // Template duplication is now handled manually in Step 2 for full control
-    log(LogLevel.INFO, 'OAuth without template_id - manual duplication flow', {
-      redirectUri,
-      templateIdConfigured: !!templateId,
-      reason: 'v1.2.13_manual_duplication',
+    // v1.2.14: NEVER include template_id
+    // Template duplication is manual (Step 1.5) - happens BEFORE OAuth
+    // This ensures Notion never auto-duplicates templates
+    log(LogLevel.INFO, 'Redirecting to Notion OAuth WITHOUT template_id', {
+      reason: 'v1.2.14_manual_duplication_before_oauth',
+      hasSession: !!session,
     });
 
-    // Redirect to Notion OAuth page
-    log(LogLevel.INFO, 'Redirecting to Notion OAuth (v1.2.13: manual duplication flow)', {
-      includesState: authUrl.searchParams.has('state'),
-    });
+    // IMPORTANT: Do NOT add template_id to authUrl under ANY circumstances
+    // Template duplication is handled manually in frontend Step 1.5
     res.redirect(authUrl.toString());
   } catch (error) {
     log(LogLevel.ERROR, 'Authorization endpoint error', {
