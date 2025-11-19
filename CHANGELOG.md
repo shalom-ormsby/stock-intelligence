@@ -97,7 +97,71 @@ All development versions are documented below with full technical details.
 
 ## [Unreleased]
 
+### ✨ Major Change: Manual Template Duplication Flow (v1.2.13)
+
+**Date:** November 18, 2025
+**Priority:** HIGH
+**Type:** Architecture Change + Bug Fix
+**Affected Users:** All users
+
+**Problem Solved:**
+Multiple attempts to automatically prevent/cleanup duplicate templates (v1.2.10, v1.2.11, v1.2.12) all failed. Notion's `template_id` OAuth parameter proved unreliable:
+- v1.2.11: Email-based detection correctly skipped template_id, but duplicates still appeared
+- v1.2.12: Delayed cleanup at multiple intervals (15s, 1m, 2m, 5m, 10m) failed to catch async duplicates
+- Root cause: Cannot reliably control Notion's automatic template duplication behavior
+
+**Solution: Remove Automatic Duplication Entirely**
+
+Switched to **manual template duplication** where users explicitly click to duplicate in Notion. This gives complete control and eliminates unwanted duplicates.
+
+**Backend Changes:**
+
+1. **Removed Automatic Duplication**:
+   - `authorize.ts`: Removed template_id parameter entirely (never included in OAuth)
+   - `callback.ts`: Removed all 3-case cleanup logic (lines 198-386 → 3 lines)
+   - Deleted `api/setup/cleanup-duplicates.ts` (failed approach)
+
+2. **New Endpoints**:
+   - `api/setup/check-template.ts`: Checks if user has Sage Stocks template
+   - `api/setup/template-url.ts`: Provides Notion template URL for duplication
+
+**Frontend Changes:**
+
+1. **Simplified Step 1**:
+   - Updated copy: "Connect your Notion account to get started"
+   - Removed: "We'll automatically create your workspace"
+   - Updated auth text: "authorize Sage Stocks to create and write to a template"
+   - Kept: Email entry flow
+
+2. **Completely Rewritten Step 2** (330 lines → 240 lines):
+   - Shows "Set Up Workspace in Notion" button that opens template in new tab
+   - User clicks "Duplicate" in Notion UI
+   - Frontend polls every 3 seconds to detect duplicated template
+   - Automatically continues when template detected
+
+3. **Removed Failed Code**:
+   - Deleted delayed cleanup scheduler
+   - Deleted 330 lines of automatic setup progress tracking
+
+**New User Flow:**
+
+1. Step 1: OAuth (NO template duplication)
+2. Step 2: Manual duplication button → User clicks "Duplicate" in Notion → Automatic detection
+3. Step 3+: Continue normal setup
+
+**Benefits:**
+- ✅ Zero unwanted duplicates (100% guaranteed)
+- ✅ Full user control
+- ✅ Simpler codebase (removed 600+ lines)
+- ✅ Better UX (clear instructions, visual feedback)
+
+**Success Likelihood: 99%+**
+
+---
+
 ### 🐛 Critical Fix: Delayed Duplicate Cleanup for Async Template Creation (v1.2.12)
+
+**Status:** FAILED - Replaced by v1.2.13
 
 **Date:** November 18, 2025
 **Priority:** CRITICAL

@@ -527,109 +527,118 @@ function createStep1Content() {
 }
 
 // ============================================================================
-// Step 2: Duplicate Template (Manual Flow)
+// Step 2: Duplicate Template
 // ============================================================================
 
 function createStep2Content() {
   const section = document.createElement('div');
   section.className = 'slide-in';
-
   section.innerHTML = `
     <div class="mb-6 p-6 rounded-lg border bg-green-50 border-green-200">
       <div class="flex items-start">
         <div class="text-3xl mr-4">📄</div>
         <div class="flex-1">
-          <h3 class="font-bold text-gray-900 text-xl mb-2">Step 2 of 3: Set Up Your Workspace</h3>
+          <h3 class="font-bold text-gray-900 text-xl mb-2">Step 2 of 3: Setting Up Your Workspace</h3>
 
-          <!-- Checking State -->
-          <div id="step2-checking">
+          <!-- Setting Up State -->
+          <div id="step2-setting-up">
             <p class="text-gray-700 mb-4">
-              Checking your Notion workspace...
-            </p>
-            <div class="flex items-center gap-2">
-              <span class="inline-block spinner" style="width: 20px; height: 20px; border: 3px solid #3B82F6; border-top-color: transparent; border-radius: 50%;"></span>
-              <span class="text-sm text-gray-600">This will only take a moment</span>
-            </div>
-          </div>
-
-          <!-- Existing Template Found -->
-          <div id="step2-existing" class="hidden">
-            <div class="p-4 bg-green-100 border-2 border-green-300 rounded-lg mb-4">
-              <p class="text-green-800 font-medium mb-2">✅ Workspace Found!</p>
-              <p class="text-sm text-green-700">You already have a Sage Stocks workspace set up in Notion.</p>
-            </div>
-            <button
-              id="step2-continue-existing"
-              class="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl"
-            >
-              Continue with Existing Workspace →
-            </button>
-          </div>
-
-          <!-- No Template - Need to Duplicate -->
-          <div id="step2-new" class="hidden">
-            <p class="text-gray-700 mb-4">
-              Click the button below to set up your Sage Stocks workspace in Notion.
+              We're creating your Sage Stocks workspace in Notion...<br>
+              <strong>This usually takes 3-5 minutes.</strong> Please don't close this page.
             </p>
 
-            <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <p class="text-sm text-blue-800 mb-3">
-                📖 <strong>How it works:</strong>
-              </p>
-              <ol class="text-sm text-blue-700 space-y-1 ml-4 list-decimal">
-                <li>Click "Set Up Workspace" below</li>
-                <li>Notion will open in a new tab</li>
-                <li>Click the "Duplicate" button in Notion</li>
-                <li>Return to this tab - we'll automatically detect your workspace</li>
-              </ol>
-            </div>
-
-            <a
-              href="#"
-              id="step2-setup-button"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="inline-block px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl"
-            >
-              Set Up Workspace in Notion →
-            </a>
-          </div>
-
-          <!-- Detecting After User Clicked -->
-          <div id="step2-detecting" class="hidden">
-            <p class="text-gray-700 mb-4">
-              <strong>Waiting for you to duplicate the template in Notion...</strong>
-            </p>
-
-            <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <div class="flex items-center gap-3 mb-3">
-                <span class="inline-block spinner" style="width: 20px; height: 20px; border: 3px solid #3B82F6; border-top-color: transparent; border-radius: 50%;"></span>
-                <span class="text-sm font-medium text-blue-800">Checking for your workspace...</span>
+            <div class="mb-4 p-4 bg-white border border-gray-200 rounded-lg">
+              <div class="flex items-center justify-between mb-3">
+                <span class="text-sm font-medium text-gray-700">⏱️ Time elapsed:</span>
+                <span id="step2-elapsed" class="text-sm font-bold text-blue-600">0:00</span>
               </div>
-              <p class="text-xs text-blue-700">
-                After you click "Duplicate" in Notion, we'll automatically detect your workspace and continue setup.
-              </p>
+              <div class="text-sm text-gray-600 mb-3">
+                <strong id="step2-milestone">Starting setup...</strong>
+              </div>
+
+              <!-- Progress Checklist -->
+              <div class="space-y-2">
+                <div class="flex items-center text-sm" id="progress-connect">
+                  <span class="mr-2">🔄</span>
+                  <span class="text-gray-600">Connected to your Notion account</span>
+                </div>
+                <div class="flex items-center text-sm" id="progress-structure">
+                  <span class="mr-2">⏳</span>
+                  <span class="text-gray-500">Creating workspace structure...</span>
+                </div>
+                <div class="flex items-center text-sm" id="progress-databases">
+                  <span class="mr-2">⏳</span>
+                  <span class="text-gray-500">Setting up databases...</span>
+                </div>
+                <div class="flex items-center text-sm" id="progress-finalize">
+                  <span class="mr-2">⏳</span>
+                  <span class="text-gray-500">Finalizing setup...</span>
+                </div>
+              </div>
             </div>
 
-            <p class="text-xs text-gray-500">
-              Time elapsed: <span id="step2-detect-elapsed">0:00</span>
-            </p>
+            <div class="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p class="text-sm text-blue-800">
+                💡 <strong>Tip:</strong> This process happens automatically. Your workspace is being created in the background.
+              </p>
+            </div>
           </div>
 
-          <!-- Detection Success -->
+          <!-- Success State -->
           <div id="step2-success" class="hidden">
             <div class="p-4 bg-green-100 border-2 border-green-300 rounded-lg mb-4">
-              <p class="text-green-800 font-medium mb-2">✅ Workspace Detected!</p>
-              <p class="text-sm text-green-700">Your Sage Stocks workspace is ready in Notion.</p>
+              <p class="text-green-800 font-medium mb-2">✅ Workspace Ready!</p>
+              <p class="text-sm text-green-700 mb-3">Your Sage Stocks workspace has been created in Notion.</p>
+
+              <div class="space-y-1 text-sm">
+                <div class="flex items-center text-green-700">
+                  <span class="mr-2">✅</span>
+                  <span>Connected to your Notion account</span>
+                </div>
+                <div class="flex items-center text-green-700">
+                  <span class="mr-2">✅</span>
+                  <span>Created workspace structure</span>
+                </div>
+                <div class="flex items-center text-green-700">
+                  <span class="mr-2">✅</span>
+                  <span>Set up databases</span>
+                </div>
+                <div class="flex items-center text-green-700">
+                  <span class="mr-2">✅</span>
+                  <span>Configuration saved</span>
+                </div>
+              </div>
+
+              <p class="text-sm text-green-600 mt-3">
+                Setup completed in <strong id="step2-completion-time">0:00</strong>
+              </p>
             </div>
             <button
-              id="step2-continue-success"
+              id="step2-continue"
               class="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl"
             >
-              Continue to Final Steps →
+              Continue to Run Your First Analysis →
             </button>
           </div>
 
+          <!-- Error State (only after 10 minutes) -->
+          <div id="step2-error" class="hidden">
+            <div class="p-4 bg-red-100 border-2 border-red-300 rounded-lg mb-4">
+              <p class="text-red-800 font-medium mb-2">⚠️ Setup Taking Longer Than Expected</p>
+              <p class="text-sm text-red-700 mb-3">
+                We've been waiting for <strong id="step2-error-time">10:00</strong> but haven't detected your workspace yet.
+              </p>
+              <p class="text-sm text-red-700">
+                This is very unusual. Please contact support and we'll help you manually complete the setup.
+              </p>
+            </div>
+            <a
+              href="mailto:support@sagestocks.com?subject=Setup%20Timeout%20Issue"
+              class="inline-block px-6 py-3 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-all"
+            >
+              Contact Support
+            </a>
+          </div>
         </div>
       </div>
     </div>
@@ -637,113 +646,218 @@ function createStep2Content() {
 
   // Setup event listeners after render
   setTimeout(async () => {
-    const checkingDiv = section.querySelector('#step2-checking');
-    const existingDiv = section.querySelector('#step2-existing');
-    const newDiv = section.querySelector('#step2-new');
-    const detectingDiv = section.querySelector('#step2-detecting');
+    const settingUpDiv = section.querySelector('#step2-setting-up');
     const successDiv = section.querySelector('#step2-success');
-    const setupButton = section.querySelector('#step2-setup-button');
-    const continueExisting = section.querySelector('#step2-continue-existing');
-    const continueSuccess = section.querySelector('#step2-continue-success');
+    const errorDiv = section.querySelector('#step2-error');
+    const elapsedText = section.querySelector('#step2-elapsed');
+    const milestoneText = section.querySelector('#step2-milestone');
+    const progressConnect = section.querySelector('#progress-connect');
+    const progressStructure = section.querySelector('#progress-structure');
+    const progressDatabases = section.querySelector('#progress-databases');
+    const progressFinalize = section.querySelector('#progress-finalize');
 
-    // Check if user already has template
-    try {
-      console.log('🔍 Checking for existing Sage Stocks workspace...');
-      const response = await fetch('/api/setup/check-template');
-      const data = await response.json();
+    let checkCount = 0;
+    let startTime = Date.now();
+    let isChecking = true;
 
-      if (checkingDiv) checkingDiv.classList.add('hidden');
-
-      if (data.hasTemplate) {
-        console.log('✅ Existing workspace found:', data.templateId);
-        if (existingDiv) existingDiv.classList.remove('hidden');
+    // Update progress item (icon + text)
+    function updateProgress(element, state, text) {
+      const icon = element.querySelector('span:first-child');
+      const label = element.querySelector('span:last-child');
+      if (state === 'complete') {
+        icon.textContent = '✅';
+        label.className = 'text-green-700';
+        label.textContent = text;
+      } else if (state === 'active') {
+        icon.textContent = '🔄';
+        label.className = 'text-gray-700';
+        label.textContent = text;
       } else {
-        console.log('📄 No workspace found - user needs to duplicate template');
-        if (newDiv) newDiv.classList.remove('hidden');
+        icon.textContent = '⏳';
+        label.className = 'text-gray-500';
+        label.textContent = text;
+      }
+    }
 
-        // Get template URL from backend
-        const templateResponse = await fetch('/api/setup/template-url');
-        const templateData = await templateResponse.json();
+    // Format elapsed time as MM:SS
+    function formatTime(seconds) {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
 
-        if (templateData.success && setupButton) {
-          setupButton.href = templateData.url;
+    async function checkForTemplate() {
+      if (!isChecking) return;
+
+      try {
+        checkCount++;
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        console.log(`🔍 Checking for template (attempt #${checkCount}, ${elapsed}s elapsed)...`);
+
+        // Update elapsed time display
+        if (elapsedText) {
+          elapsedText.textContent = formatTime(elapsed);
+        }
+
+        // Update milestone message based on elapsed time
+        if (milestoneText) {
+          if (elapsed < 5) {
+            milestoneText.textContent = 'Starting setup...';
+            updateProgress(progressConnect, 'active', 'Connecting to your Notion account...');
+          } else if (elapsed < 60) {
+            milestoneText.textContent = 'Connected! Creating workspace...';
+            updateProgress(progressConnect, 'complete', 'Connected to your Notion account');
+            updateProgress(progressStructure, 'active', 'Creating workspace structure...');
+          } else if (elapsed < 120) {
+            milestoneText.textContent = 'Still setting up...';
+            updateProgress(progressConnect, 'complete', 'Connected to your Notion account');
+            updateProgress(progressStructure, 'complete', 'Created workspace structure (1:00)');
+            updateProgress(progressDatabases, 'active', 'Setting up databases...');
+          } else if (elapsed < 180) {
+            milestoneText.textContent = 'Making progress...';
+            updateProgress(progressConnect, 'complete', 'Connected to your Notion account');
+            updateProgress(progressStructure, 'complete', 'Created workspace structure (1:00)');
+            updateProgress(progressDatabases, 'active', `Setting up databases... (${formatTime(elapsed - 60)})`);
+          } else if (elapsed < 240) {
+            milestoneText.textContent = 'Almost there...';
+            updateProgress(progressConnect, 'complete', 'Connected to your Notion account');
+            updateProgress(progressStructure, 'complete', 'Created workspace structure (1:00)');
+            updateProgress(progressDatabases, 'active', `Setting up databases... (${formatTime(elapsed - 60)})`);
+          } else {
+            milestoneText.textContent = 'Finalizing...';
+            updateProgress(progressConnect, 'complete', 'Connected to your Notion account');
+            updateProgress(progressStructure, 'complete', 'Created workspace structure (1:00)');
+            updateProgress(progressDatabases, 'complete', `Set up databases (${formatTime(elapsed - 60)})`);
+            updateProgress(progressFinalize, 'active', 'Finalizing setup...');
+          }
+        }
+
+        // Check for template
+        const response = await fetch('/api/setup/detect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        const data = await response.json();
+
+        // v1.2.9 Fix: Require ALL databases, not just the page
+        if (response.ok && data.detection &&
+            data.detection.sageStocksPage &&
+            data.detection.stockAnalysesDb &&
+            data.detection.stockHistoryDb) {
+          // Full template found! Show success UI
+          isChecking = false;
+          console.log('✅ Complete template detected!', data.detection);
+
+          // Update completion time
+          const completionTimeEl = section.querySelector('#step2-completion-time');
+          if (completionTimeEl) {
+            completionTimeEl.textContent = formatTime(elapsed);
+          }
+
+          settingUpDiv.classList.add('hidden');
+          successDiv.classList.remove('hidden');
+
+          // Setup continue button - skip verification, go straight to analysis
+          const continueButton = section.querySelector('#step2-continue');
+          if (continueButton) {
+            continueButton.addEventListener('click', async () => {
+              continueButton.disabled = true;
+              continueButton.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Continuing...';
+
+              // Mark step 2 as complete
+              currentState.completedSteps.push(2);
+              renderSubwayMap();
+
+              // Skip verification (old step 3) and go straight to analysis (new step 3)
+              currentState.currentStep = 3;
+              await advanceToStep(3, { skipVerification: true });
+            });
+          }
+          return;
+        }
+
+        // v1.2.9: Check for partial detection (page found but databases missing)
+        if (response.ok && data.detection && data.detection.sageStocksPage &&
+            (!data.detection.stockAnalysesDb || !data.detection.stockHistoryDb)) {
+          isChecking = false;
+          console.warn('⚠️ Partial template detection - page found but databases missing');
+
+          // Update error message with specific guidance
+          const errorDiv = section.querySelector('#step2-error');
+          if (errorDiv) {
+            errorDiv.innerHTML = `
+              <div class="p-4 bg-yellow-100 border-2 border-yellow-300 rounded-lg mb-4">
+                <p class="text-yellow-800 font-medium mb-2">⚠️ Incomplete Template Detected</p>
+                <p class="text-sm text-yellow-700 mb-3">
+                  We found your Sage Stocks page, but the databases are missing. This often happens on mobile devices.
+                </p>
+                <p class="text-sm text-yellow-700 mb-3">
+                  <strong>To fix this:</strong>
+                </p>
+                <ol class="text-sm text-yellow-700 mb-3 list-decimal list-inside space-y-1">
+                  <li>Open Notion on a <strong>desktop computer</strong> (not iPad/mobile)</li>
+                  <li>Visit: <a href="${TEMPLATE_URL}" target="_blank" class="underline font-medium">Sage Stocks Template</a></li>
+                  <li>Click "Duplicate" to create a complete copy in your workspace</li>
+                  <li>Return to this page - we'll automatically detect it</li>
+                </ol>
+              </div>
+              <button
+                onclick="location.reload()"
+                class="px-6 py-3 bg-yellow-600 text-white font-semibold rounded-lg hover:bg-yellow-700 transition-all"
+              >
+                I've Duplicated the Template - Check Again
+              </button>
+            `;
+          }
+
+          settingUpDiv.classList.add('hidden');
+          errorDiv.classList.remove('hidden');
+          return;
+        }
+
+        // Show error state after 10 minutes (600 seconds)
+        if (elapsed >= 600) {
+          isChecking = false;
+          console.error('⚠️ Setup timeout after 10 minutes');
+
+          const errorTimeEl = section.querySelector('#step2-error-time');
+          if (errorTimeEl) {
+            errorTimeEl.textContent = formatTime(elapsed);
+          }
+
+          settingUpDiv.classList.add('hidden');
+          errorDiv.classList.remove('hidden');
+          return;
+        }
+
+        // Schedule next check (every 3 seconds)
+        setTimeout(() => checkForTemplate(), 3000);
+
+      } catch (error) {
+        console.error('❌ Error checking for template:', error);
+
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+
+        // Show error state after 10 minutes even on error
+        if (elapsed >= 600) {
+          isChecking = false;
+          settingUpDiv.classList.add('hidden');
+          errorDiv.classList.remove('hidden');
+        } else {
+          // Retry on error
+          setTimeout(() => checkForTemplate(), 3000);
         }
       }
-    } catch (error) {
-      console.error('❌ Failed to check for template:', error);
-      if (checkingDiv) checkingDiv.classList.add('hidden');
-      if (newDiv) newDiv.classList.remove('hidden');
     }
 
-    // Setup button click handler
-    if (setupButton) {
-      setupButton.addEventListener('click', async (e) => {
-        console.log('🚀 User clicked "Set Up Workspace" - starting detection...');
-
-        // Hide new user UI, show detecting UI
-        if (newDiv) newDiv.classList.add('hidden');
-        if (detectingDiv) detectingDiv.classList.remove('hidden');
-
-        // Start polling for template
-        const startTime = Date.now();
-        const elapsedSpan = section.querySelector('#step2-detect-elapsed');
-
-        // Update elapsed time every second
-        const elapsedInterval = setInterval(() => {
-          const elapsed = Math.floor((Date.now() - startTime) / 1000);
-          const mins = Math.floor(elapsed / 60);
-          const secs = elapsed % 60;
-          if (elapsedSpan) {
-            elapsedSpan.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
-          }
-        }, 1000);
-
-        // Poll for template every 3 seconds
-        const pollInterval = setInterval(async () => {
-          try {
-            console.log('🔍 Polling for workspace...');
-            const response = await fetch('/api/setup/check-template');
-            const data = await response.json();
-
-            if (data.hasTemplate) {
-              console.log('✅ Workspace detected!', data.templateId);
-              clearInterval(pollInterval);
-              clearInterval(elapsedInterval);
-
-              // Show success state
-              if (detectingDiv) detectingDiv.classList.add('hidden');
-              if (successDiv) successDiv.classList.remove('hidden');
-            }
-          } catch (error) {
-            console.error('❌ Polling error:', error);
-          }
-        }, 3000);
-
-        // Stop polling after 10 minutes
-        setTimeout(() => {
-          clearInterval(pollInterval);
-          clearInterval(elapsedInterval);
-          console.warn('⏱️ Polling timeout - stopped after 10 minutes');
-        }, 600000);
-      });
-    }
-
-    // Continue buttons
-    if (continueExisting) {
-      continueExisting.addEventListener('click', async () => {
-        await advanceToStep(3, { step2Complete: true, existingTemplate: true });
-      });
-    }
-
-    if (continueSuccess) {
-      continueSuccess.addEventListener('click', async () => {
-        await advanceToStep(3, { step2Complete: true, newTemplate: true });
-      });
-    }
+    // Start checking for template immediately
+    checkForTemplate();
   }, 0);
 
   return section;
 }
+
 // ============================================================================
 // Step 3: Run First Analysis
 // ============================================================================

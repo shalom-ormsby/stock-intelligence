@@ -141,38 +141,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       });
     }
 
-    // Only include template_id for NEW users (prevents duplicate templates)
-    if (templateId && !isExistingUser) {
-      authUrl.searchParams.set('template_id', templateId);
-      log(LogLevel.INFO, 'New user: Including template_id in OAuth flow', {
-        redirectUri,
-        templateId,
-        reason: 'new_user',
-        hasSession: !!session,
-        existingUserParam,
-        hasExistingTemplate,
-      });
-    } else if (templateId && isExistingUser) {
-      log(LogLevel.WARN, 'EXISTING USER: Skipping template_id to prevent duplication', {
-        redirectUri,
-        hasSession: !!session,
-        existingUserParam,
-        hasExistingTemplate,
-        reason: hasExistingTemplate ? 'database_has_sage_stocks_page' : 'session_or_param_detected',
-        notionUserId: session?.notionUserId,
-      });
-    } else {
-      log(LogLevel.WARN, 'SAGE_STOCKS_TEMPLATE_ID not set - template will NOT be duplicated', {
-        redirectUri,
-      });
-    }
+    // v1.2.13: NEVER include template_id (manual duplication only)
+    // Template duplication is now handled manually in Step 2 for full control
+    log(LogLevel.INFO, 'OAuth without template_id - manual duplication flow', {
+      redirectUri,
+      templateIdConfigured: !!templateId,
+      reason: 'v1.2.13_manual_duplication',
+    });
 
     // Redirect to Notion OAuth page
-    log(LogLevel.INFO, 'Redirecting to Notion OAuth', {
-      includesTemplateId: authUrl.searchParams.has('template_id'),
+    log(LogLevel.INFO, 'Redirecting to Notion OAuth (v1.2.13: manual duplication flow)', {
       includesState: authUrl.searchParams.has('state'),
-      isExistingUser,
-      hasExistingTemplate,
     });
     res.redirect(authUrl.toString());
   } catch (error) {
