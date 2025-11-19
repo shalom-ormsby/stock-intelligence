@@ -34,48 +34,86 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     // Check if user is existing (from frontend query param or session cookie)
     const existingUserParam = req.query.existing_user === 'true';
+    const emailParam = req.query.email as string | undefined;
     const session = await validateSession(req);
     let isExistingUser = existingUserParam || !!session;
 
     log(LogLevel.INFO, 'OAuth authorization request received', {
       existingUserParam,
       hasSession: !!session,
+      hasEmailParam: !!emailParam,
       sessionUserId: session?.userId,
       sessionNotionUserId: session?.notionUserId,
       isExistingUser,
     });
 
-    // v1.2.10: CRITICAL FIX - Database-backed check for existing users
-    // If user has a session, check database to see if they already have a template
+    // v1.2.11: ENHANCED - Email-based existing user detection (works without session)
+    // Priority order: 1) Session lookup, 2) Email lookup, 3) Query param
     let hasExistingTemplate = false;
+
+    // Method 1: Check by session (if user has active session)
     if (session?.notionUserId) {
       try {
         const existingUser = await getUserByNotionId(session.notionUserId);
         hasExistingTemplate = !!(existingUser?.sageStocksPageId);
 
-        log(LogLevel.INFO, 'Database check for existing template', {
+        log(LogLevel.INFO, 'Database check by session (Notion ID)', {
           notionUserId: session.notionUserId,
           userId: existingUser?.id,
           hasSageStocksPageId: hasExistingTemplate,
           sageStocksPageId: existingUser?.sageStocksPageId,
         });
 
-        // If user has a template in database, treat them as existing user regardless of param
         if (hasExistingTemplate) {
           isExistingUser = true;
-          log(LogLevel.WARN, 'FORCING existing user flag based on database check', {
+          log(LogLevel.WARN, 'FORCING existing user flag based on session database check', {
             reason: 'user_has_sage_stocks_page_in_database',
+            method: 'session_notion_id',
             notionUserId: session.notionUserId,
             sageStocksPageId: existingUser?.sageStocksPageId,
             willSkipTemplateId: true,
           });
         }
       } catch (dbError) {
-        log(LogLevel.ERROR, 'Database check failed (non-critical, continuing with session-based detection)', {
+        log(LogLevel.ERROR, 'Session-based database check failed (non-critical)', {
           error: dbError instanceof Error ? dbError.message : String(dbError),
           notionUserId: session.notionUserId,
         });
-        // Continue with session-based detection if database check fails
+      }
+    }
+
+    // Method 2: Check by email (if no session but email provided)
+    if (!hasExistingTemplate && emailParam) {
+      try {
+        const { getUserByEmail } = await import('../../lib/auth');
+        const normalizedEmail = emailParam.toLowerCase().trim();
+        const existingUser = await getUserByEmail(normalizedEmail);
+        hasExistingTemplate = !!(existingUser?.sageStocksPageId);
+
+        log(LogLevel.INFO, 'Database check by email', {
+          email: normalizedEmail,
+          userId: existingUser?.id,
+          notionUserId: existingUser?.notionUserId,
+          hasSageStocksPageId: hasExistingTemplate,
+          sageStocksPageId: existingUser?.sageStocksPageId,
+        });
+
+        if (hasExistingTemplate) {
+          isExistingUser = true;
+          log(LogLevel.WARN, 'FORCING existing user flag based on email database check', {
+            reason: 'user_has_sage_stocks_page_in_database',
+            method: 'email_lookup',
+            email: normalizedEmail,
+            notionUserId: existingUser?.notionUserId,
+            sageStocksPageId: existingUser?.sageStocksPageId,
+            willSkipTemplateId: true,
+          });
+        }
+      } catch (dbError) {
+        log(LogLevel.ERROR, 'Email-based database check failed (non-critical)', {
+          error: dbError instanceof Error ? dbError.message : String(dbError),
+          email: emailParam,
+        });
       }
     }
 

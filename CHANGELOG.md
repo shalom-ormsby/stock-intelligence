@@ -97,6 +97,110 @@ All development versions are documented below with full technical details.
 
 ## [Unreleased]
 
+### ✨ Feature: Email-Based User Verification to Prevent Template Duplication (v1.2.11)
+
+**Date:** November 18, 2025
+**Priority:** HIGH
+**Type:** Feature + Critical Bug Fix
+**Affected Users:** All users (especially those re-authenticating without active sessions)
+
+**Problem Solved:**
+v1.2.10's session-based detection couldn't prevent template duplication when users logged out or lost their session cookies. The system had no way to identify existing users without an active session, leading to repeated template duplication.
+
+**Solution Implemented:**
+
+**Email-Based Verification with localStorage Fallback** - Users enter email once per browser, system remembers them even after logout.
+
+**Frontend Changes** (`public/js/setup-flow.js`):
+
+1. **Updated handleNotionSignIn() function** (lines 57-102):
+   - Priority 1: Check session cookie (no email needed)
+   - Priority 2: Check saved email from localStorage OR user input
+   - Priority 3: Check legacy localStorage flag
+   - Passes email to authorize endpoint for database verification
+
+2. **Enhanced Step 1 UI** (lines 395-527):
+   - Conditionally shows email input only when needed
+   - If session exists → no email input shown
+   - If email saved in localStorage → shows "Signing in as: email" with change option
+   - If neither → shows email input field with validation
+   - Email validation: requires @ and . characters
+   - Saves email to localStorage after first entry
+   - Enter key support for quick submission
+
+**Backend Changes**:
+
+1. **New API Endpoint** (`api/auth/check-email.ts`):
+   - Accepts email as query parameter
+   - Normalizes email to lowercase
+   - Looks up user by email in Beta Users database
+   - Returns: exists, hasTemplate, status
+   - Comprehensive logging for debugging
+
+2. **Enhanced authorize.ts** (lines 35-118):
+   - Added `emailParam` query parameter support
+   - Two-method verification:
+     - **Method 1**: Session-based lookup (if session exists)
+     - **Method 2**: Email-based lookup (if no session but email provided)
+   - Checks Beta Users database by email
+   - If user found with `sageStocksPageId` → skips template_id
+   - Enhanced logging shows which method was used
+
+**User Experience:**
+
+**First-Time User:**
+1. Lands on setup page
+2. Enters email address
+3. Clicks "Sign in with Notion"
+4. Email saved to localStorage
+5. Template duplicated normally
+
+**Returning User (with session):**
+1. Lands on setup page
+2. No email input shown
+3. Clicks "Sign in with Notion"
+4. Template duplication skipped ✅
+
+**Returning User (no session, same browser):**
+1. Lands on setup page
+2. Shows "Signing in as: saved@email.com"
+3. Clicks "Sign in with Notion"
+4. Template duplication skipped ✅
+
+**Returning User (no session, different browser):**
+1. Lands on setup page
+2. Enters email address (same as before)
+3. Clicks "Sign in with Notion"
+4. System recognizes email from database
+5. Template duplication skipped ✅
+
+**Benefits:**
+- ✅ Works without active session (solves v1.2.10's limitation)
+- ✅ Email saved in localStorage → only enter once per browser
+- ✅ Builds email list for user communication
+- ✅ Email already stored in Beta Users database (no schema changes needed)
+- ✅ Graceful fallback: session → localStorage → manual entry
+- ✅ Works across logout/login cycles
+
+**Testing:**
+- ✅ TypeScript compilation passes
+- ✅ Email validation working
+- ✅ localStorage persistence confirmed
+- ✅ Database lookup by email functional
+
+**Files Changed:**
+- `api/auth/check-email.ts` - New email verification endpoint
+- `api/auth/authorize.ts` - Email-based user lookup
+- `public/js/setup-flow.js` - Email input UI + localStorage fallback
+
+**Migration Notes:**
+- No database schema changes needed (email already stored)
+- Existing users will see email input on next re-authentication
+- After first email entry, localStorage remembers them
+- Fully backward compatible with existing session-based flow
+
+---
+
 ### 🐛 CRITICAL Bug Fix: Template Duplication Still Occurring for Existing Users (v1.2.10)
 
 **Date:** November 18, 2025

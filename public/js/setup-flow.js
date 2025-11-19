@@ -51,26 +51,54 @@ let currentState = {
 // ============================================================================
 
 /**
- * Handle Notion sign-in with existing user detection
- * v1.2.5: Prevents duplicate template creation for returning users
+ * Handle Notion sign-in with email-based existing user detection
+ * v1.2.11: Email-based verification with localStorage fallback
  */
-function handleNotionSignIn() {
+async function handleNotionSignIn(emailInput = null) {
   // Check if user has an existing session (cookie or localStorage)
   const hasSessionCookie = document.cookie.includes('si_session=');
   const hasLocalSetupFlag = localStorage.getItem('sage_stocks_setup_complete') === 'true';
-  const isExistingUser = hasSessionCookie || hasLocalSetupFlag;
+  const savedEmail = localStorage.getItem('sage_stocks_user_email');
 
-  // Build authorization URL with detection parameter
   let authUrl = '/api/auth/authorize';
-  if (isExistingUser) {
+
+  // Priority 1: Session cookie (no email needed)
+  if (hasSessionCookie) {
     authUrl += '?existing_user=true';
-    console.log('🔍 Existing user detected (cookie or localStorage) - will skip template duplication');
-  } else {
-    console.log('✨ New user - will duplicate template during OAuth');
+    console.log('🔍 Existing user detected (session cookie) - will skip template duplication');
+    window.location.href = authUrl;
+    return;
   }
 
-  // Redirect to OAuth
-  window.location.href = authUrl;
+  // Priority 2: Email from input or localStorage
+  let userEmail = emailInput || savedEmail;
+
+  if (userEmail) {
+    // Normalize email
+    userEmail = userEmail.toLowerCase().trim();
+
+    // Save to localStorage for next time
+    localStorage.setItem('sage_stocks_user_email', userEmail);
+
+    // Add email to auth URL for backend verification
+    authUrl += `?email=${encodeURIComponent(userEmail)}`;
+    console.log('📧 Email-based verification:', userEmail);
+
+    window.location.href = authUrl;
+    return;
+  }
+
+  // Priority 3: localStorage setup flag (legacy)
+  if (hasLocalSetupFlag) {
+    authUrl += '?existing_user=true';
+    console.log('🔍 Existing user detected (localStorage flag) - will skip template duplication');
+    window.location.href = authUrl;
+    return;
+  }
+
+  // If we reach here without email, the UI should show email input
+  // This function will be called again when email is submitted
+  console.log('✨ New user - email verification required');
 }
 
 // ============================================================================
@@ -379,6 +407,13 @@ function createStep1Content() {
     </div>
   ` : '';
 
+  // Check if we have saved email in localStorage
+  const savedEmail = localStorage.getItem('sage_stocks_user_email');
+  const hasSession = document.cookie.includes('si_session=');
+
+  // If we have session or saved email, skip email input
+  const needsEmailInput = !hasSession && !savedEmail;
+
   section.innerHTML = `
     ${mobileWarning}
     <div class="mb-6 p-6 rounded-lg border bg-blue-50 border-blue-200">
@@ -390,12 +425,46 @@ function createStep1Content() {
             We'll automatically create your stock analysis workspace in Notion.<br>
             <strong>This process takes about 5 minutes.</strong>
           </p>
+
+          ${needsEmailInput ? `
+            <div class="mb-4 p-4 bg-white border border-blue-200 rounded-lg">
+              <label class="block text-sm font-medium mb-2 text-gray-700">
+                📧 Enter your email to get started
+              </label>
+              <p class="text-xs text-gray-600 mb-3">
+                We'll use this to identify your account and send you updates. You only need to enter this once per browser.
+              </p>
+              <div class="flex gap-2">
+                <input
+                  type="email"
+                  id="user-email-input"
+                  placeholder="your@email.com"
+                  class="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                  required
+                />
+              </div>
+              <p id="email-error" class="hidden text-sm text-red-600 mt-2"></p>
+            </div>
+          ` : savedEmail ? `
+            <div class="mb-4 p-3 bg-white border border-blue-200 rounded-lg">
+              <p class="text-sm text-gray-700">
+                📧 Signing in as: <strong>${savedEmail}</strong>
+                <button
+                  onclick="localStorage.removeItem('sage_stocks_user_email'); window.location.reload();"
+                  class="ml-2 text-xs text-blue-600 hover:text-blue-700 underline"
+                >
+                  Change email
+                </button>
+              </p>
+            </div>
+          ` : ''}
+
           <p class="text-sm text-gray-600 mb-4">
             By signing in, you authorize Sage Stocks to create and access your workspace databases.
           </p>
           <button
-            onclick="handleNotionSignIn()"
-            class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl"
+            id="signin-button"
+            class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <img src="/notion-logo.png" alt="Notion" class="w-5 h-5 mr-2" onerror="this.style.display='none'" />
             Sign in with Notion
@@ -404,6 +473,55 @@ function createStep1Content() {
       </div>
     </div>
   `;
+
+  // Setup event listeners after render
+  setTimeout(() => {
+    const emailInput = section.querySelector('#user-email-input');
+    const signinButton = section.querySelector('#signin-button');
+    const emailError = section.querySelector('#email-error');
+
+    if (signinButton) {
+      signinButton.addEventListener('click', async () => {
+        // If we need email input, validate it first
+        if (needsEmailInput && emailInput) {
+          const email = emailInput.value.trim();
+
+          // Basic email validation
+          if (!email || !email.includes('@') || !email.includes('.')) {
+            if (emailError) {
+              emailError.textContent = 'Please enter a valid email address';
+              emailError.classList.remove('hidden');
+            }
+            emailInput.focus();
+            return;
+          }
+
+          if (emailError) {
+            emailError.classList.add('hidden');
+          }
+
+          // Disable button and show loading
+          signinButton.disabled = true;
+          signinButton.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Verifying...';
+
+          // Call handleNotionSignIn with email
+          await handleNotionSignIn(email);
+        } else {
+          // No email needed, proceed directly
+          await handleNotionSignIn();
+        }
+      });
+
+      // Allow Enter key to submit
+      if (emailInput) {
+        emailInput.addEventListener('keypress', (e) => {
+          if (e.key === 'Enter') {
+            signinButton.click();
+          }
+        });
+      }
+    }
+  }, 0);
 
   return section;
 }
