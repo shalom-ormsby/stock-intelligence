@@ -97,6 +97,67 @@ All development versions are documented below with full technical details.
 
 ## [Unreleased]
 
+### 🐛 Critical Bug Fix: Incomplete Template Setup on Mobile Devices (v1.2.9)
+
+**Date:** November 18, 2025
+**Priority:** Critical
+**Affected Users:** Beta testers using iPad/mobile devices for initial setup
+
+**Problem:**
+Beta tester "Ben" completed OAuth on iPad, but Notion's template duplication only created the Sage Stocks page without the Stock Analyses and Stock History databases. The system incorrectly marked setup as "complete" by saving `undefined` values for database IDs. When attempting to analyze, the system failed with error: "Stock Analyses database not configured."
+
+**Root Cause:**
+1. `api/setup/detect.ts` only validated `sageStocksPage` existence before saving
+2. Database IDs used optional chaining (`?.id`), allowing `undefined` values to be stored
+3. Frontend (`setup-flow.js`) only checked for page existence, not database completeness
+4. No mobile device warning or guidance for users
+
+**Fix:**
+
+**Backend Changes** (`api/setup/detect.ts`):
+- Added strict validation requiring ALL databases before saving (lines 74-77)
+  - Changed from: `if (sageStocksPage)`
+  - Changed to: `if (sageStocksPage && stockAnalysesDb && stockHistoryDb)`
+- Removed optional chaining - database IDs now required, not optional
+- Added logging for partial detection scenarios (lines 98-106)
+- Prevents saving `undefined` to Beta Users database
+
+**Frontend Changes** (`public/js/setup-flow.js`):
+- Updated success validation to require all components (lines 612-616)
+  - Previously: Only checked `data.detection.sageStocksPage`
+  - Now: Requires `sageStocksPage + stockAnalysesDb + stockHistoryDb`
+- Added partial detection error handler (lines 649-686)
+  - Detects when page exists but databases missing
+  - Shows yellow warning with actionable guidance
+  - Instructs users to duplicate template on desktop
+  - Provides "Check Again" button after manual duplication
+- Added mobile device detection warning (lines 371-380)
+  - Detects iPad/iPhone/Android via user agent
+  - Shows yellow banner recommending desktop for best experience
+
+**Impact:**
+- ✅ Prevents future incomplete setups from being saved as "complete"
+- ✅ Mobile users warned before starting OAuth flow
+- ✅ Clear recovery instructions for partial detection
+- ✅ Better observability via partial detection logging
+
+**Testing:**
+- ✅ TypeScript compilation passes
+- ✅ Validation logic prevents `undefined` database IDs
+
+**Files Changed:**
+- `api/setup/detect.ts` - Backend validation logic
+- `public/js/setup-flow.js` - Frontend validation + mobile warning
+
+**For Affected Users:**
+Users who experienced this issue should:
+1. Open Notion on desktop (not mobile)
+2. Visit template URL and click "Duplicate"
+3. Return to setup page - system will auto-detect databases
+4. Complete first analysis
+
+---
+
 ### 🐛 Bug Fix: Market Context Redis Cache Not Expiring (v1.0.8b)
 
 **Date:** November 17, 2025
