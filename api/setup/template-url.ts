@@ -12,16 +12,16 @@ import { log, LogLevel } from '../../lib/logger';
 
 export default async function handler(_req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
-    const templateId = process.env.SAGE_STOCKS_TEMPLATE_ID;
+    let templateId = process.env.SAGE_STOCKS_TEMPLATE_ID;
 
-    if (!templateId) {
-      log(LogLevel.ERROR, 'SAGE_STOCKS_TEMPLATE_ID not configured');
-      res.status(500).json({
-        success: false,
-        error: 'Template not configured',
-        message: 'Server configuration error. Please contact support.',
-      });
-      return;
+    // Fix for incorrect template ID in some environments
+    // The ID ce9b3a07... is a deleted/invalid page that was cached in some envs
+    const KNOWN_BAD_ID = 'ce9b3a07e96a41c3ac1cc2a99f92bd90';
+    const CORRECT_ID = '2a9a1d1b67e0818b8e9fe451466994fc';
+
+    if (!templateId || templateId === KNOWN_BAD_ID) {
+      log(LogLevel.WARN, `Replacing invalid/missing template ID '${templateId}' with correct ID`);
+      templateId = CORRECT_ID;
     }
 
     // Notion template URL format: https://www.notion.so/[template-id]
