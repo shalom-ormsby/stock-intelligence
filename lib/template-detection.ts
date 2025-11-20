@@ -52,6 +52,8 @@ async function searchUserDatabases(notionToken: string): Promise<any[]> {
   let startCursor: string | undefined = undefined;
 
   console.log('🔍 [searchUserDatabases] Starting database search...');
+  console.log('🔍 [searchUserDatabases] API version: 2025-09-03');
+  console.log('🔍 [searchUserDatabases] Filter: { property: "object", value: "data_source" }');
 
   while (hasMore) {
     const response = await notion.search({
@@ -60,17 +62,29 @@ async function searchUserDatabases(notionToken: string): Promise<any[]> {
       page_size: 100,
     });
 
-    console.log(`📊 [searchUserDatabases] Found ${response.results.length} databases in this batch`);
+    console.log(`📊 [searchUserDatabases] Batch ${databases.length / 100 + 1}: Found ${response.results.length} databases`);
+    console.log(`📊 [searchUserDatabases] Response object types:`, response.results.map(r => r.object));
     databases.push(...response.results);
     hasMore = response.has_more;
     startCursor = response.next_cursor || undefined;
   }
 
-  console.log(`✓ [searchUserDatabases] Total databases found: ${databases.length}`);
-  console.log('📋 [searchUserDatabases] Database titles:', databases.map(db => ({
-    id: db.id,
-    title: db.title?.[0]?.plain_text || 'Untitled',
-  })));
+  console.log(`✅ [searchUserDatabases] Search complete: ${databases.length} total databases found`);
+
+  if (databases.length === 0) {
+    console.log('⚠️  [searchUserDatabases] NO DATABASES FOUND!');
+    console.log('⚠️  [searchUserDatabases] This could mean:');
+    console.log('   1. Template hasn\'t been duplicated yet');
+    console.log('   2. OAuth token lacks database permissions');
+    console.log('   3. API version or filter is incorrect');
+  } else {
+    console.log('📋 [searchUserDatabases] Database details:');
+    databases.forEach((db, index) => {
+      console.log(`   ${index + 1}. "${db.title?.[0]?.plain_text || 'Untitled'}" (ID: ${db.id})`);
+      console.log(`      Properties: ${Object.keys(db.properties || {}).join(', ')}`);
+      console.log(`      Object type: ${db.object}`);
+    });
+  }
 
   return databases;
 }
@@ -86,6 +100,8 @@ async function searchUserPages(notionToken: string): Promise<any[]> {
   let startCursor: string | undefined = undefined;
 
   console.log('🔍 [searchUserPages] Starting page search...');
+  console.log('🔍 [searchUserPages] API version: 2025-09-03');
+  console.log('🔍 [searchUserPages] Filter: { property: "object", value: "page" }');
 
   while (hasMore) {
     const response = await notion.search({
@@ -94,22 +110,30 @@ async function searchUserPages(notionToken: string): Promise<any[]> {
       page_size: 100,
     });
 
-    console.log(`📄 [searchUserPages] Found ${response.results.length} pages in this batch`);
+    console.log(`📄 [searchUserPages] Batch ${pages.length / 100 + 1}: Found ${response.results.length} pages`);
     pages.push(...response.results);
     hasMore = response.has_more;
     startCursor = response.next_cursor || undefined;
   }
 
-  console.log(`✓ [searchUserPages] Total pages found: ${pages.length}`);
-  console.log('📋 [searchUserPages] Page titles:', pages.map(page => {
-    const titleProp = Object.values(page.properties || {}).find(
-      (prop: any) => prop.type === 'title'
-    ) as any;
-    return {
-      id: page.id,
-      title: titleProp?.title?.[0]?.plain_text || 'Untitled',
-    };
-  }));
+  console.log(`✅ [searchUserPages] Search complete: ${pages.length} total pages found`);
+
+  if (pages.length === 0) {
+    console.log('⚠️  [searchUserPages] NO PAGES FOUND!');
+    console.log('⚠️  [searchUserPages] This could mean:');
+    console.log('   1. Template hasn\'t been duplicated yet');
+    console.log('   2. OAuth token lacks page read permissions');
+  } else {
+    console.log('📋 [searchUserPages] Page details:');
+    pages.forEach((page, index) => {
+      const titleProp = Object.values(page.properties || {}).find(
+        (prop: any) => prop.type === 'title'
+      ) as any;
+      const title = titleProp?.title?.[0]?.plain_text || 'Untitled';
+      console.log(`   ${index + 1}. "${title}" (ID: ${page.id})`);
+      console.log(`      Object type: ${page.object}`);
+    });
+  }
 
   return pages;
 }
