@@ -25,6 +25,8 @@ export interface PageMatch {
 export interface DetectionResult {
   stockAnalysesDb: DatabaseMatch | null;
   stockHistoryDb: DatabaseMatch | null;
+  stockEventsDb: DatabaseMatch | null;
+  marketContextDb: DatabaseMatch | null;
   sageStocksPage: PageMatch | null;
   needsManual: boolean;
 }
@@ -283,6 +285,125 @@ async function detectStockHistoryDb(
 }
 
 /**
+ * Detect Stock Events database (v1.2.16)
+ */
+async function detectStockEventsDb(
+  notionToken: string
+): Promise<DatabaseMatch | null> {
+  console.log('🎯 [detectStockEventsDb] Starting Stock Events detection...');
+  const databases = await searchUserDatabases(notionToken);
+
+  const criteria = {
+    titleMatches: ['Stock Events', 'Events', 'SI Events'],
+    titleWeight: 0.3,
+    requiredProps: ['Ticker', 'Event Type', 'When'],
+    requiredPropsWeight: 0.5,
+    optionalProps: ['Event Name', 'Timing'],
+    optionalPropsWeight: 0.2,
+    propertyTypes: {
+      'Ticker': 'relation',
+      'Event Type': 'select',
+      'When': 'date',
+    },
+  };
+
+  const scores = databases.map(db => {
+    const title = db.title?.[0]?.plain_text || 'Untitled';
+    const props = Object.keys(db.properties || {});
+    const score = calculateMatchScore(db, criteria);
+
+    console.log(`  📊 Scoring "${title}":`, {
+      score: score.toFixed(3),
+      properties: props,
+      hasRequiredProps: criteria.requiredProps.every(req =>
+        props.some(p => p.toLowerCase() === req.toLowerCase())
+      ),
+    });
+
+    return {
+      id: db.id,
+      title,
+      score,
+    };
+  });
+
+  const best = scores.sort((a, b) => b.score - a.score)[0];
+
+  console.log('🏆 [detectStockEventsDb] Best match:', best ? {
+    title: best.title,
+    score: best.score.toFixed(3),
+    threshold: '0.5',
+    passes: best.score >= 0.5,
+  } : 'No matches');
+
+  if (!best || best.score < 0.5) return null;
+
+  return {
+    ...best,
+    confidence: best.score > 0.8 ? 'high' : best.score > 0.6 ? 'medium' : 'low',
+  };
+}
+
+/**
+ * Detect Market Context Database
+ * Look for "Market Context" or "Market Regime" with specific properties
+ */
+async function detectMarketContextDb(notionToken: string): Promise<DatabaseMatch | null> {
+  console.log('🎯 [detectMarketContextDb] Starting Market Context detection...');
+  const databases = await searchUserDatabases(notionToken);
+
+  const criteria = {
+    titleMatches: ['Market Context', 'Market Regime', 'Daily Market'],
+    titleWeight: 0.3,
+    requiredProps: ['Market Regime', 'Risk Assessment', 'VIX Level'],
+    requiredPropsWeight: 0.5,
+    optionalProps: ['Top Sectors', 'Summary'],
+    optionalPropsWeight: 0.2,
+    propertyTypes: {
+      'Market Regime': 'select',
+      'Risk Assessment': 'select',
+      'VIX Level': 'number'
+    }
+  };
+
+  const scores = databases.map(db => {
+    const title = db.title?.[0]?.plain_text || 'Untitled';
+    const props = Object.keys(db.properties || {});
+    const score = calculateMatchScore(db, criteria);
+
+    console.log(`  📊 Scoring "${title}":`, {
+      score: score.toFixed(3),
+      properties: props,
+      hasRequiredProps: criteria.requiredProps.every(req =>
+        props.some(p => p.toLowerCase() === req.toLowerCase())
+      ),
+    });
+
+    return {
+      id: db.id,
+      title,
+      score,
+    };
+  });
+
+  const best = scores.sort((a, b) => b.score - a.score)[0];
+
+  console.log('🏆 [detectMarketContextDb] Best match:', best ? {
+    title: best.title,
+    score: best.score.toFixed(3),
+    threshold: '0.5',
+    passes: best.score >= 0.5,
+  } : 'No matches');
+
+  if (!best || best.score < 0.5) return null;
+
+  return {
+    ...best,
+    confidence: best.score > 0.8 ? 'high' : best.score > 0.6 ? 'medium' : 'low',
+  };
+}
+
+/**
  * Detect Sage Stocks hub page
  */
 async function detectSageStocksPage(
@@ -341,17 +462,25 @@ async function detectSageStocksPage(
 export async function autoDetectTemplate(
   notionToken: string
 ): Promise<DetectionResult> {
-  const [stockAnalyses, stockHistory, sageStocksPage] = await Promise.all([
+  const [stockAnalysesDb, stockHistoryDb, stockEventsDb, marketContextDb, sageStocksPage] = await Promise.all([
     detectStockAnalysesDb(notionToken),
     detectStockHistoryDb(notionToken),
+    detectStockEventsDb(notionToken),
+    detectMarketContextDb(notionToken),
     detectSageStocksPage(notionToken),
   ]);
 
+  // Determine if manual setup is needed
+  // We need at least the core databases to proceed automatically
+  const needsManual = !stockAnalysesDb || !stockHistoryDb || !stockEventsDb || !marketContextDb || !sageStocksPage;
+
   return {
-    stockAnalysesDb: stockAnalyses,
-    stockHistoryDb: stockHistory,
+    stockAnalysesDb,
+    stockHistoryDb,
+    stockEventsDb,
+    marketContextDb,
     sageStocksPage,
-    needsManual: !stockAnalyses || !stockHistory || !sageStocksPage,
+    needsManual
   };
 }
 

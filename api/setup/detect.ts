@@ -46,6 +46,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         detection: {
           stockAnalysesDb: { id: user.stockAnalysesDbId, title: 'Stock Analyses', confidence: 'high' },
           stockHistoryDb: { id: user.stockHistoryDbId, title: 'Stock History', confidence: 'high' },
+          stockEventsDb: user.stockEventsDbId ? { id: user.stockEventsDbId, title: 'Stock Events', confidence: 'high' } : null,
+          marketContextDb: user.marketContextDbId ? { id: user.marketContextDbId, title: 'Market Context', confidence: 'high' } : null,
           sageStocksPage: { id: user.sageStocksPageId, title: 'Sage Stocks', confidence: 'high' },
           needsManual: false,
         }
@@ -64,6 +66,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       userId: user.id,
       stockAnalyses: detection.stockAnalysesDb ? 'Found' : 'Not found',
       stockHistory: detection.stockHistoryDb ? 'Found' : 'Not found',
+      stockEvents: detection.stockEventsDb ? 'Found' : 'Not found',
+      marketContext: detection.marketContextDb ? 'Found' : 'Not found',
       sageStocksPage: detection.sageStocksPage ? 'Found' : 'Not found',
       needsManual: detection.needsManual,
     });
@@ -74,12 +78,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!detection.needsManual &&
       detection.sageStocksPage &&
       detection.stockAnalysesDb &&
-      detection.stockHistoryDb) {
+      detection.stockHistoryDb &&
+      detection.stockEventsDb &&
+      detection.marketContextDb) {
       // Store IDs for use in retry closure
       const detectedIds = {
         sageStocksPageId: detection.sageStocksPage.id,
         stockAnalysesDbId: detection.stockAnalysesDb.id,  // No longer optional
         stockHistoryDbId: detection.stockHistoryDb.id,    // No longer optional
+        stockEventsDbId: detection.stockEventsDb.id,      // v1.2.16: New required DB
+        marketContextDbId: detection.marketContextDb.id,  // v1.3.0: New required DB
       };
 
       try {
@@ -119,6 +127,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           step3DetectionResults: {
             stockAnalysesDb: detection.stockAnalysesDb || undefined,
             stockHistoryDb: detection.stockHistoryDb || undefined,
+            stockEventsDb: detection.stockEventsDb || undefined,
+            marketContextDb: detection.marketContextDb || undefined,
             sageStocksPage: detection.sageStocksPage || undefined,
           },
         });
@@ -130,6 +140,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           step3DetectionResults: {
             stockAnalysesDb: detection.stockAnalysesDb || undefined,
             stockHistoryDb: detection.stockHistoryDb || undefined,
+            stockEventsDb: detection.stockEventsDb || undefined,
+            marketContextDb: detection.marketContextDb || undefined,
             sageStocksPage: detection.sageStocksPage || undefined,
           },
           errors: [{
@@ -148,6 +160,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       detection: {
         stockAnalysesDb: detection.stockAnalysesDb,
         stockHistoryDb: detection.stockHistoryDb,
+        stockEventsDb: detection.stockEventsDb,
+        marketContextDb: detection.marketContextDb,
         sageStocksPage: detection.sageStocksPage,
         needsManual: detection.needsManual,
       },

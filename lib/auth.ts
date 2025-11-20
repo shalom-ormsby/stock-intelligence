@@ -27,6 +27,8 @@ export interface SetupProgress {
   step3DetectionResults?: {
     stockAnalysesDb?: { id: string; title: string; confidence: string };
     stockHistoryDb?: { id: string; title: string; confidence: string };
+    stockEventsDb?: { id: string; title: string; confidence: string };
+    marketContextDb?: { id: string; title: string; confidence: string };
     sageStocksPage?: { id: string; title: string; confidence: string };
   };
   step4FirstTicker?: string;
@@ -65,6 +67,7 @@ export interface User {
   stockAnalysesDbId?: string;
   stockHistoryDbId?: string;
   marketContextDbId?: string; // v1.1.0: Market Context database
+  stockEventsDbId?: string;   // v1.2.16: Stock Events database
   sageStocksPageId?: string;
   templateVersion?: string;
   upgradeHistory?: string; // JSON string of UpgradeHistory[]

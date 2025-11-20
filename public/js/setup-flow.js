@@ -225,13 +225,15 @@ async function triggerAutoDetection() {
     }
 
     if (data.success && data.detection) {
-      const { stockAnalysesDb, stockHistoryDb, sageStocksPage, needsManual } = data.detection;
+      const { stockAnalysesDb, stockHistoryDb, stockEventsDb, marketContextDb, sageStocksPage, needsManual } = data.detection;
 
       // Check if all required databases were found
-      if (!needsManual && stockAnalysesDb && stockHistoryDb && sageStocksPage) {
+      if (!needsManual && stockAnalysesDb && stockHistoryDb && stockEventsDb && marketContextDb && sageStocksPage) {
         console.log('✅ Auto-detection successful!');
         console.log('   Stock Analyses DB:', stockAnalysesDb.id);
         console.log('   Stock History DB:', stockHistoryDb.id);
+        console.log('   Stock Events DB:', stockEventsDb.id);
+        console.log('   Market Context DB:', marketContextDb.id);
         console.log('   Sage Stocks Page:', sageStocksPage.id);
 
         // Database IDs are already saved by the backend (api/setup/detect.ts lines 71-102)
@@ -241,6 +243,8 @@ async function triggerAutoDetection() {
         console.log('   Found:', {
           stockAnalysesDb: !!stockAnalysesDb,
           stockHistoryDb: !!stockHistoryDb,
+          stockEventsDb: !!stockEventsDb,
+          marketContextDb: !!marketContextDb,
           sageStocksPage: !!sageStocksPage,
         });
 
@@ -694,9 +698,16 @@ function renderStep1_5Content() {
               </button>
             </div>
 
+            <div class="mt-4 mb-4">
+              <label class="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                <input type="checkbox" id="confirm-duplicate" class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 border-gray-300">
+                <span class="text-sm font-medium text-gray-700">I have duplicated the template in Notion</span>
+              </label>
+            </div>
+
             <div class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
               <p class="text-xs text-yellow-800">
-                ⚠️ <strong>Important:</strong> Make sure you click "Duplicate" in Notion before continuing. We'll verify your workspace after you connect.
+                ⚠️ <strong>Important:</strong> You must duplicate the template before continuing, otherwise the setup will fail.
               </p>
             </div>
           </div>
@@ -722,22 +733,30 @@ function renderStep1_5Content() {
       console.error('❌ Failed to get template URL:', error);
     }
 
-    // Enable "Continue" button when "Open Template" is clicked
-    if (openTemplateButton && continueButton) {
-      openTemplateButton.addEventListener('click', () => {
-        console.log('📄 User clicked Open Template - enabling Continue button');
-        continueButton.disabled = false;
-        continueButton.classList.remove('disabled:opacity-50', 'disabled:cursor-not-allowed', 'disabled:shadow-none');
+    // Enable "Continue" button ONLY when checkbox is checked
+    const confirmCheckbox = document.querySelector('#confirm-duplicate');
 
-        // Optional: Add a visual cue
-        continueButton.innerHTML = 'Continue to Connect Notion →';
+    if (confirmCheckbox && continueButton) {
+      confirmCheckbox.addEventListener('change', (e) => {
+        const isChecked = e.target.checked;
+        continueButton.disabled = !isChecked;
+
+        if (isChecked) {
+          continueButton.classList.remove('disabled:opacity-50', 'disabled:cursor-not-allowed', 'disabled:shadow-none');
+          console.log('✅ User confirmed duplication - enabling Continue button');
+        } else {
+          continueButton.classList.add('disabled:opacity-50', 'disabled:cursor-not-allowed', 'disabled:shadow-none');
+          console.log('❌ User unchecked confirmation - disabling Continue button');
+        }
       });
     }
 
     // Continue to OAuth button
     if (continueButton) {
       continueButton.addEventListener('click', () => {
-        console.log('✅ User says they duplicated template - proceeding to OAuth');
+        if (continueButton.disabled) return;
+
+        console.log('✅ User proceeding to OAuth');
         const email = localStorage.getItem('sage_stocks_user_email');
         proceedToOAuth(email);
       });
