@@ -1115,7 +1115,8 @@ function showStatusMessage(status) {
           <p class="text-${msg.color}-700 text-sm mt-1">${msg.message}</p>
           ${status === 'pending' ? `
             <button
-              onclick="window.location.reload()"
+              id="refresh-status-btn"
+              onclick="refreshStatusAndDetect()"
               class="mt-4 px-4 py-2 bg-${msg.color}-600 text-white font-semibold rounded-lg hover:bg-${msg.color}-700 transition-all"
             >
               🔄 Refresh Status
@@ -1140,5 +1141,51 @@ function getErrorMessage(errorCode) {
   return messages[errorCode] || 'An error occurred during setup. Please try again.';
 }
 
+/**
+ * Refresh status and trigger database detection
+ * Called by the "Refresh Status" button for pending users
+ */
+async function refreshStatusAndDetect() {
+  const btn = document.getElementById('refresh-status-btn');
+  if (!btn) return;
+
+  // Show loading state
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Detecting databases...';
+
+  try {
+    console.log('🔄 Refresh Status clicked - triggering database detection');
+
+    // Trigger database detection
+    const response = await fetch('/api/setup/detect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    const data = await response.json();
+
+    console.log('📊 Detection response:', data);
+
+    if (data.success) {
+      console.log('✅ Detection completed successfully');
+      // Reload page to show updated status
+      window.location.reload();
+    } else {
+      console.error('❌ Detection failed:', data.error);
+      // Show error but still reload to show current state
+      alert(`Detection failed: ${data.error || 'Unknown error'}\n\nCheck Vercel logs for details.`);
+      window.location.reload();
+    }
+  } catch (error) {
+    console.error('❌ Detection request failed:', error);
+    alert(`Failed to trigger detection: ${error.message}\n\nCheck Vercel logs for details.`);
+    // Restore button state
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+}
+
 // Make functions globally accessible for inline onclick handlers
 window.completeSetup = completeSetup;
+window.refreshStatusAndDetect = refreshStatusAndDetect;
