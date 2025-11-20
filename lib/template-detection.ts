@@ -53,34 +53,37 @@ async function searchUserDatabases(notionToken: string): Promise<any[]> {
 
   console.log('🔍 [searchUserDatabases] Starting database search...');
   console.log('🔍 [searchUserDatabases] API version: 2025-09-03');
-  console.log('🔍 [searchUserDatabases] Filter: { property: "object", value: "database" }');
+  console.log('🔍 [searchUserDatabases] Filter: { property: "object", value: "data_source" }');
 
   while (hasMore) {
     const response = await notion.search({
-      filter: { property: 'object', value: 'database' },
+      filter: { property: 'object', value: 'data_source' },
       start_cursor: startCursor,
       page_size: 100,
     });
 
-    console.log(`📊 [searchUserDatabases] Batch ${databases.length / 100 + 1}: Found ${response.results.length} databases`);
+    console.log(`📊 [searchUserDatabases] Batch ${databases.length / 100 + 1}: Found ${response.results.length} data sources`);
     console.log(`📊 [searchUserDatabases] Response object types:`, response.results.map(r => r.object));
     databases.push(...response.results);
     hasMore = response.has_more;
     startCursor = response.next_cursor || undefined;
   }
 
-  console.log(`✅ [searchUserDatabases] Search complete: ${databases.length} total databases found`);
+  console.log(`✅ [searchUserDatabases] Search complete: ${databases.length} total data sources found`);
 
   if (databases.length === 0) {
-    console.log('⚠️  [searchUserDatabases] NO DATABASES FOUND!');
+    console.log('⚠️  [searchUserDatabases] NO DATA SOURCES FOUND!');
     console.log('⚠️  [searchUserDatabases] This could mean:');
     console.log('   1. Template hasn\'t been duplicated yet');
     console.log('   2. OAuth token lacks database permissions');
     console.log('   3. API version or filter is incorrect');
   } else {
-    console.log('📋 [searchUserDatabases] Database details:');
+    console.log('📋 [searchUserDatabases] Data source details:');
     databases.forEach((db, index) => {
-      console.log(`   ${index + 1}. "${db.title?.[0]?.plain_text || 'Untitled'}" (ID: ${db.id})`);
+      const parentDbId = db.parent?.type === 'database_id' ? db.parent.database_id : 'N/A';
+      console.log(`   ${index + 1}. "${db.title?.[0]?.plain_text || 'Untitled'}"`);
+      console.log(`      Data Source ID: ${db.id}`);
+      console.log(`      Parent Database ID: ${parentDbId}`);
       console.log(`      Properties: ${Object.keys(db.properties || {}).join(', ')}`);
       console.log(`      Object type: ${db.object}`);
     });
@@ -136,6 +139,22 @@ async function searchUserPages(notionToken: string): Promise<any[]> {
   }
 
   return pages;
+}
+
+/**
+ * Extract parent database ID from a data source
+ * Notion API v2025-09-03 returns data sources when searching with object: 'data_source'
+ * We need the parent database ID for notion.databases.retrieve() to work
+ */
+function extractDatabaseId(dataSource: any): string {
+  // Check if the parent is a database_id type
+  if (dataSource.parent?.type === 'database_id') {
+    return dataSource.parent.database_id;
+  }
+
+  // Fallback to the data source ID itself (may not work with databases.retrieve)
+  console.warn(`⚠️  Data source "${dataSource.title?.[0]?.plain_text || 'Untitled'}" has no parent database_id, using data source ID as fallback`);
+  return dataSource.id;
 }
 
 /**
@@ -216,6 +235,7 @@ async function detectStockAnalysesDb(
     const title = db.title?.[0]?.plain_text || 'Untitled';
     const props = Object.keys(db.properties || {});
     const score = calculateMatchScore(db, criteria);
+    const databaseId = extractDatabaseId(db); // Extract parent database ID
 
     console.log(`  📊 Scoring "${title}":`, {
       score: score.toFixed(3),
@@ -223,10 +243,12 @@ async function detectStockAnalysesDb(
       hasRequiredProps: criteria.requiredProps.every(req =>
         props.some(p => p.toLowerCase() === req.toLowerCase())
       ),
+      dataSourceId: db.id,
+      parentDatabaseId: databaseId,
     });
 
     return {
-      id: db.id,
+      id: databaseId, // Use parent database ID, not data source ID
       title,
       score,
     };
@@ -275,6 +297,7 @@ async function detectStockHistoryDb(
     const title = db.title?.[0]?.plain_text || 'Untitled';
     const props = Object.keys(db.properties || {});
     const score = calculateMatchScore(db, criteria);
+    const databaseId = extractDatabaseId(db); // Extract parent database ID
 
     console.log(`  📊 Scoring "${title}":`, {
       score: score.toFixed(3),
@@ -282,10 +305,12 @@ async function detectStockHistoryDb(
       hasRequiredProps: criteria.requiredProps.every(req =>
         props.some(p => p.toLowerCase() === req.toLowerCase())
       ),
+      dataSourceId: db.id,
+      parentDatabaseId: databaseId,
     });
 
     return {
-      id: db.id,
+      id: databaseId, // Use parent database ID, not data source ID
       title,
       score,
     };
@@ -335,6 +360,7 @@ async function detectStockEventsDb(
     const title = db.title?.[0]?.plain_text || 'Untitled';
     const props = Object.keys(db.properties || {});
     const score = calculateMatchScore(db, criteria);
+    const databaseId = extractDatabaseId(db); // Extract parent database ID
 
     console.log(`  📊 Scoring "${title}":`, {
       score: score.toFixed(3),
@@ -342,10 +368,12 @@ async function detectStockEventsDb(
       hasRequiredProps: criteria.requiredProps.every(req =>
         props.some(p => p.toLowerCase() === req.toLowerCase())
       ),
+      dataSourceId: db.id,
+      parentDatabaseId: databaseId,
     });
 
     return {
-      id: db.id,
+      id: databaseId, // Use parent database ID, not data source ID
       title,
       score,
     };
@@ -394,6 +422,7 @@ async function detectMarketContextDb(notionToken: string): Promise<DatabaseMatch
     const title = db.title?.[0]?.plain_text || 'Untitled';
     const props = Object.keys(db.properties || {});
     const score = calculateMatchScore(db, criteria);
+    const databaseId = extractDatabaseId(db); // Extract parent database ID
 
     console.log(`  📊 Scoring "${title}":`, {
       score: score.toFixed(3),
@@ -401,10 +430,12 @@ async function detectMarketContextDb(notionToken: string): Promise<DatabaseMatch
       hasRequiredProps: criteria.requiredProps.every(req =>
         props.some(p => p.toLowerCase() === req.toLowerCase())
       ),
+      dataSourceId: db.id,
+      parentDatabaseId: databaseId,
     });
 
     return {
-      id: db.id,
+      id: databaseId, // Use parent database ID, not data source ID
       title,
       score,
     };
