@@ -34,15 +34,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const existingUser = await getUserByEmail(normalizedEmail);
 
     if (!existingUser) {
-      log(LogLevel.INFO, 'New user - forcing manual template setup (Step 1.5)', {
+      log(LogLevel.INFO, 'New user - requires OAuth with automatic template duplication', {
         email: normalizedEmail,
       });
       res.status(200).json({
         success: true,
         exists: false,
         hasTemplate: false,
-        requiresOAuth: false, // Do not go directly to OAuth
-        redirectTo: '/?step=1.5', // Force manual setup
+        requiresOAuth: true, // Go to OAuth - Notion will auto-duplicate template
       });
       return;
     }

@@ -11,6 +11,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { log, LogLevel } from '../../lib/logger';
 import { validateSession } from '../../lib/auth';
+import { extractTemplateId } from '../../lib/utils';
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
@@ -48,6 +49,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('owner', 'user');
 
+    // Add template_id for automatic template duplication
+    // Uses SAGE_STOCKS_TEMPLATE_ID from env, falls back to hardcoded ID
+    // extractTemplateId handles both notion.so and notion.site URLs
+    const templateIdOrUrl = process.env.SAGE_STOCKS_TEMPLATE_ID || '2a9a1d1b67e0818b8e9fe451466994fc';
+    const templateId = extractTemplateId(templateIdOrUrl);
+    authUrl.searchParams.set('template_id', templateId);
+
     // Pass session data through OAuth state parameter (for callback to use)
     if (session) {
       const stateData = {
@@ -62,33 +70,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       });
     }
 
-    // v1.2.14: NEVER include template_id
-    // Template duplication is manual (Step 1.5) - happens BEFORE OAuth
-    // This ensures Notion never auto-duplicates templates
-
-    // CRITICAL DIAGNOSTIC: Log the actual OAuth URL being constructed
     const finalUrl = authUrl.toString();
-    const urlParams = new URLSearchParams(new URL(finalUrl).search);
-    const hasTemplateIdInUrl = urlParams.has('template_id');
 
-    log(LogLevel.WARN, 'CRITICAL: OAuth URL constructed - checking for template_id', {
-      reason: 'v1.2.14_manual_duplication_before_oauth',
+    log(LogLevel.INFO, 'OAuth URL constructed with template_id for automatic duplication', {
+      templateId,
       hasSession: !!session,
-      hasTemplateIdInUrl,
-      templateIdValue: hasTemplateIdInUrl ? urlParams.get('template_id') : null,
       completeUrl: finalUrl,
-      allParams: Object.fromEntries(urlParams.entries()),
     });
 
-    if (hasTemplateIdInUrl) {
-      log(LogLevel.ERROR, 'CRITICAL BUG: template_id found in OAuth URL despite prevention code!', {
-        templateIdValue: urlParams.get('template_id'),
-        completeUrl: finalUrl,
-      });
-    }
-
-    // IMPORTANT: Do NOT add template_id to authUrl under ANY circumstances
-    // Template duplication is handled manually in frontend Step 1.5
     res.redirect(finalUrl);
   } catch (error) {
     log(LogLevel.ERROR, 'Authorization endpoint error', {

@@ -52,7 +52,10 @@ let currentState = {
 
 /**
  * Handle setup flow initiation with database check
- * v1.2.15: Skip OAuth entirely for existing users (prevents template duplication)
+ * Routes users based on their status:
+ * - Existing users with template -> Skip OAuth, go to app
+ * - New users -> OAuth with automatic template duplication
+ * - Existing users without template -> OAuth to reconnect
  */
 async function handleSetupStart(emailInput = null) {
   // Check if user has an existing session
@@ -81,12 +84,12 @@ async function handleSetupStart(emailInput = null) {
       const data = await response.json();
 
       if (!data.requiresOAuth && data.redirectTo) {
-        // v1.2.15+: Handle redirects (Existing user -> App, New user -> Manual Setup)
-        console.log(`✅ Redirecting based on API response: ${data.redirectTo}`);
+        // Existing user with template -> Skip OAuth, go directly to app
+        console.log(`✅ Existing user with template - redirecting to: ${data.redirectTo}`);
         window.location.href = data.redirectTo;
       } else if (data.requiresOAuth) {
-        // New user OR reconnection needed: Go through OAuth
-        console.log('🔐 OAuth required - redirecting to authorization');
+        // New user OR reconnection needed: Go through OAuth with automatic template duplication
+        console.log('🔐 OAuth required - redirecting to authorization (template will auto-duplicate)');
         proceedToOAuth(userEmail);
       }
     } else if (hasSessionCookie) {
@@ -102,7 +105,7 @@ async function handleSetupStart(emailInput = null) {
 }
 
 /**
- * Proceed to OAuth (after database check or manual setup)
+ * Proceed to OAuth (for new users - automatic template duplication)
  */
 function proceedToOAuth(email = null) {
   let authUrl = '/api/auth/authorize';
@@ -111,17 +114,8 @@ function proceedToOAuth(email = null) {
     authUrl += `?email=${encodeURIComponent(email)}`;
   }
 
-  console.log('🚀 Proceeding to OAuth:', authUrl);
+  console.log('🚀 Proceeding to OAuth with automatic template duplication:', authUrl);
   window.location.href = authUrl;
-}
-
-/**
- * Show manual template setup step (for new users)
- */
-function showManualSetupStep() {
-  console.log('📄 Showing manual template setup');
-  // Navigate to Step 1.5 (manual setup)
-  window.location.href = '/?step=1.5';
 }
 
 // ============================================================================
@@ -165,16 +159,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       showStatusMessage(statusParam);
       return;
     }
-  }
-
-  // v1.2.14: Step 1.5 = Manual template setup (BEFORE OAuth)
-  if (stepParam === '1.5') {
-    console.log('📄 Showing Step 1.5: Manual template setup');
-    currentState.currentStep = 1.5;
-    currentState.completedSteps = [];
-    renderSubwayMap();
-    renderStep1_5Content();
-    return;
   }
 
   // If OAuth callback just completed (step=2 means OAuth succeeded, now verify)
@@ -628,144 +612,7 @@ function createStep1Content() {
 }
 
 // ============================================================================
-// Step 1.5: Manual Template Setup (BEFORE OAuth)
-// ============================================================================
-
-function renderStep1_5Content() {
-  const contentDiv = document.querySelector('#setup-content');
-  if (!contentDiv) return;
-
-  const savedEmail = localStorage.getItem('sage_stocks_user_email');
-
-  contentDiv.innerHTML = `
-    <div class="slide-in">
-      <div class="mb-6 p-6 rounded-lg border bg-blue-50 border-blue-200">
-        <div class="flex items-start">
-          <div class="text-3xl mr-4">📄</div>
-          <div class="flex-1">
-            <h3 class="font-bold text-gray-900 text-xl mb-2">Set Up Your Workspace</h3>
-            <p class="text-gray-700 mb-4">
-              Before connecting to Notion, let's set up your workspace template.
-            </p>
-
-            <!-- Tutorial GIF Placeholder -->
-            <div class="mb-6 aspect-video bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center relative overflow-hidden group">
-              <div class="text-center p-6">
-                <div class="text-4xl mb-2">🎬</div>
-                <p class="text-gray-500 font-medium">Tutorial GIF Placeholder</p>
-                <p class="text-xs text-gray-400 mt-1">Shows: Open Template → Click Duplicate → Close Tab</p>
-              </div>
-              <!-- Hover overlay to hint at future content -->
-              <div class="absolute inset-0 bg-black bg-opacity-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <p class="text-xs text-gray-600 font-medium bg-white px-3 py-1 rounded-full shadow-sm">Animation coming soon</p>
-              </div>
-            </div>
-
-            <div class="mb-4 p-4 bg-white border border-blue-200 rounded-lg">
-              <p class="text-sm font-medium text-gray-800 mb-3">
-                📖 <strong>Instructions:</strong>
-              </p>
-              <ol class="text-sm text-gray-700 space-y-2 ml-4 list-decimal">
-                <li>Click "Open Template in Notion" below</li>
-                <li>Notion will open in a new tab</li>
-                <li>Click the <strong>"Duplicate"</strong> button in the top-right corner of Notion</li>
-                <li>Return to this tab and click "Continue to Connect Notion"</li>
-              </ol>
-            </div>
-
-            ${savedEmail ? `
-              <p class="text-sm text-gray-600 mb-4">
-                Setting up for: <strong>${savedEmail}</strong>
-              </p>
-            ` : ''}
-
-            <div class="flex flex-col sm:flex-row gap-3">
-              <a
-                href="#"
-                id="open-template-button"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="inline-flex items-center justify-center px-6 py-3 bg-white border-2 border-blue-600 text-blue-600 font-semibold rounded-lg hover:bg-blue-50 transition-all"
-              >
-                📄 Open Template in Notion
-              </a>
-              <button
-                id="continue-to-oauth"
-                disabled
-                class="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
-              >
-                Continue to Connect Notion →
-              </button>
-            </div>
-
-            <div class="mt-4 mb-4">
-              <label class="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
-                <input type="checkbox" id="confirm-duplicate" class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 border-gray-300">
-                <span class="text-sm font-medium text-gray-700">I have duplicated the template in Notion</span>
-              </label>
-            </div>
-
-            <div class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <p class="text-xs text-yellow-800">
-                ⚠️ <strong>Important:</strong> You must duplicate the template before continuing, otherwise the setup will fail.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-
-  // Setup event listeners
-  setTimeout(async () => {
-    const openTemplateButton = document.querySelector('#open-template-button');
-    const continueButton = document.querySelector('#continue-to-oauth');
-
-    // Get template URL
-    try {
-      const response = await fetch('/api/setup/template-url');
-      const data = await response.json();
-
-      if (data.success && openTemplateButton) {
-        openTemplateButton.href = data.url;
-      }
-    } catch (error) {
-      console.error('❌ Failed to get template URL:', error);
-    }
-
-    // Enable "Continue" button ONLY when checkbox is checked
-    const confirmCheckbox = document.querySelector('#confirm-duplicate');
-
-    if (confirmCheckbox && continueButton) {
-      confirmCheckbox.addEventListener('change', (e) => {
-        const isChecked = e.target.checked;
-        continueButton.disabled = !isChecked;
-
-        if (isChecked) {
-          continueButton.classList.remove('disabled:opacity-50', 'disabled:cursor-not-allowed', 'disabled:shadow-none');
-          console.log('✅ User confirmed duplication - enabling Continue button');
-        } else {
-          continueButton.classList.add('disabled:opacity-50', 'disabled:cursor-not-allowed', 'disabled:shadow-none');
-          console.log('❌ User unchecked confirmation - disabling Continue button');
-        }
-      });
-    }
-
-    // Continue to OAuth button
-    if (continueButton) {
-      continueButton.addEventListener('click', () => {
-        if (continueButton.disabled) return;
-
-        console.log('✅ User proceeding to OAuth');
-        const email = localStorage.getItem('sage_stocks_user_email');
-        proceedToOAuth(email);
-      });
-    }
-  }, 0);
-}
-
-// ============================================================================
-// Step 2: Duplicate Template (Manual Flow)
+// Step 2: Verify Workspace (After OAuth - Template Auto-Duplicated)
 // ============================================================================
 
 /**

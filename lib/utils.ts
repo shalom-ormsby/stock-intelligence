@@ -465,7 +465,7 @@ export function chunk<T>(array: T[], size: number): T[][] {
  * @returns Clean page ID without dashes
  */
 export function extractNotionPageId(pageIdOrUrl: string): string {
-  if (pageIdOrUrl.includes('notion.so')) {
+  if (pageIdOrUrl.includes('notion.so') || pageIdOrUrl.includes('notion.site')) {
     // Extract from URL: https://notion.so/workspace/Page-Title-abc123...
     const match = pageIdOrUrl.split('/').pop()?.split('?')[0];
     return match ? match.replace(/-/g, '') : pageIdOrUrl;
@@ -473,4 +473,46 @@ export function extractNotionPageId(pageIdOrUrl: string): string {
 
   // Already a page ID, just remove dashes
   return pageIdOrUrl.replace(/-/g, '');
+}
+
+/**
+ * Normalize Notion URL to handle both notion.so and notion.site domains
+ *
+ * Notion auto-converts notion.so URLs to notion.site in many contexts.
+ * This function extracts the page ID and returns a canonical notion.so URL
+ * that works reliably across all contexts.
+ *
+ * @param urlOrId - Notion URL (notion.so or notion.site) or page ID
+ * @returns Normalized notion.so URL
+ *
+ * @example
+ * normalizeNotionUrl('https://ormsby.notion.site/Sage-Stocks-2a9a1d1b67e0818b8e9fe451466994fc')
+ * // Returns: 'https://www.notion.so/2a9a1d1b67e0818b8e9fe451466994fc'
+ *
+ * normalizeNotionUrl('2a9a1d1b67e0818b8e9fe451466994fc')
+ * // Returns: 'https://www.notion.so/2a9a1d1b67e0818b8e9fe451466994fc'
+ */
+export function normalizeNotionUrl(urlOrId: string): string {
+  // Extract page ID from URL or use as-is if already an ID
+  const pageId = extractNotionPageId(urlOrId);
+
+  // Return canonical notion.so URL
+  // Note: We use www.notion.so (not just notion.so) as it's the official domain
+  return `https://www.notion.so/${pageId}`;
+}
+
+/**
+ * Extract template ID from Notion template URL
+ *
+ * Handles both notion.so and notion.site URLs
+ *
+ * @param templateUrl - Notion template URL
+ * @returns Template ID (32-character hex string without dashes)
+ *
+ * @example
+ * extractTemplateId('https://www.notion.so/Sage-Stocks-2a9a1d1b67e0818b8e9fe451466994fc')
+ * // Returns: '2a9a1d1b67e0818b8e9fe451466994fc'
+ */
+export function extractTemplateId(templateUrl: string): string {
+  return extractNotionPageId(templateUrl);
 }

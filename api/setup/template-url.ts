@@ -9,29 +9,31 @@
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { log, LogLevel } from '../../lib/logger';
+import { normalizeNotionUrl, extractTemplateId } from '../../lib/utils';
 
 export default async function handler(_req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
-    let templateId = process.env.SAGE_STOCKS_TEMPLATE_ID;
+    let templateIdOrUrl = process.env.SAGE_STOCKS_TEMPLATE_ID;
 
     // Fix for incorrect template ID in some environments
     // The ID ce9b3a07... is a deleted/invalid page that was cached in some envs
     const KNOWN_BAD_ID = 'ce9b3a07e96a41c3ac1cc2a99f92bd90';
     const CORRECT_ID = '2a9a1d1b67e0818b8e9fe451466994fc';
 
-    if (!templateId || templateId === KNOWN_BAD_ID) {
-      log(LogLevel.WARN, `Replacing invalid/missing template ID '${templateId}' with correct ID`);
-      templateId = CORRECT_ID;
+    if (!templateIdOrUrl || templateIdOrUrl === KNOWN_BAD_ID) {
+      log(LogLevel.WARN, `Replacing invalid/missing template ID '${templateIdOrUrl}' with correct ID`);
+      templateIdOrUrl = CORRECT_ID;
     }
 
-    // Notion template URL format: https://www.notion.so/[template-id]
-    // When user visits this URL while logged into Notion, they'll see the template
-    // with a "Duplicate" button in the top-right corner
-    const templateUrl = `https://www.notion.so/${templateId}`;
+    // Normalize URL to handle both notion.so and notion.site
+    // This ensures we always return a canonical notion.so URL that works everywhere
+    const templateUrl = normalizeNotionUrl(templateIdOrUrl);
+    const templateId = extractTemplateId(templateIdOrUrl);
 
     log(LogLevel.INFO, 'Template URL requested', {
       templateId,
       templateUrl,
+      originalValue: templateIdOrUrl,
     });
 
     res.status(200).json({
