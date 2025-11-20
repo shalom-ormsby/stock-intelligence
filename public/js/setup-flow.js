@@ -189,13 +189,77 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderSubwayMap();
   renderStepContent();
 
-  // Auto-trigger Step 3 (verification) if we just completed Step 2 (duplicate)
+  // Auto-trigger database detection if we just completed Step 2 (duplicate)
   if (currentState.currentStep === 3) {
     setTimeout(() => {
       triggerAutoDetection();
     }, 500);
   }
 });
+
+// ============================================================================
+// Database Auto-Detection (Critical for setup completion)
+// ============================================================================
+
+/**
+ * Trigger automatic database detection
+ * Called automatically after workspace verification (Step 2 → Step 3 transition)
+ *
+ * This function is CRITICAL - without it, database IDs remain empty and
+ * analysis attempts will fail with "database not configured" errors.
+ */
+async function triggerAutoDetection() {
+  console.log('🔍 Starting automatic database detection...');
+
+  try {
+    const response = await fetch('/api/setup/detect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    const data = await response.json();
+
+    console.log('📡 Detection API response:', response.status, data);
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Detection failed');
+    }
+
+    if (data.success && data.detection) {
+      const { stockAnalysesDb, stockHistoryDb, sageStocksPage, needsManual } = data.detection;
+
+      // Check if all required databases were found
+      if (!needsManual && stockAnalysesDb && stockHistoryDb && sageStocksPage) {
+        console.log('✅ Auto-detection successful!');
+        console.log('   Stock Analyses DB:', stockAnalysesDb.id);
+        console.log('   Stock History DB:', stockHistoryDb.id);
+        console.log('   Sage Stocks Page:', sageStocksPage.id);
+
+        // Database IDs are already saved by the backend (api/setup/detect.ts lines 71-102)
+        // User can now proceed to Step 3 (first analysis)
+      } else if (needsManual) {
+        console.warn('⚠️  Partial detection - some databases not found');
+        console.log('   Found:', {
+          stockAnalysesDb: !!stockAnalysesDb,
+          stockHistoryDb: !!stockHistoryDb,
+          sageStocksPage: !!sageStocksPage,
+        });
+
+        // Show error to user - manual entry would be needed
+        showError('Could not find all databases in your workspace. Please verify you duplicated the Sage Stocks template correctly.');
+      } else {
+        console.error('❌ Detection succeeded but returned unexpected data structure');
+        showError('Database detection completed with unexpected results. Please contact support.');
+      }
+    } else {
+      console.error('❌ Detection API returned unexpected response:', data);
+      showError('Database detection failed. Please contact support.');
+    }
+  } catch (error) {
+    console.error('❌ Auto-detection failed:', error);
+    showError(`Database detection failed: ${error.message}. Please refresh and try again, or contact support.`);
+  }
+}
 
 // ============================================================================
 // API Communication

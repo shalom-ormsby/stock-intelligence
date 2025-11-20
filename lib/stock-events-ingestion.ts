@@ -20,6 +20,34 @@ import { FMPClient } from './fmp-client';
 import { info, warn, error as logError, createTimer } from './logger';
 
 // ========================================
+// HELPER: Data Source ID Resolution
+// ========================================
+
+// Cache for data source IDs (API v2025-09-03)
+const dataSourceCache = new Map<string, string>();
+
+/**
+ * Get data source ID from database ID
+ * Required for Notion API version 2025-09-03
+ */
+async function getDataSourceId(notion: Client, databaseId: string): Promise<string> {
+  const cacheKey = `${databaseId}`;
+  if (dataSourceCache.has(cacheKey)) {
+    return dataSourceCache.get(cacheKey)!;
+  }
+
+  const db = await notion.databases.retrieve({ database_id: databaseId });
+  const dataSourceId = (db as any).data_sources?.[0]?.id;
+
+  if (!dataSourceId) {
+    throw new Error(`No data source found for database ${databaseId}`);
+  }
+
+  dataSourceCache.set(cacheKey, dataSourceId);
+  return dataSourceId;
+}
+
+// ========================================
 // TYPES
 // ========================================
 
@@ -28,8 +56,9 @@ interface BetaUser {
   email: string;
   name: string;
   accessToken: string;
-  stockAnalysesDbId?: string; // Discovered via search
-  stockEventsDbId?: string; // Discovered via search
+  stockAnalysesDbId?: string; // From Beta Users database
+  stockHistoryDbId?: string; // From Beta Users database
+  stockEventsDbId?: string; // From Beta Users database (v1.2.16)
   timezone: string;
 }
 
@@ -182,16 +211,19 @@ async function fetchBetaUsers(
   databaseId: string,
   adminToken: string
 ): Promise<BetaUser[]> {
-  const notion = new Client({ auth: adminToken });
+  const notion = new Client({ auth: adminToken, notionVersion: '2025-09-03' });
   const users: BetaUser[] = [];
 
   try {
+    // Get data source ID for API v2025-09-03
+    const dataSourceId = await getDataSourceId(notion, databaseId);
+
     let hasMore = true;
     let startCursor: string | undefined;
 
     while (hasMore) {
-      const response = await (notion as any).databases.query({
-        database_id: databaseId,
+      const response = await notion.dataSources.query({
+        data_source_id: dataSourceId,
         filter: {
           property: 'Status',
           select: {
@@ -202,7 +234,7 @@ async function fetchBetaUsers(
       });
 
       for (const page of response.results) {
-        const props = page.properties;
+        const props = (page as any).properties;
 
         // Extract user data
         const userId = page.id;
@@ -210,6 +242,11 @@ async function fetchBetaUsers(
         const name = props.Name?.title?.[0]?.plain_text || '';
         const accessToken = props['Access Token']?.rich_text?.[0]?.plain_text || '';
         const timezone = props.Timezone?.rich_text?.[0]?.plain_text || 'America/Los_Angeles';
+
+        // Extract database IDs (multi-tenant configuration)
+        const stockAnalysesDbId = props['Stock Analyses DB ID']?.rich_text?.[0]?.plain_text || undefined;
+        const stockHistoryDbId = props['Stock History DB ID']?.rich_text?.[0]?.plain_text || undefined;
+        const stockEventsDbId = props['Stock Events DB ID']?.rich_text?.[0]?.plain_text || undefined;
 
         if (!accessToken) {
           warn('User missing access token, skipping', { userId, email });
@@ -222,11 +259,14 @@ async function fetchBetaUsers(
           name,
           accessToken,
           timezone,
+          stockAnalysesDbId,
+          stockHistoryDbId,
+          stockEventsDbId,
         });
       }
 
       hasMore = response.has_more;
-      startCursor = response.next_cursor;
+      startCursor = response.next_cursor || undefined;
     }
 
     return users;
@@ -241,7 +281,7 @@ async function fetchBetaUsers(
  */
 async function discoverUserDatabases(user: BetaUser): Promise<void> {
   try {
-    const notion = new Client({ auth: user.accessToken });
+    const notion = new Client({ auth: user.accessToken, notionVersion: '2025-09-03' });
 
     // Search for databases in user's workspace
     const response = await notion.search({
@@ -284,22 +324,28 @@ async function collectPortfolioWatchlistStocks(
 
   for (const user of users) {
     try {
-      // Discover databases for this user
-      await discoverUserDatabases(user);
-      metrics.notionApiCalls++; // Database search
-
+      // Check if user has Stock Analyses DB configured
       if (!user.stockAnalysesDbId) {
-        warn('Stock Analyses database not found, skipping user', { email: user.email });
-        metrics.usersFailed++;
-        continue;
+        // Fallback: Try to discover via search (for backwards compatibility)
+        await discoverUserDatabases(user);
+        metrics.notionApiCalls++; // Database search
+
+        if (!user.stockAnalysesDbId) {
+          warn('Stock Analyses DB ID not configured, skipping user', { email: user.email });
+          metrics.usersFailed++;
+          continue;
+        }
       }
 
-      const notion = new Client({ auth: user.accessToken });
+      const notion = new Client({ auth: user.accessToken, notionVersion: '2025-09-03' });
+
+      // Get data source ID for Stock Analyses database
+      const dataSourceId = await getDataSourceId(notion, user.stockAnalysesDbId);
 
       // Query Stock Analyses for Portfolio or Watchlist stocks
       // Check if Stock Type property exists, otherwise process all stocks
-      const response = await (notion as any).databases.query({
-        database_id: user.stockAnalysesDbId,
+      const response = await notion.dataSources.query({
+        data_source_id: dataSourceId,
         filter: {
           or: [
             {
@@ -322,8 +368,8 @@ async function collectPortfolioWatchlistStocks(
 
       // Extract tickers
       for (const page of response.results) {
-        const ticker = page.properties.Ticker?.title?.[0]?.plain_text || '';
-        const stockType = page.properties['Stock Type']?.select?.name || '';
+        const ticker = (page as any).properties.Ticker?.title?.[0]?.plain_text || '';
+        const stockType = (page as any).properties['Stock Type']?.select?.name || '';
 
         if (!ticker) continue;
 
@@ -514,10 +560,17 @@ async function distributeEventsToUsers(
     // Write events to each subscriber's database
     for (const user of subscribers) {
       try {
+        // Check if user has Stock Events DB configured
         if (!user.stockEventsDbId) {
-          warn('User missing Stock Events database ID, skipping', { email: user.email });
-          metrics.warnings.push(`User ${user.email}: Missing Stock Events DB`);
-          continue;
+          // Fallback: Try to discover via search (for backwards compatibility)
+          await discoverUserDatabases(user);
+          metrics.notionApiCalls++;
+
+          if (!user.stockEventsDbId) {
+            warn('Stock Events DB ID not configured, skipping user', { email: user.email });
+            metrics.warnings.push(`User ${user.email}: Missing Stock Events DB ID`);
+            continue;
+          }
         }
 
         await writeEventsToNotionDatabase(
@@ -545,7 +598,7 @@ async function writeEventsToNotionDatabase(
   events: StockEventData[],
   metrics: StockEventsIngestionMetrics
 ): Promise<void> {
-  const notion = new Client({ auth: user.accessToken });
+  const notion = new Client({ auth: user.accessToken, notionVersion: '2025-09-03' });
 
   for (const event of events) {
     try {
@@ -687,8 +740,11 @@ async function findExistingEvent(
   eventDate: string
 ): Promise<string | undefined> {
   try {
-    const response = await (notion as any).databases.query({
-      database_id: databaseId,
+    // Get data source ID for API v2025-09-03
+    const dataSourceId = await getDataSourceId(notion, databaseId);
+
+    const response = await notion.dataSources.query({
+      data_source_id: dataSourceId,
       filter: {
         and: [
           {

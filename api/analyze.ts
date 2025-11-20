@@ -246,12 +246,35 @@ export default async function handler(
       throw new Error('FRED_API_KEY environment variable is not set');
     }
 
-    // Validate user-specific database IDs
-    if (!stockAnalysesDbId) {
-      throw new Error('Stock Analyses database not configured. Please complete setup at https://sagestocks.vercel.app/');
-    }
-    if (!stockHistoryDbId) {
-      throw new Error('Stock History database not configured. Please complete setup at https://sagestocks.vercel.app/');
+    // Validate user-specific database IDs (CRITICAL: blocks analysis if setup incomplete)
+    const missingDatabases = [];
+    if (!stockAnalysesDbId) missingDatabases.push('Stock Analyses');
+    if (!stockHistoryDbId) missingDatabases.push('Stock History');
+
+    if (missingDatabases.length > 0) {
+      const errorMessage = `Setup incomplete: ${missingDatabases.join(', ')} database${missingDatabases.length > 1 ? 's' : ''} not configured. Please complete setup at https://sagestocks.vercel.app/`;
+
+      console.error('❌ Database configuration validation failed:', {
+        userId: user.id,
+        email: session.email,
+        missingDatabases,
+        stockAnalysesDbId: stockAnalysesDbId || 'MISSING',
+        stockHistoryDbId: stockHistoryDbId || 'MISSING',
+        sageStocksPageId: user.sageStocksPageId || 'MISSING',
+      });
+
+      // Return structured error response
+      res.status(400).json({
+        success: false,
+        error: 'SETUP_INCOMPLETE',
+        message: errorMessage,
+        details: {
+          missingDatabases,
+          setupRequired: true,
+          setupUrl: 'https://sagestocks.vercel.app/',
+        }
+      });
+      return;
     }
 
     // CRITICAL: Validate database access before starting analysis (v1.2.1)

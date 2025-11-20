@@ -699,6 +699,10 @@ export async function updateUserDatabaseIds(
     sageStocksPageId?: string;
     stockAnalysesDbId?: string;
     stockHistoryDbId?: string;
+    marketContextDbId?: string;
+    stockEventsDbId?: string;
+    setupCompletedAt?: string; // ISO 8601 timestamp
+    templateVersion?: string;
   }
 ): Promise<void> {
   try {
@@ -722,6 +726,30 @@ export async function updateUserDatabaseIds(
       };
     }
 
+    if (databaseIds.marketContextDbId) {
+      properties['Market Context DB ID'] = {
+        rich_text: [{ text: { content: databaseIds.marketContextDbId } }],
+      };
+    }
+
+    if (databaseIds.stockEventsDbId) {
+      properties['Stock Events DB ID'] = {
+        rich_text: [{ text: { content: databaseIds.stockEventsDbId } }],
+      };
+    }
+
+    if (databaseIds.setupCompletedAt) {
+      properties['Setup Completed At'] = {
+        date: { start: databaseIds.setupCompletedAt },
+      };
+    }
+
+    if (databaseIds.templateVersion) {
+      properties['Template Version'] = {
+        rich_text: [{ text: { content: databaseIds.templateVersion } }],
+      };
+    }
+
     await notion.pages.update({
       page_id: userId,
       properties,
@@ -732,6 +760,9 @@ export async function updateUserDatabaseIds(
       hasSageStocksPage: !!databaseIds.sageStocksPageId,
       hasStockAnalyses: !!databaseIds.stockAnalysesDbId,
       hasStockHistory: !!databaseIds.stockHistoryDbId,
+      hasMarketContext: !!databaseIds.marketContextDbId,
+      hasStockEvents: !!databaseIds.stockEventsDbId,
+      setupCompletedAt: databaseIds.setupCompletedAt || null,
     });
   } catch (error: any) {
     // Check if this is a Notion service outage (temporary)

@@ -299,6 +299,14 @@ export const BETA_USERS_SCHEMA: NotionProperty[] = [
     description: 'Subscription level - determines analysis quotas and feature access'
   },
   { name: 'Timezone', type: 'rich_text', description: 'User IANA timezone (e.g., America/Los_Angeles)' },
+  // Database IDs (populated during OAuth setup)
+  { name: 'Stock Analyses DB ID', type: 'rich_text', description: 'Database ID for Stock Analyses' },
+  { name: 'Stock History DB ID', type: 'rich_text', description: 'Database ID for Stock History' },
+  { name: 'Stock Events DB ID', type: 'rich_text', description: 'Database ID for Stock Events (v1.2.16)' },
+  { name: 'Market Context DB ID', type: 'rich_text', description: 'Database ID for Market Context (v1.1.0)' },
+  { name: 'Sage Stocks Page ID', type: 'rich_text', description: 'Page ID for Sage Stocks workspace' },
+  { name: 'Template Version', type: 'rich_text', description: 'Version of template user is using' },
+  { name: 'Setup Completed At', type: 'date', description: 'When setup was completed' },
 ];
 
 /**
