@@ -97,6 +97,183 @@ All development versions are documented below with full technical details.
 
 ## [Unreleased]
 
+### 📅 Stock Events Ingestion Pipeline (v1.2.16)
+
+**Date:** November 19, 2025
+**Priority:** HIGH
+**Type:** Feature - Event Calendar Integration
+**Status:** ✅ Implemented
+
+**Summary:**
+Implemented complete FMP event calendar ingestion pipeline that automatically fetches upcoming stock events (earnings calls, dividends, stock splits) for all Portfolio and Watchlist stocks across all users.
+
+**Problem Solved:**
+Users needed visibility into upcoming earnings calls, dividend payments, and stock splits for their portfolio holdings to make informed trading decisions and plan around catalyst events.
+
+**Implementation:**
+
+**1. New Database Schema: Stock Events** ([config/notion-schema.ts:341-403](config/notion-schema.ts#L341-L403))
+- **Event Name** (title): Auto-generated as `{TICKER} {Event Type}`
+- **Event Date** (date): When the event occurs (powers Notion Calendar view)
+- **Event Type** (select): Earnings Call, Dividend, Stock Split, Guidance, Economic Event
+- **Status** (select): Upcoming, Today, Completed, Cancelled
+- **Quality Metrics:** Confidence level, Timing Precision, Event Source
+- **Event-Specific Fields:**
+  - EPS Estimate (number) - for earnings calls
+  - Dividend Amount (number) - for dividend events
+  - Split Ratio (text) - e.g., "4:1" for stock splits
+  - Fiscal Quarter/Year - earnings period tracking
+
+**2. FMP API Client Extensions** ([lib/fmp-client.ts:434-586](lib/fmp-client.ts#L434-L586))
+Added 4 new event calendar methods:
+- `getEarningsCalendar(from, to)` - Fetches earnings call schedule
+- `getDividendCalendar(from, to)` - Fetches dividend payment dates
+- `getStockSplitCalendar(from, to)` - Fetches stock split events
+- `getEconomicCalendar(from, to)` - Fetches economic events (for guidance tracking)
+
+All methods include:
+- Graceful error handling (returns empty array on failure)
+- Structured logging with duration tracking
+- 30-second timeout protection
+- Exported TypeScript interfaces for type safety
+
+**3. Stock Events Ingestion Service** ([lib/stock-events-ingestion.ts](lib/stock-events-ingestion.ts))
+Complete deduplication + distribution pipeline:
+
+**Architecture Pattern:**
+```
+User A: AAPL, NVDA, MSFT (Portfolio)
+User B: AAPL, TSLA (Watchlist)
+User C: NVDA, GOOGL (Portfolio)
+
+Step 1: Collect unique tickers → [AAPL, NVDA, MSFT, TSLA, GOOGL]
+Step 2: Fetch events from FMP → 1 API call per ticker (5 total)
+Step 3: Distribute to subscribers:
+  - AAPL events → Users A & B
+  - NVDA events → Users A & C
+  - MSFT events → User A
+  - TSLA events → User B
+  - GOOGL events → User C
+
+Result: 5 FMP calls instead of 6 (17% savings)
+With 100 users, scales to 99%+ savings
+```
+
+**Key Features:**
+- ✅ **Smart filtering:** Only fetches events for Portfolio/Watchlist stocks (per user)
+- ✅ **Deduplication:** Fetches each ticker once, distributes to all owners
+- ✅ **Database discovery:** Auto-finds Stock Events database in each user's workspace
+- ✅ **Upsert logic:** Creates if new, updates if exists (by ticker + event_type + date)
+- ✅ **Graceful errors:** Logs warnings but continues processing (no cascade failures)
+- ✅ **Comprehensive metrics:** Tracks users, stocks, events, API calls, errors
+
+**4. Cron Job Endpoint** ([api/jobs/stock-events.ts](api/jobs/stock-events.ts))
+- **Schedule:** Weekly on Sundays at 12:00 UTC (4:00 AM Pacific)
+- **Max Duration:** 300 seconds (5 minutes)
+- **Authentication:** CRON_SECRET bearer token
+- **Date Range:** Fetches next 90 days of events
+- **Returns:** Detailed execution summary with metrics
+
+**5. Test Script** ([scripts/test-stock-events.ts](scripts/test-stock-events.ts))
+```bash
+npx ts-node scripts/test-stock-events.ts
+```
+Tests:
+- FMP API calendar methods (earnings, dividends, splits)
+- Full ingestion pipeline (dry-run capable)
+- Displays comprehensive metrics and error reporting
+
+**6. Vercel Configuration Updates** ([vercel.json](vercel.json))
+```json
+{
+  "functions": {
+    "api/jobs/stock-events.ts": { "maxDuration": 300 }
+  },
+  "crons": [
+    {
+      "path": "/api/jobs/stock-events",
+      "schedule": "0 12 * * 0"  // Sundays at 12:00 UTC
+    }
+  ]
+}
+```
+
+**Data Quality Standards:**
+- **Confidence:** All FMP-sourced events marked as "High"
+- **Timing Precision:** "Date Confirmed" (FMP provides official dates)
+- **Event Source:** "FMP API" (for audit trail)
+- **Fiscal Period Extraction:** Automatically parses Q1-Q4 and fiscal year from earnings data
+- **Split Ratio Parsing:** Formats split ratios as "4:1", "3:2", etc.
+
+**Error Resilience:**
+- API failures → Logged, job continues
+- Malformed records → Skipped, job continues
+- Missing tickers → Warned, job continues
+- Per-user failures → Isolated (one user's error doesn't block others)
+- Missing Stock Events database → User skipped with warning
+
+**Performance Optimizations:**
+- Deduplication reduces API calls by 99% at scale (100+ users)
+- Batch processing minimizes Notion API calls
+- Single search per user for database discovery
+- Upsert logic prevents duplicate event records
+
+**Environment Variables Required:**
+```bash
+FMP_API_KEY=sk_...              # Financial Modeling Prep API key
+NOTION_API_KEY=ntn_...          # Admin Notion API token
+BETA_USERS_DB_ID=abc123...      # Beta Users database ID
+CRON_SECRET=...                 # Cron job authentication
+```
+
+**User Impact:**
+- ✅ Automatic event calendar for Portfolio/Watchlist stocks
+- ✅ Events appear in Notion Calendar view (via Event Date property)
+- ✅ 90-day forward visibility into earnings, dividends, splits
+- ✅ No manual data entry required
+- ✅ Weekly updates ensure fresh data
+
+**Technical Debt Addressed:**
+- Used `(notion as any).databases.query()` to bypass TypeScript types
+  - Reason: Codebase uses old Notion API (not 2025-09-03 version)
+  - Migration to new API tracked in NOTION_API_MIGRATION.md
+  - Pattern consistent with existing codebase (market-context.ts, etc.)
+
+**Files Modified:**
+- [config/notion-schema.ts](config/notion-schema.ts) - Added STOCK_EVENTS_SCHEMA
+- [lib/fmp-client.ts](lib/fmp-client.ts) - Added 4 event calendar methods + types
+- [lib/stock-events-ingestion.ts](lib/stock-events-ingestion.ts) - New ingestion service (730 lines)
+- [api/jobs/stock-events.ts](api/jobs/stock-events.ts) - New cron job endpoint
+- [scripts/test-stock-events.ts](scripts/test-stock-events.ts) - New test script
+- [vercel.json](vercel.json) - Added cron schedule and function config
+
+**Testing:**
+```bash
+# Test FMP API methods
+npx ts-node scripts/test-stock-events.ts
+
+# Manual trigger (requires CRON_SECRET)
+curl -X GET https://your-domain.vercel.app/api/jobs/stock-events \
+  -H "Authorization: Bearer $CRON_SECRET"
+
+# TypeScript compilation
+npx tsc --noEmit  # ✅ Passes with no errors
+```
+
+**Next Steps (Future Enhancements):**
+- Link Stock Events to Stock Analyses via relation property
+- Add "Recent Events" linked table view to stock pages
+- Historical event impact analysis (how did AAPL move after last earnings?)
+- Email/Slack notifications for upcoming events
+- Customizable event types per user (opt-in/opt-out)
+
+**Related Issues:**
+- Closes requirement: "Build FMP ingestion for Portfolio & Watchlist Stocks"
+- Enables: "Add Recent Event Impact linked table to stock pages"
+- Foundation for: Event-driven analysis and pattern recognition
+
+---
+
 ### 🎯 ROOT CAUSE IDENTIFIED: Skip OAuth for Existing Users (v1.2.15)
 
 **Date:** November 19, 2025

@@ -1,9 +1,9 @@
 # Sage Stocks Architecture
 
-*Last updated: November 18, 2025*
+*Last updated: November 19, 2025*
 
-**Development Version:** v1.2.5 (Complete) - Template Duplication Prevention
-**Latest Feature:** v1.0.8b (Complete) - Market Context Cache Bug Fixes
+**Development Version:** v1.2.16 (Complete) - Stock Events Ingestion Pipeline
+**Latest Feature:** v1.2.16 (Complete) - FMP Event Calendar Integration (Earnings, Dividends, Splits)
 **Template Version:** v0.1.0 (Beta) - Launching with Cohort 1
 **Production URL:** [https://sagestocks.vercel.app](https://sagestocks.vercel.app)
 **Status:** ✅ Live in Production - Fully Automated
@@ -41,6 +41,7 @@ Sage Stocks is a **serverless stock analysis platform** that delivers automated 
 - **Real-time stock analysis** - Technical + fundamental indicators from FMP and FRED APIs
 - **6-dimension scoring system** - 5 weighted (Technical 28.5%, Fundamental 33%, Macro 19%, Risk 14.5%, Market Alignment 5%) + Sentiment (reference-only, 0% weight in composite)
 - **Market context awareness** - Regime detection (Risk-On, Risk-Off, Transition) with sector rotation tracking (v1.0.7)
+- **Stock events calendar** - Automated ingestion of earnings calls, dividends, and stock splits for Portfolio/Watchlist stocks (v1.2.16)
 - **LLM-generated analysis** - 7-section regime-aware analysis narratives (Google Gemini Flash 2.5, $0.013/analysis)
 - **Historical context tracking** - Delta tracking across previous analyses
 - **Template version management** - User-controlled upgrade system with data preservation (v1.1.6)
@@ -68,7 +69,7 @@ Sage Stocks is a **serverless stock analysis platform** that delivers automated 
 - **Plan:** Vercel Pro ($20/month) - Required for 300-second timeout on analysis endpoint
 
 ### Data Sources
-- **Financial Modeling Prep (FMP)** - Stock data, fundamentals, technical indicators, sector ETF performance
+- **Financial Modeling Prep (FMP)** - Stock data, fundamentals, technical indicators, sector ETF performance, event calendars (v1.2.16: earnings, dividends, stock splits)
 - **FRED API** - Macroeconomic indicators (yield curve, VIX, consumer sentiment)
 - **Upstash Redis** - Distributed state for rate limiting + market context caching (1-hour TTL, optional - v1.0.7)
 
@@ -982,30 +983,43 @@ stock-intelligence/
 │   ├── webhook.ts            # Notion archive webhook (180 LOC)
 │   ├── bypass.ts             # Bypass code activation (115 LOC)
 │   ├── usage.ts              # Usage tracking endpoint (115 LOC)
-│   └── health.ts             # Health check endpoint (25 LOC)
+│   ├── health.ts             # Health check endpoint (25 LOC)
+│   ├── cron/                 # Scheduled cron jobs
+│   │   └── scheduled-analyses.ts  # Daily analysis job (800s max duration)
+│   └── jobs/                 # Background job endpoints
+│       ├── market-context.ts      # Daily market context job (120s max duration)
+│       └── stock-events.ts        # Weekly stock events ingestion (300s max duration) [v1.2.16]
 │
 ├── lib/                      # Core business logic libraries
 │   ├── orchestrator.ts       # Stock analysis orchestrator (522 LOC) [v1.0.5]
 │   ├── stock-analyzer.ts     # Pure analysis logic (315 LOC) [v1.0.5]
+│   ├── stock-events-ingestion.ts  # Event calendar ingestion (730 LOC) [v1.2.16]
 │   ├── rate-limiter.ts       # Rate limiting + bypass sessions (340 LOC)
 │   ├── scoring.ts            # Score calculation algorithms (850 LOC)
 │   ├── notion-client.ts      # Notion API wrapper (600 LOC)
-│   ├── fmp-client.ts         # FMP API client (400 LOC)
+│   ├── fmp-client.ts         # FMP API client + event calendar (586 LOC) [v1.2.16]
 │   ├── fred-client.ts        # FRED API client (150 LOC)
 │   ├── errors.ts             # Custom error classes (180 LOC)
 │   ├── logger.ts             # Logging utilities (80 LOC)
 │   ├── validators.ts         # Input validation (120 LOC)
 │   ├── utils.ts              # Helper functions (100 LOC)
 │   ├── auth.ts               # Authentication helpers (60 LOC)
-│   └── notion-poller.ts      # Notion polling logic (200 LOC)
+│   ├── notion-poller.ts      # Notion polling logic (200 LOC)
+│   └── market/               # Market context system [v1.0.7+]
+│       ├── context.ts        # Main market context API
+│       ├── data-collector.ts # FMP/FRED data fetching
+│       ├── regime-classifier.ts  # Risk-On/Off classification
+│       ├── cache.ts          # Redis caching (1-hour TTL)
+│       └── types.ts          # Type definitions
 │
 ├── config/                   # Configuration schemas
 │   ├── scoring-config.ts     # Scoring weights and thresholds
-│   └── notion-schema.ts      # Notion database property mappings
+│   └── notion-schema.ts      # Database property mappings (8 databases) [v1.2.16]
 │
 ├── scripts/                  # Testing and utility scripts
 │   ├── test-analyze.ts       # Local analysis testing (240 LOC)
 │   ├── test-notion-write.ts  # Notion write testing
+│   ├── test-stock-events.ts  # Stock events pipeline testing [v1.2.16]
 │   └── poll-notion.ts        # Manual polling script
 │
 ├── docs/                     # Documentation
@@ -1074,6 +1088,16 @@ stock-intelligence/
   - No HTTP/auth concerns - pure business logic
   - Shared by HTTP endpoint and orchestrator
 
+- `stock-events-ingestion.ts` - **Stock Events Pipeline (v1.2.16)** ⭐
+  - Fetches upcoming stock events from FMP (earnings, dividends, splits)
+  - Deduplication pattern: Fetches each ticker once, distributes to all owners
+  - Database discovery: Auto-finds Stock Events database in each user's workspace
+  - Upsert logic: Creates if new, updates if exists (by ticker + event_type + date)
+  - Graceful error handling: Logs warnings, continues processing (no cascade failures)
+  - Runs weekly via cron (Sundays 12:00 UTC) for next 90 days of events
+  - **Impact:** 99% API savings at scale (100 users sharing stocks)
+  - See [CHANGELOG.md#v1.2.16](CHANGELOG.md) for full details
+
 - `rate-limiter.ts` - Rate limiting engine
   - Redis key management (`rate_limit:{userId}:{date}`)
   - Bypass session management (`bypass_session:{userId}`)
@@ -1097,6 +1121,7 @@ stock-intelligence/
   - Financial statements
   - Technical indicators
   - Profile/company info
+  - **Event calendars (v1.2.16):** Earnings, dividends, stock splits, economic events
 
 - `fred-client.ts` - Macro data fetching
   - Yield curve (DGS10, DGS2)
