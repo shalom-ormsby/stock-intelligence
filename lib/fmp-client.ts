@@ -122,6 +122,51 @@ interface FinancialRatios {
   [key: string]: any; // Allow other ratios
 }
 
+// Event Calendar Interfaces (v1.2.16 - Stock Events Pipeline)
+
+export interface EarningsCalendarEvent {
+  symbol: string;
+  date: string; // Date of earnings call (YYYY-MM-DD)
+  eps?: number | null; // Actual EPS (null if not yet reported)
+  epsEstimated?: number | null; // Estimated EPS
+  time?: string; // "bmo" (before market open), "amc" (after market close), or specific time
+  revenue?: number | null; // Actual revenue
+  revenueEstimated?: number | null; // Estimated revenue
+  fiscalDateEnding?: string; // Quarter/year end date
+  updatedFromDate?: string; // Last update timestamp
+}
+
+export interface DividendCalendarEvent {
+  symbol: string;
+  date: string; // Ex-dividend date (YYYY-MM-DD)
+  label?: string; // e.g., "August 07, 2023"
+  adjDividend?: number; // Adjusted dividend amount per share
+  dividend?: number; // Dividend amount per share
+  recordDate?: string; // Record date
+  paymentDate?: string; // Payment date
+  declarationDate?: string; // Declaration date
+}
+
+export interface StockSplitEvent {
+  symbol: string;
+  date: string; // Split date (YYYY-MM-DD)
+  label?: string; // e.g., "August 31, 2020"
+  numerator?: number; // Split ratio numerator (e.g., 4 in "4:1")
+  denominator?: number; // Split ratio denominator (e.g., 1 in "4:1")
+}
+
+export interface EconomicCalendarEvent {
+  event: string; // Event name (e.g., "GDP Growth Rate")
+  date: string; // Event date (YYYY-MM-DD HH:MM:SS)
+  country?: string; // Country code (e.g., "US")
+  actual?: number | null; // Actual value
+  previous?: number | null; // Previous value
+  estimate?: number | null; // Estimated value
+  change?: number | null; // Change from previous
+  changePercentage?: number | null; // Change percentage
+  impact?: string; // "High", "Medium", "Low"
+}
+
 export class FMPClient {
   private client: AxiosInstance;
   private apiKey: string;
@@ -384,6 +429,160 @@ export class FMPClient {
     );
 
     return response.data || [];
+  }
+
+  // ========================================
+  // EVENT CALENDAR METHODS (v1.2.16)
+  // For Stock Events Pipeline
+  // ========================================
+
+  /**
+   * Get earnings calendar for a date range
+   *
+   * @param from Start date (YYYY-MM-DD)
+   * @param to End date (YYYY-MM-DD)
+   * @returns Array of earnings events
+   *
+   * @example
+   * const events = await fmpClient.getEarningsCalendar('2025-01-01', '2025-03-31');
+   */
+  async getEarningsCalendar(from: string, to: string): Promise<EarningsCalendarEvent[]> {
+    const timer = createTimer('FMP getEarningsCalendar', { from, to });
+
+    try {
+      const response = await this.client.get<EarningsCalendarEvent[]>(
+        '/earning_calendar',
+        {
+          params: { from, to },
+        }
+      );
+
+      const duration = timer.end(true);
+      logAPICall('FMP', 'getEarningsCalendar', duration, true, {
+        from,
+        to,
+        count: response.data?.length || 0
+      });
+
+      return response.data || [];
+    } catch (error) {
+      timer.endWithError(error as Error);
+      logAPICall('FMP', 'getEarningsCalendar', 0, false, { from, to });
+      warn('FMP earnings calendar fetch failed, returning empty array', { from, to, error });
+      return []; // Graceful degradation - optional data
+    }
+  }
+
+  /**
+   * Get dividend calendar for a date range
+   *
+   * @param from Start date (YYYY-MM-DD)
+   * @param to End date (YYYY-MM-DD)
+   * @returns Array of dividend events
+   *
+   * @example
+   * const events = await fmpClient.getDividendCalendar('2025-01-01', '2025-03-31');
+   */
+  async getDividendCalendar(from: string, to: string): Promise<DividendCalendarEvent[]> {
+    const timer = createTimer('FMP getDividendCalendar', { from, to });
+
+    try {
+      const response = await this.client.get<DividendCalendarEvent[]>(
+        '/stock_dividend_calendar',
+        {
+          params: { from, to },
+        }
+      );
+
+      const duration = timer.end(true);
+      logAPICall('FMP', 'getDividendCalendar', duration, true, {
+        from,
+        to,
+        count: response.data?.length || 0
+      });
+
+      return response.data || [];
+    } catch (error) {
+      timer.endWithError(error as Error);
+      logAPICall('FMP', 'getDividendCalendar', 0, false, { from, to });
+      warn('FMP dividend calendar fetch failed, returning empty array', { from, to, error });
+      return []; // Graceful degradation - optional data
+    }
+  }
+
+  /**
+   * Get stock split calendar for a date range
+   *
+   * @param from Start date (YYYY-MM-DD)
+   * @param to End date (YYYY-MM-DD)
+   * @returns Array of stock split events
+   *
+   * @example
+   * const events = await fmpClient.getStockSplitCalendar('2025-01-01', '2025-03-31');
+   */
+  async getStockSplitCalendar(from: string, to: string): Promise<StockSplitEvent[]> {
+    const timer = createTimer('FMP getStockSplitCalendar', { from, to });
+
+    try {
+      const response = await this.client.get<StockSplitEvent[]>(
+        '/stock_split_calendar',
+        {
+          params: { from, to },
+        }
+      );
+
+      const duration = timer.end(true);
+      logAPICall('FMP', 'getStockSplitCalendar', duration, true, {
+        from,
+        to,
+        count: response.data?.length || 0
+      });
+
+      return response.data || [];
+    } catch (error) {
+      timer.endWithError(error as Error);
+      logAPICall('FMP', 'getStockSplitCalendar', 0, false, { from, to });
+      warn('FMP stock split calendar fetch failed, returning empty array', { from, to, error });
+      return []; // Graceful degradation - optional data
+    }
+  }
+
+  /**
+   * Get economic calendar for a date range
+   * Used to track guidance and macroeconomic events
+   *
+   * @param from Start date (YYYY-MM-DD)
+   * @param to End date (YYYY-MM-DD)
+   * @returns Array of economic events
+   *
+   * @example
+   * const events = await fmpClient.getEconomicCalendar('2025-01-01', '2025-03-31');
+   */
+  async getEconomicCalendar(from: string, to: string): Promise<EconomicCalendarEvent[]> {
+    const timer = createTimer('FMP getEconomicCalendar', { from, to });
+
+    try {
+      const response = await this.client.get<EconomicCalendarEvent[]>(
+        '/economic_calendar',
+        {
+          params: { from, to },
+        }
+      );
+
+      const duration = timer.end(true);
+      logAPICall('FMP', 'getEconomicCalendar', duration, true, {
+        from,
+        to,
+        count: response.data?.length || 0
+      });
+
+      return response.data || [];
+    } catch (error) {
+      timer.endWithError(error as Error);
+      logAPICall('FMP', 'getEconomicCalendar', 0, false, { from, to });
+      warn('FMP economic calendar fetch failed, returning empty array', { from, to, error });
+      return []; // Graceful degradation - optional data
+    }
   }
 
   /**

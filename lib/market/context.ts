@@ -89,11 +89,11 @@ export async function getMarketContext(
       economic,
     });
 
-    // Step 5: Build complete market context
-    const now = new Date();
+    // Step 5: Build complete market context (using Pacific Time)
+    const { getPacificTime } = await import('../utils');
     const marketContext: MarketContext = {
-      timestamp: now.toISOString(),
-      date: now.toISOString().split('T')[0], // YYYY-MM-DD
+      timestamp: new Date().toISOString(), // Keep UTC for internal tracking
+      date: getPacificTime('date'), // YYYY-MM-DD in Pacific Time
 
       // Regime classification
       regime: regimeClassification.regime,
@@ -138,7 +138,7 @@ export async function getMarketContext(
 
     // Graceful degradation: return neutral context
     console.warn('[MARKET] ⚠️  Returning neutral market context as fallback');
-    return getNeutralMarketContext();
+    return await getNeutralMarketContext();
   }
 }
 
@@ -147,12 +147,12 @@ export async function getMarketContext(
  *
  * Returns a neutral/transition regime with null/zero values
  */
-function getNeutralMarketContext(): MarketContext {
-  const now = new Date();
+async function getNeutralMarketContext(): Promise<MarketContext> {
+  const { getPacificTime } = await import('../utils');
 
   return {
-    timestamp: now.toISOString(),
-    date: now.toISOString().split('T')[0],
+    timestamp: new Date().toISOString(),
+    date: getPacificTime('date'),
 
     regime: 'Transition',
     regimeConfidence: 0.5,

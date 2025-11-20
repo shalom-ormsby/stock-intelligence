@@ -388,6 +388,54 @@ export function isDefined<T>(value: T | null | undefined): value is T {
 }
 
 /**
+ * Get current date/time in Pacific Time (America/Los_Angeles)
+ *
+ * @param format - Output format: 'date' (YYYY-MM-DD), 'datetime' (ISO string in PT), 'display' (formatted string)
+ * @returns Date/time string in Pacific Time
+ *
+ * @example
+ * getPacificTime('date')     // "2025-11-19"
+ * getPacificTime('datetime') // "2025-11-19T17:30:00.000-08:00"
+ * getPacificTime('display')  // "Nov 19, 2025, 5:30 PM"
+ */
+export function getPacificTime(format: 'date' | 'datetime' | 'display' = 'date'): string {
+  const now = new Date();
+
+  if (format === 'date') {
+    // Get YYYY-MM-DD in Pacific Time
+    const dateStr = now.toLocaleDateString('en-US', {
+      timeZone: 'America/Los_Angeles',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+
+    // Convert from MM/DD/YYYY to YYYY-MM-DD
+    const [month, day, year] = dateStr.split('/');
+    return `${year}-${month}-${day}`;
+  } else if (format === 'datetime') {
+    // Get ISO string in Pacific Time
+    return now.toLocaleString('en-US', {
+      timeZone: 'America/Los_Angeles',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).replace(/(\d+)\/(\d+)\/(\d+),\s(\d+):(\d+):(\d+)/, '$3-$1-$2T$4:$5:$6');
+  } else {
+    // Display format
+    return now.toLocaleString('en-US', {
+      timeZone: 'America/Los_Angeles',
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+  }
+}
+
+/**
  * Get value or default
  */
 export function getOrDefault<T>(

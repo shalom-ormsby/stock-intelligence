@@ -18,6 +18,9 @@
     },
     "api/cron/scheduled-analyses.ts": {
       "maxDuration": 800
+    },
+    "api/jobs/stock-events.ts": {
+      "maxDuration": 300
     }
   },
   "crons": [
@@ -28,6 +31,10 @@
     {
       "path": "/api/cron/scheduled-analyses",
       "schedule": "30 13 * * 1-5"
+    },
+    {
+      "path": "/api/jobs/stock-events",
+      "schedule": "0 12 * * 0"
     }
   ],
   "buildCommand": "npm run type-check",

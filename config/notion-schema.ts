@@ -213,6 +213,12 @@ export const MARKET_CONTEXT_SCHEMA: NotionProperty[] = [
   { name: 'SPY Change (1M)', type: 'number', description: 'S&P 500 1-month change' },
   { name: 'QQQ Change (1D)', type: 'number', description: 'Nasdaq 1-day change' },
   { name: 'VIX Level', type: 'number', description: 'Volatility index level' },
+  {
+    name: 'Market Direction',
+    type: 'select',
+    options: ['Up', 'Down', 'Sideways'],
+    description: 'Overall market trend based on S&P 500 1-month performance'
+  },
 
   // Economic indicators
   { name: 'Fed Funds Rate', type: 'number', description: 'Current Fed funds rate' },
@@ -333,6 +339,70 @@ export const BETA_FEEDBACK_SCHEMA: NotionProperty[] = [
 ];
 
 /**
+ * Stock Events Database Schema (v1.2.16 - NEW)
+ * Upcoming stock events (earnings, dividends, splits, guidance) from FMP API
+ * Used for calendar tracking and event-driven analysis
+ */
+export const STOCK_EVENTS_SCHEMA: NotionProperty[] = [
+  // Primary fields
+  { name: 'Event Name', type: 'title', required: true, description: 'Auto-generated: {TICKER} {Event Type}' },
+  { name: 'Event Date', type: 'date', required: true, description: 'When the event occurs' },
+  { name: 'Ticker', type: 'rich_text', required: true, description: 'Stock ticker symbol for filtering' },
+
+  // Event details
+  {
+    name: 'Event Type',
+    type: 'select',
+    required: true,
+    options: ['Earnings Call', 'Dividend', 'Stock Split', 'Guidance', 'Economic Event'],
+    description: 'Type of stock event'
+  },
+  { name: 'Description', type: 'rich_text', description: 'Event details (EPS estimates, dividend amount, split ratio, etc.)' },
+
+  // Status tracking
+  {
+    name: 'Status',
+    type: 'select',
+    options: ['Upcoming', 'Today', 'Completed', 'Cancelled'],
+    description: 'Event lifecycle status'
+  },
+
+  // Quality metrics
+  {
+    name: 'Confidence',
+    type: 'select',
+    options: ['High', 'Medium-High', 'Medium', 'Low'],
+    description: 'Data confidence level (High for FMP-sourced events)'
+  },
+  {
+    name: 'Timing Precision',
+    type: 'select',
+    options: ['Date Confirmed', 'Estimated', 'Preliminary'],
+    description: 'How precise is the event date?'
+  },
+
+  // Data source
+  {
+    name: 'Event Source',
+    type: 'select',
+    options: ['FMP API', 'Manual Entry', 'Company Announcement'],
+    description: 'Where this event data came from'
+  },
+  { name: 'Created Date', type: 'created_time', description: 'When this event was added to database' },
+  { name: 'Last Updated', type: 'last_edited_time', description: 'Last modification timestamp' },
+
+  // Relations
+  { name: 'Stock', type: 'relation', description: 'Link to Stock Analyses database' },
+
+  // Additional event-specific data
+  { name: 'EPS Estimate', type: 'number', description: 'Expected earnings per share (for earnings calls)' },
+  { name: 'Dividend Amount', type: 'number', description: 'Dividend per share (for dividend events)' },
+  { name: 'Split Ratio', type: 'rich_text', description: 'Split ratio like "2:1" or "3:2" (for stock splits)' },
+  { name: 'Fiscal Quarter', type: 'rich_text', description: 'Q1, Q2, Q3, Q4 (for earnings)' },
+  { name: 'Fiscal Year', type: 'number', description: 'Fiscal year (for earnings)' },
+];
+
+/**
  * Get all required database schemas
  */
 export const ALL_SCHEMAS = {
@@ -343,6 +413,7 @@ export const ALL_SCHEMAS = {
   usageTracking: USAGE_TRACKING_SCHEMA,
   betaUsers: BETA_USERS_SCHEMA,
   betaFeedback: BETA_FEEDBACK_SCHEMA,
+  stockEvents: STOCK_EVENTS_SCHEMA,
 };
 
 /**
@@ -356,4 +427,5 @@ export const DATABASE_NAMES = {
   usageTracking: 'Usage Tracking',
   betaUsers: 'Beta Users',
   betaFeedback: 'Beta Feedback',
+  stockEvents: 'Stock Events',
 };
