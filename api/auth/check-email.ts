@@ -1,17 +1,16 @@
 /**
  * Email Check Endpoint
  *
- * Checks if a user exists in the Beta Users database and if they have a template.
- * This runs BEFORE OAuth to determine the correct user flow:
- * - Existing user with template: Go straight to OAuth
- * - New user / No template: Show manual template setup first
+ * Checks if a user exists in the Beta Users database and determines routing:
+ * - Existing user with template: Create session, skip OAuth, redirect to /analyze
+ * - New user: Go through OAuth (template will be auto-created by Notion integration settings)
  *
- * v1.2.14: Pre-OAuth database check
+ * v1.2.15: Skip OAuth for existing users (final fix for template duplication)
  */
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { log, LogLevel } from '../../lib/logger';
-import { getUserByEmail } from '../../lib/auth';
+import { getUserByEmail, storeUserSession } from '../../lib/auth';
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
@@ -27,7 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    log(LogLevel.INFO, 'Email check requested (pre-OAuth)', {
+    log(LogLevel.INFO, 'Email check requested', {
       email: normalizedEmail,
     });
 
@@ -35,34 +34,70 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const existingUser = await getUserByEmail(normalizedEmail);
 
     if (!existingUser) {
-      log(LogLevel.INFO, 'User not found in database', {
+      log(LogLevel.INFO, 'New user - needs OAuth', {
         email: normalizedEmail,
       });
       res.status(200).json({
         success: true,
         exists: false,
         hasTemplate: false,
+        requiresOAuth: true,
       });
       return;
     }
 
-    // User exists - check if they have a template set up
+    // User exists - check if they have a template and valid token
     const hasTemplate = Boolean(existingUser.sageStocksPageId);
+    const hasAccessToken = Boolean(existingUser.accessToken);
 
-    log(LogLevel.INFO, 'User found in database', {
+    log(LogLevel.INFO, 'Existing user found', {
       email: normalizedEmail,
       userId: existingUser.id,
       notionUserId: existingUser.notionUserId,
       hasTemplate,
+      hasAccessToken,
       sageStocksPageId: existingUser.sageStocksPageId,
+    });
+
+    if (hasTemplate && hasAccessToken) {
+      // v1.2.15 KEY FIX: Create session for existing user, skip OAuth entirely
+      // This prevents template duplication caused by Notion integration settings
+      await storeUserSession(res, {
+        userId: existingUser.id,
+        email: existingUser.email,
+        name: existingUser.name,
+        notionUserId: existingUser.notionUserId,
+      });
+
+      log(LogLevel.INFO, 'Session created for existing user - skipping OAuth', {
+        userId: existingUser.id,
+        email: normalizedEmail,
+        reason: 'v1.2.15_skip_oauth_for_existing_users',
+      });
+
+      res.status(200).json({
+        success: true,
+        exists: true,
+        hasTemplate: true,
+        requiresOAuth: false,
+        redirectTo: '/analyze.html',
+      });
+      return;
+    }
+
+    // User exists but missing template or token - needs OAuth
+    log(LogLevel.INFO, 'Existing user needs OAuth (missing template or token)', {
+      userId: existingUser.id,
+      email: normalizedEmail,
+      hasTemplate,
+      hasAccessToken,
     });
 
     res.status(200).json({
       success: true,
       exists: true,
       hasTemplate,
-      userId: existingUser.id,
-      notionUserId: existingUser.notionUserId,
+      requiresOAuth: true,
     });
   } catch (error) {
     log(LogLevel.ERROR, 'Email check error', {

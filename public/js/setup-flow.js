@@ -52,7 +52,7 @@ let currentState = {
 
 /**
  * Handle setup flow initiation with database check
- * v1.2.14: Check database BEFORE OAuth to determine user path
+ * v1.2.15: Skip OAuth entirely for existing users (prevents template duplication)
  */
 async function handleSetupStart(emailInput = null) {
   // Check if user has an existing session
@@ -72,7 +72,7 @@ async function handleSetupStart(emailInput = null) {
     localStorage.setItem('sage_stocks_user_email', userEmail);
   }
 
-  // Check database: Does this user already have a template?
+  // Check database: Route based on user status
   try {
     console.log('🔍 Checking database for existing user...');
 
@@ -80,19 +80,20 @@ async function handleSetupStart(emailInput = null) {
       const response = await fetch(`/api/auth/check-email?email=${encodeURIComponent(userEmail)}`);
       const data = await response.json();
 
-      if (data.exists && data.hasTemplate) {
-        // Existing user with template: Go straight to OAuth
-        console.log('✅ Existing user detected - going to OAuth');
+      if (!data.requiresOAuth && data.redirectTo) {
+        // v1.2.15 KEY FIX: Existing user - skip OAuth entirely
+        // Session already created by check-email endpoint
+        console.log('✅ Existing user - skipping OAuth, redirecting to app');
+        window.location.href = data.redirectTo;
+      } else if (data.requiresOAuth) {
+        // New user OR reconnection needed: Go through OAuth
+        console.log('🔐 OAuth required - redirecting to authorization');
         proceedToOAuth(userEmail);
-      } else {
-        // New user OR existing user without template: Show manual setup
-        console.log('📄 New user or no template - showing manual setup');
-        showManualSetupStep();
       }
     } else if (hasSessionCookie) {
-      // Has session: Go straight to OAuth
-      console.log('✅ Session detected - going to OAuth');
-      proceedToOAuth();
+      // Has session: Skip to app
+      console.log('✅ Session detected - going to app');
+      window.location.href = '/analyze.html';
     }
   } catch (error) {
     console.error('❌ Database check failed:', error);
