@@ -53,11 +53,11 @@ async function searchUserDatabases(notionToken: string): Promise<any[]> {
 
   console.log('🔍 [searchUserDatabases] Starting database search...');
   console.log('🔍 [searchUserDatabases] API version: 2025-09-03');
-  console.log('🔍 [searchUserDatabases] Filter: { property: "object", value: "data_source" }');
+  console.log('🔍 [searchUserDatabases] Filter: { property: "object", value: "database" }');
 
   while (hasMore) {
     const response = await notion.search({
-      filter: { property: 'object', value: 'data_source' },
+      filter: { property: 'object', value: 'database' },
       start_cursor: startCursor,
       page_size: 100,
     });

@@ -227,7 +227,7 @@ async function checkForDuplicates(notion: Client): Promise<{
   sageStocksPages: number;
 }> {
   const databasesResponse = await notion.search({
-    filter: { property: 'object', value: 'data_source' },
+    filter: { property: 'object', value: 'database' },
     page_size: 100,
   });
 
