@@ -142,62 +142,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       stateDataHasExistingTemplate: stateData?.hasExistingTemplate,
     });
 
-    // v1.2.10 CRITICAL FIX: AGGRESSIVE duplicate template detection and cleanup
-    // This runs IMMEDIATELY after OAuth to catch and archive duplicates before user sees them
-    let sageStocksPages: any[] = [];
-    let userNotion: any = null;
-
-    try {
-      const { Client } = await import('@notionhq/client');
-      userNotion = new Client({ auth: accessToken, notionVersion: '2025-09-03' });
-
-      log(LogLevel.INFO, 'Searching for Sage Stocks templates in workspace...', {
-        userId,
-        email: userEmail,
-        isExistingUser: !!existingUser,
-        stateDataIndicatesExistingTemplate: stateData?.hasExistingTemplate,
-      });
-
-      const searchResults = await userNotion.search({
-        filter: { property: 'object', value: 'page' },
-        page_size: 100, // Increased to catch all pages
-      });
-
-      // Find ALL Sage Stocks pages
-      sageStocksPages = searchResults.results.filter((p: any) =>
-        p.object === 'page' &&
-        p.properties?.title?.title?.[0]?.plain_text?.includes('Sage Stocks')
-      );
-
-      log(LogLevel.WARN, 'Template search complete', {
-        totalPagesAccessible: searchResults.results.length,
-        sageStocksFoundCount: sageStocksPages.length,
-        sageStocksIds: sageStocksPages.map((p: any) => p.id),
-        sageStocksCreatedTimes: sageStocksPages.map((p: any) => ({ id: p.id, created: p.created_time })),
-        templateIdWasSet: !!process.env.SAGE_STOCKS_TEMPLATE_ID,
-        userIsExisting: !!existingUser,
-        userHasSavedPageId: !!existingUser?.sageStocksPageId,
-        stateDataHasExistingTemplate: stateData?.hasExistingTemplate,
-      });
-
-      if (sageStocksPages.length === 0 && process.env.SAGE_STOCKS_TEMPLATE_ID) {
-        log(LogLevel.WARN, 'Template was NOT duplicated during OAuth despite template_id being set', {
-          templateId: process.env.SAGE_STOCKS_TEMPLATE_ID,
-          pagesFound: searchResults.results.length,
-          userEmail,
-          isExistingUser: !!existingUser,
-        });
-      }
-    } catch (diagError) {
-      log(LogLevel.ERROR, 'Template search failed (non-critical)', {
-        error: diagError instanceof Error ? diagError.message : String(diagError),
-        userEmail,
-      });
-    }
-
-    // v1.2.13: Template search is now for information only
-    // No automatic cleanup - template duplication is manual in Step 2
-    // This search helps us know if user already has a template set up
+    // v1.2.17: Removed legacy "Aggressive duplicate template detection"
+    // We now force manual duplication in Step 1.5, so we don't need to search for duplicates here.
+    // This significantly speeds up the OAuth callback.
 
     // Step 5: Create or update user in Beta Users database
     const user = await createOrUpdateUser({
@@ -269,9 +216,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       //   // Setup already complete - go to analyzer
       //   res.redirect('/analyze.html');
       // } else {
-        // New user or incomplete setup - go to single-page setup flow
-        // v1.2.14: Step 2 = Verify Template (check that user duplicated in Step 1.5)
-        res.redirect('/?step=2'); // OAuth (step 1) just completed, now verify workspace at step 2
+      // New user or incomplete setup - go to single-page setup flow
+      // v1.2.14: Step 2 = Verify Template (check that user duplicated in Step 1.5)
+      res.redirect('/?step=2'); // OAuth (step 1) just completed, now verify workspace at step 2
       // }
       return;
     }

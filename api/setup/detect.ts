@@ -72,9 +72,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // CRITICAL: This must succeed or the first analysis will fail!
     // v1.2.9 Fix: Only save if ALL required databases are detected (not just the page)
     if (!detection.needsManual &&
-        detection.sageStocksPage &&
-        detection.stockAnalysesDb &&
-        detection.stockHistoryDb) {
+      detection.sageStocksPage &&
+      detection.stockAnalysesDb &&
+      detection.stockHistoryDb) {
       // Store IDs for use in retry closure
       const detectedIds = {
         sageStocksPageId: detection.sageStocksPage.id,
@@ -134,7 +134,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           },
           errors: [{
             step: 3,
-            message: 'Could not auto-detect all databases. Please enter them manually.',
+            message: 'We found the Sage Stocks page, but the databases are missing or empty. Please wait a moment for Notion to finish creating them, then try again.',
             code: 'PARTIAL_DETECTION',
           }],
         });

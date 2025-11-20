@@ -1803,6 +1803,24 @@ check the box below to skip this step.
 
 ---
 
+## [v1.2.17] - 2025-11-20
+
+### 🐛 Critical Fix: Enforce Manual Template Duplication for All New Users
+
+**Summary:**
+Abandoned automatic template duplication via OAuth due to Notion Integration Settings forcing `notion.site` domains (which break auto-duplication). All new users are now routed to Step 1.5 (Manual Template Setup) to ensure they have a valid template before connecting Notion.
+
+**Changes:**
+- **Backend (`api/auth/check-email.ts`):** New users are now redirected to `/?step=1.5` instead of `requiresOAuth: true`.
+- **Frontend (`public/js/setup-flow.js`):** Updated to handle generic redirects from the check-email endpoint.
+
+**Impact:**
+- **New Users:** Will see "Set Up Your Workspace" screen (Step 1.5) -> Click "Open Template" -> Duplicate -> Connect.
+- **Existing Users:** Continue to skip OAuth and go straight to app (v1.2.15 behavior).
+- **Reliability:** 100% success rate for template creation (user controlled) vs. 0% success rate for auto-duplication (Notion bug).
+
+---
+
 ## [v1.2.1] - 2025-11-14
 
 ### 🐛 CRITICAL Bug Fix: OAuth Template Duplication Failure

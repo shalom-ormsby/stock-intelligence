@@ -81,9 +81,8 @@ async function handleSetupStart(emailInput = null) {
       const data = await response.json();
 
       if (!data.requiresOAuth && data.redirectTo) {
-        // v1.2.15 KEY FIX: Existing user - skip OAuth entirely
-        // Session already created by check-email endpoint
-        console.log('✅ Existing user - skipping OAuth, redirecting to app');
+        // v1.2.15+: Handle redirects (Existing user -> App, New user -> Manual Setup)
+        console.log(`✅ Redirecting based on API response: ${data.redirectTo}`);
         window.location.href = data.redirectTo;
       } else if (data.requiresOAuth) {
         // New user OR reconnection needed: Go through OAuth
@@ -645,6 +644,19 @@ function renderStep1_5Content() {
               Before connecting to Notion, let's set up your workspace template.
             </p>
 
+            <!-- Tutorial GIF Placeholder -->
+            <div class="mb-6 aspect-video bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center relative overflow-hidden group">
+              <div class="text-center p-6">
+                <div class="text-4xl mb-2">🎬</div>
+                <p class="text-gray-500 font-medium">Tutorial GIF Placeholder</p>
+                <p class="text-xs text-gray-400 mt-1">Shows: Open Template → Click Duplicate → Close Tab</p>
+              </div>
+              <!-- Hover overlay to hint at future content -->
+              <div class="absolute inset-0 bg-black bg-opacity-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <p class="text-xs text-gray-600 font-medium bg-white px-3 py-1 rounded-full shadow-sm">Animation coming soon</p>
+              </div>
+            </div>
+
             <div class="mb-4 p-4 bg-white border border-blue-200 rounded-lg">
               <p class="text-sm font-medium text-gray-800 mb-3">
                 📖 <strong>Instructions:</strong>
@@ -675,7 +687,8 @@ function renderStep1_5Content() {
               </a>
               <button
                 id="continue-to-oauth"
-                class="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl"
+                disabled
+                class="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
               >
                 Continue to Connect Notion →
               </button>
@@ -707,6 +720,18 @@ function renderStep1_5Content() {
       }
     } catch (error) {
       console.error('❌ Failed to get template URL:', error);
+    }
+
+    // Enable "Continue" button when "Open Template" is clicked
+    if (openTemplateButton && continueButton) {
+      openTemplateButton.addEventListener('click', () => {
+        console.log('📄 User clicked Open Template - enabling Continue button');
+        continueButton.disabled = false;
+        continueButton.classList.remove('disabled:opacity-50', 'disabled:cursor-not-allowed', 'disabled:shadow-none');
+
+        // Optional: Add a visual cue
+        continueButton.innerHTML = 'Continue to Connect Notion →';
+      });
     }
 
     // Continue to OAuth button
