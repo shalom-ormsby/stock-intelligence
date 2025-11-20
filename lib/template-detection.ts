@@ -457,31 +457,82 @@ async function detectSageStocksPage(
 }
 
 /**
- * Auto-detect all template components
+ * Auto-detect all template components with retry logic
+ *
+ * When Notion duplicates a template, the page appears immediately but databases
+ * take a few seconds to be created. This function retries up to 3 times with
+ * exponential backoff to wait for databases to appear.
  */
 export async function autoDetectTemplate(
   notionToken: string
 ): Promise<DetectionResult> {
-  const [stockAnalysesDb, stockHistoryDb, stockEventsDb, marketContextDb, sageStocksPage] = await Promise.all([
-    detectStockAnalysesDb(notionToken),
-    detectStockHistoryDb(notionToken),
-    detectStockEventsDb(notionToken),
-    detectMarketContextDb(notionToken),
-    detectSageStocksPage(notionToken),
-  ]);
+  const maxAttempts = 3;
+  const delays = [0, 3000, 5000]; // 0ms, 3s, 5s
 
-  // Determine if manual setup is needed
-  // We need at least the core databases to proceed automatically
-  const needsManual = !stockAnalysesDb || !stockHistoryDb || !stockEventsDb || !marketContextDb || !sageStocksPage;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    console.log(`🔍 [autoDetectTemplate] Attempt ${attempt}/${maxAttempts}`);
 
-  return {
-    stockAnalysesDb,
-    stockHistoryDb,
-    stockEventsDb,
-    marketContextDb,
-    sageStocksPage,
-    needsManual
-  };
+    // Wait before retry (except first attempt)
+    if (attempt > 1) {
+      const delay = delays[attempt - 1];
+      console.log(`⏱️  [autoDetectTemplate] Waiting ${delay}ms before retry...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+
+    const [stockAnalysesDb, stockHistoryDb, stockEventsDb, marketContextDb, sageStocksPage] = await Promise.all([
+      detectStockAnalysesDb(notionToken),
+      detectStockHistoryDb(notionToken),
+      detectStockEventsDb(notionToken),
+      detectMarketContextDb(notionToken),
+      detectSageStocksPage(notionToken),
+    ]);
+
+    // Determine if manual setup is needed
+    const needsManual = !stockAnalysesDb || !stockHistoryDb || !stockEventsDb || !marketContextDb || !sageStocksPage;
+
+    const foundCount = [stockAnalysesDb, stockHistoryDb, stockEventsDb, marketContextDb, sageStocksPage].filter(Boolean).length;
+    console.log(`📊 [autoDetectTemplate] Attempt ${attempt}: Found ${foundCount}/5 components`);
+
+    // If we found everything, return immediately
+    if (!needsManual) {
+      console.log(`✅ [autoDetectTemplate] All components found on attempt ${attempt}`);
+      return {
+        stockAnalysesDb,
+        stockHistoryDb,
+        stockEventsDb,
+        marketContextDb,
+        sageStocksPage,
+        needsManual: false
+      };
+    }
+
+    // If this is not the last attempt, log what's missing and continue
+    if (attempt < maxAttempts) {
+      console.log(`⚠️  [autoDetectTemplate] Missing components on attempt ${attempt}:`, {
+        stockAnalysesDb: !!stockAnalysesDb ? '✓' : '✗',
+        stockHistoryDb: !!stockHistoryDb ? '✓' : '✗',
+        stockEventsDb: !!stockEventsDb ? '✓' : '✗',
+        marketContextDb: !!marketContextDb ? '✓' : '✗',
+        sageStocksPage: !!sageStocksPage ? '✓' : '✗',
+      });
+      console.log(`🔄 [autoDetectTemplate] Retrying...`);
+      continue;
+    }
+
+    // Last attempt - return what we found
+    console.log(`❌ [autoDetectTemplate] Failed to find all components after ${maxAttempts} attempts`);
+    return {
+      stockAnalysesDb,
+      stockHistoryDb,
+      stockEventsDb,
+      marketContextDb,
+      sageStocksPage,
+      needsManual: true
+    };
+  }
+
+  // Should never reach here, but TypeScript requires a return
+  throw new Error('autoDetectTemplate: Unexpected end of function');
 }
 
 /**
