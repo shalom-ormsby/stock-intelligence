@@ -77,10 +77,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     const finalUrl = authUrl.toString();
 
-    log(LogLevel.INFO, 'OAuth URL constructed with template_id for automatic duplication', {
-      templateId,
+    log(LogLevel.INFO, 'OAuth URL constructed (manual template duplication flow)', {
       hasSession: !!session,
       completeUrl: finalUrl,
+      note: 'Users must manually duplicate template and select it during OAuth',
     });
 
     res.redirect(finalUrl);
