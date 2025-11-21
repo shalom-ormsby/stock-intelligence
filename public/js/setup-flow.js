@@ -320,6 +320,13 @@ async function advanceToStep(step, data = null) {
     renderStepContent();
 
     console.log(`✓ Advanced to step ${step}`);
+
+    // Auto-trigger database detection when advancing to step 3
+    if (step === 3) {
+      setTimeout(() => {
+        triggerAutoDetection();
+      }, 500);
+    }
   } catch (error) {
     console.error(`❌ Failed to advance to step ${step}:`, error);
     showError(`Failed to update progress: ${error.message}`);
