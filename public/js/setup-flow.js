@@ -521,8 +521,22 @@ function createStep1Content() {
               <li>In Notion, click the <strong>"Duplicate"</strong> button in the top-right</li>
               <li>Select your workspace and confirm</li>
               <li>Wait for the template to finish duplicating (usually 10-30 seconds)</li>
-              <li>Come back here and click "I've Duplicated the Template" below</li>
+              <li>Come back here and check the box below to confirm</li>
             </ol>
+          </div>
+
+          <div class="mb-4 p-4 bg-white border border-green-200 rounded-lg">
+            <label class="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                id="template-duplicated-checkbox"
+                class="mt-1 w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500"
+              />
+              <div class="flex-1">
+                <p class="text-sm font-medium text-gray-900">I've successfully duplicated the Sage Stocks template in my Notion workspace</p>
+                <p class="text-xs text-gray-600 mt-1">Make sure the template has finished duplicating before checking this box</p>
+              </div>
+            </label>
           </div>
 
           <button
@@ -530,7 +544,7 @@ function createStep1Content() {
             class="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
             disabled
           >
-            ✅ I've Duplicated the Template
+            ✅ Continue to Connect Notion
           </button>
         </div>
       </div>
@@ -541,6 +555,7 @@ function createStep1Content() {
   setTimeout(async () => {
     const openTemplateButton = section.querySelector('#open-template-button');
     const duplicatedButton = section.querySelector('#template-duplicated-button');
+    const duplicatedCheckbox = section.querySelector('#template-duplicated-checkbox');
 
     // Fetch template URL
     if (openTemplateButton) {
@@ -551,10 +566,6 @@ function createStep1Content() {
           
           if (data.success && data.url) {
             window.open(data.url, '_blank');
-            // Enable the "I've duplicated" button after opening template
-            if (duplicatedButton) {
-              duplicatedButton.disabled = false;
-            }
           } else {
             alert('Failed to get template URL. Please contact support.');
           }
@@ -565,10 +576,27 @@ function createStep1Content() {
       });
     }
 
+    // Enable/disable button based on checkbox
+    if (duplicatedCheckbox && duplicatedButton) {
+      duplicatedCheckbox.addEventListener('change', () => {
+        duplicatedButton.disabled = !duplicatedCheckbox.checked;
+      });
+    }
+
     // Move to Step 2 (OAuth) after template is duplicated
+    // NOTE: We don't call advanceToStep here because user isn't authenticated yet
+    // We just update local state and render Step 2
     if (duplicatedButton) {
-      duplicatedButton.addEventListener('click', async () => {
-        await advanceToStep(2, { step1Complete: true });
+      duplicatedButton.addEventListener('click', () => {
+        // Update local state (no API call needed - user isn't authenticated yet)
+        currentState.currentStep = 2;
+        currentState.completedSteps = [1];
+        
+        // Re-render the UI
+        renderSubwayMap();
+        renderStepContent();
+        
+        console.log('✓ Moved to Step 2: Connect Notion');
       });
     }
   }, 0);
