@@ -10,17 +10,17 @@
 const STEPS = [
   {
     number: 1,
+    title: 'Duplicate Template',
+    icon: '📄',
+    duration: '1 min',
+    description: 'Get the template',
+  },
+  {
+    number: 2,
     title: 'Connect Notion',
     icon: '🔗',
     duration: '1 min',
     description: 'Sign in with Notion',
-  },
-  {
-    number: 2,
-    title: 'Setup Workspace',
-    icon: '📄',
-    duration: '3-5 min',
-    description: 'Creating your databases',
   },
   {
     number: 3,
@@ -162,10 +162,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // If OAuth callback just completed (step=2 means OAuth succeeded, now verify)
+  // Note: step=2 in URL means OAuth completed, but we're now on Step 3 (verify + analyze)
   if (stepParam === '2') {
-    currentState.currentStep = 2;
-    currentState.completedSteps = [1]; // OAuth (step 1) is now complete
-    await advanceToStep(2, { step1Complete: true });
+    currentState.currentStep = 3;
+    currentState.completedSteps = [1, 2]; // Template duplication (step 1) and OAuth (step 2) are complete
+    await advanceToStep(3, { step2Complete: true });
   }
 
   // Render subway map and content
@@ -461,13 +462,15 @@ function renderStepContent() {
   // Render content based on current step
   switch (currentState.currentStep) {
     case 1:
+      // Step 1: Duplicate Template (BEFORE OAuth)
       container.appendChild(createStep1Content());
       break;
     case 2:
+      // Step 2: Connect Notion (OAuth - user selects duplicated pages)
       container.appendChild(createStep2Content());
       break;
     case 3:
-      // Step 3: Run first analysis on the setup page
+      // Step 3: Verify workspace and run first analysis
       container.appendChild(createStep3Content());
       break;
     case 4:
@@ -481,10 +484,103 @@ function renderStepContent() {
 }
 
 // ============================================================================
-// Step 1: Sign In with Notion (OAuth)
+// Step 1: Duplicate Template (BEFORE OAuth)
 // ============================================================================
 
 function createStep1Content() {
+  const section = document.createElement('div');
+  section.className = 'slide-in';
+
+  section.innerHTML = `
+    <div class="mb-6 p-6 rounded-lg border bg-blue-50 border-blue-200">
+      <div class="flex items-start">
+        <div class="text-3xl mr-4">📄</div>
+        <div class="flex-1">
+          <h3 class="font-bold text-gray-900 text-xl mb-2">Step 1 of 3: Duplicate the Sage Stocks Template</h3>
+          <p class="text-gray-700 mb-4">
+            First, duplicate our template into your Notion workspace. This creates all the databases you'll need for stock analysis.
+          </p>
+          
+          <div class="mb-4 p-4 bg-white border border-blue-200 rounded-lg">
+            <p class="text-sm text-gray-700 mb-3">
+              <strong>Important:</strong> You must duplicate the template <strong>before</strong> connecting your Notion account. 
+              This ensures the integration can access your duplicated pages.
+            </p>
+            <button
+              id="open-template-button"
+              class="w-full px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl"
+            >
+              📄 Open Template in Notion
+            </button>
+          </div>
+
+          <div class="p-4 bg-yellow-50 border-2 border-yellow-300 rounded-lg mb-4">
+            <p class="text-yellow-800 font-medium mb-2">📋 Instructions:</p>
+            <ol class="text-sm text-yellow-700 space-y-2 ml-4 list-decimal">
+              <li>Click "Open Template in Notion" above</li>
+              <li>In Notion, click the <strong>"Duplicate"</strong> button in the top-right</li>
+              <li>Select your workspace and confirm</li>
+              <li>Wait for the template to finish duplicating (usually 10-30 seconds)</li>
+              <li>Come back here and click "I've Duplicated the Template" below</li>
+            </ol>
+          </div>
+
+          <button
+            id="template-duplicated-button"
+            class="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled
+          >
+            ✅ I've Duplicated the Template
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Setup event listeners
+  setTimeout(async () => {
+    const openTemplateButton = section.querySelector('#open-template-button');
+    const duplicatedButton = section.querySelector('#template-duplicated-button');
+
+    // Fetch template URL
+    if (openTemplateButton) {
+      openTemplateButton.addEventListener('click', async () => {
+        try {
+          const response = await fetch('/api/setup/template-url');
+          const data = await response.json();
+          
+          if (data.success && data.url) {
+            window.open(data.url, '_blank');
+            // Enable the "I've duplicated" button after opening template
+            if (duplicatedButton) {
+              duplicatedButton.disabled = false;
+            }
+          } else {
+            alert('Failed to get template URL. Please contact support.');
+          }
+        } catch (error) {
+          console.error('Failed to fetch template URL:', error);
+          alert('Failed to open template. Please contact support.');
+        }
+      });
+    }
+
+    // Move to Step 2 (OAuth) after template is duplicated
+    if (duplicatedButton) {
+      duplicatedButton.addEventListener('click', async () => {
+        await advanceToStep(2, { step1Complete: true });
+      });
+    }
+  }, 0);
+
+  return section;
+}
+
+// ============================================================================
+// Step 2: Connect Notion (OAuth - AFTER template duplication)
+// ============================================================================
+
+function createStep2Content() {
   const section = document.createElement('div');
   section.className = 'slide-in';
 
@@ -512,11 +608,20 @@ function createStep1Content() {
       <div class="flex items-start">
         <div class="text-3xl mr-4">🔗</div>
         <div class="flex-1">
-          <h3 class="font-bold text-gray-900 text-xl mb-2">Step 1 of 3: Connect Your Notion Account</h3>
+          <h3 class="font-bold text-gray-900 text-xl mb-2">Step 2 of 3: Connect Your Notion Account</h3>
           <p class="text-gray-700 mb-4">
-            Connect your Notion account to get started with Sage Stocks.<br>
-            <strong>Setup takes about 5 minutes.</strong>
+            Now connect your Notion account. <strong>Important:</strong> When Notion asks which pages to share, 
+            make sure to <strong>select your duplicated Sage Stocks page</strong> so the integration can access it.
           </p>
+          
+          <div class="mb-4 p-4 bg-yellow-50 border-2 border-yellow-300 rounded-lg">
+            <p class="text-yellow-800 font-medium mb-2">⚠️ Critical Step:</p>
+            <p class="text-sm text-yellow-700">
+              During OAuth, Notion will ask "Which pages do you want to share?" 
+              You <strong>must select your duplicated Sage Stocks page</strong> from the list. 
+              If you don't see it, make sure you completed Step 1 and the template finished duplicating.
+            </p>
+          </div>
 
           ${needsEmailInput ? `
             <div class="mb-4 p-4 bg-white border border-blue-200 rounded-lg">
@@ -619,17 +724,16 @@ function createStep1Content() {
 }
 
 // ============================================================================
-// Step 2: Verify Workspace (After OAuth - Template Auto-Duplicated)
+// Step 3: Verify Workspace & Run First Analysis (After OAuth)
 // ============================================================================
 
 /**
- * Step 2: Verify Workspace (v1.2.14)
+ * Step 3: Verify Workspace (After OAuth)
  *
- * Runs AFTER OAuth callback. Verifies that the user has a Sage Stocks template
- * in their workspace (either from Step 1.5 manual duplication or from being
- * an existing user).
+ * Runs AFTER OAuth callback. Verifies that the integration can access the
+ * duplicated Sage Stocks template and runs database detection.
  */
-function createStep2Content() {
+function createStep3Content() {
   const section = document.createElement('div');
   section.className = 'slide-in';
 
@@ -638,12 +742,12 @@ function createStep2Content() {
       <div class="flex items-start">
         <div class="text-3xl mr-4">✅</div>
         <div class="flex-1">
-          <h3 class="font-bold text-gray-900 text-xl mb-2">Step 2 of 3: Verify Your Workspace</h3>
+          <h3 class="font-bold text-gray-900 text-xl mb-2">Step 3 of 3: Verify Your Workspace</h3>
 
           <!-- Checking State -->
-          <div id="step2-checking">
+          <div id="step3-checking">
             <p class="text-gray-700 mb-4">
-              Verifying your Notion workspace...
+              Verifying your Notion workspace and detecting databases...
             </p>
             <div class="flex items-center gap-2">
               <span class="inline-block spinner" style="width: 20px; height: 20px; border: 3px solid #3B82F6; border-top-color: transparent; border-radius: 50%;"></span>
@@ -651,22 +755,18 @@ function createStep2Content() {
             </div>
           </div>
 
-          <!-- Workspace Verified -->
-          <div id="step2-verified" class="hidden">
+          <!-- Workspace Verified - Show Analysis UI -->
+          <div id="step3-verified" class="hidden">
             <div class="p-4 bg-green-100 border-2 border-green-300 rounded-lg mb-4">
               <p class="text-green-800 font-medium mb-2">✅ Workspace Verified!</p>
               <p class="text-sm text-green-700">Your Sage Stocks workspace is set up and ready to use.</p>
             </div>
-            <button
-              id="step2-continue"
-              class="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl"
-            >
-              Continue to Final Step →
-            </button>
+            <!-- Analysis UI will be shown here -->
+            <div id="step3-analysis-ui"></div>
           </div>
 
           <!-- Workspace Not Found (Error State) -->
-          <div id="step2-error" class="hidden">
+          <div id="step3-error" class="hidden">
             <div class="p-4 bg-red-100 border-2 border-red-300 rounded-lg mb-4">
               <p class="text-red-800 font-medium mb-2">❌ Integration Cannot Access Your Workspace</p>
               <p class="text-sm text-red-700 mb-3">
@@ -681,13 +781,13 @@ function createStep2Content() {
             </div>
             <div class="flex flex-col sm:flex-row gap-3">
               <button
-                id="step2-retry"
+                id="step3-retry"
                 class="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl"
               >
                 🔄 Check Again
               </button>
               <button
-                id="step2-restart"
+                id="step3-restart"
                 class="px-6 py-3 bg-white border-2 border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition-all"
               >
                 ← Start Over
@@ -702,27 +802,36 @@ function createStep2Content() {
 
   // Setup event listeners after render
   setTimeout(async () => {
-    const checkingDiv = section.querySelector('#step2-checking');
-    const verifiedDiv = section.querySelector('#step2-verified');
-    const errorDiv = section.querySelector('#step2-error');
-    const continueButton = section.querySelector('#step2-continue');
-    const retryButton = section.querySelector('#step2-retry');
-    const restartButton = section.querySelector('#step2-restart');
+    const checkingDiv = section.querySelector('#step3-checking');
+    const verifiedDiv = section.querySelector('#step3-verified');
+    const errorDiv = section.querySelector('#step3-error');
+    const analysisUi = section.querySelector('#step3-analysis-ui');
+    const retryButton = section.querySelector('#step3-retry');
+    const restartButton = section.querySelector('#step3-restart');
 
-    // Function to check for template
+    // Function to check for template and run detection
     async function checkForTemplate() {
       try {
         console.log('🔍 Verifying Sage Stocks workspace...');
         const response = await fetch('/api/setup/check-template');
         const data = await response.json();
 
-        if (checkingDiv) checkingDiv.classList.add('hidden');
-
         if (data.hasTemplate) {
           console.log('✅ Workspace verified:', data.templateId);
+          if (checkingDiv) checkingDiv.classList.add('hidden');
           if (verifiedDiv) verifiedDiv.classList.remove('hidden');
+          
+          // Trigger auto-detection
+          await triggerAutoDetection();
+          
+          // Show analysis UI
+          if (analysisUi) {
+            analysisUi.innerHTML = createAnalysisUI();
+            setupAnalysisListeners(analysisUi);
+          }
         } else {
           console.warn('❌ No workspace found - user may not have duplicated template');
+          if (checkingDiv) checkingDiv.classList.add('hidden');
           if (errorDiv) errorDiv.classList.remove('hidden');
         }
       } catch (error) {
@@ -734,13 +843,6 @@ function createStep2Content() {
 
     // Initial check
     await checkForTemplate();
-
-    // Continue button
-    if (continueButton) {
-      continueButton.addEventListener('click', async () => {
-        await advanceToStep(3, { step2Complete: true });
-      });
-    }
 
     // Retry button
     if (retryButton) {
@@ -766,19 +868,15 @@ function createStep2Content() {
 
   return section;
 }
-// ============================================================================
-// Step 3: Run First Analysis
-// ============================================================================
 
-function createStep3Content() {
-  const section = document.createElement('div');
-  section.className = 'slide-in';
-  section.innerHTML = `
+// Helper function to create analysis UI
+function createAnalysisUI() {
+  return `
     <div class="mb-6 p-6 rounded-lg border bg-indigo-50 border-indigo-200">
       <div class="flex items-start">
         <div class="text-3xl mr-4">📊</div>
         <div class="flex-1">
-          <h3 class="font-bold text-gray-900 text-xl mb-2">Step 3 of 3: Run Your First Analysis</h3>
+          <h3 class="font-bold text-gray-900 text-xl mb-2">Run Your First Analysis</h3>
           <p class="text-gray-700 mb-4">
             Your workspace is ready! Enter any ticker symbol (like AAPL, TSLA, or GOOGL) and we'll generate a comprehensive analysis in your Notion workspace.
           </p>
@@ -804,37 +902,44 @@ function createStep3Content() {
       </div>
     </div>
   `;
-
-  // Setup event listeners
-  setTimeout(() => {
-    const input = section.querySelector('#ticker-input');
-    const button = section.querySelector('#analyze-button');
-
-    if (input && button) {
-      input.addEventListener('input', () => {
-        button.disabled = input.value.trim().length < 1;
-      });
-
-      button.addEventListener('click', async () => {
-        await runFirstAnalysis(input.value.trim().toUpperCase());
-      });
-
-      input.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter' && input.value.trim().length >= 1) {
-          runFirstAnalysis(input.value.trim().toUpperCase());
-        }
-      });
-    }
-  }, 0);
-
-  return section;
 }
 
-async function runFirstAnalysis(ticker) {
-  const button = document.getElementById('analyze-button');
-  const statusDiv = document.getElementById('analysis-status');
+// Helper function to setup analysis listeners
+function setupAnalysisListeners(container) {
+  const input = container.querySelector('#ticker-input');
+  const button = container.querySelector('#analyze-button');
+  const statusDiv = container.querySelector('#analysis-status');
 
-  if (!button || !statusDiv) return;
+  if (input && button && statusDiv) {
+    input.addEventListener('input', () => {
+      button.disabled = input.value.trim().length < 1;
+    });
+
+    button.addEventListener('click', async () => {
+      await runFirstAnalysis(input.value.trim().toUpperCase(), button, statusDiv);
+    });
+
+    input.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter' && input.value.trim().length >= 1) {
+        runFirstAnalysis(input.value.trim().toUpperCase(), button, statusDiv);
+      }
+    });
+  }
+}
+
+// ============================================================================
+// Analysis Functions (used by Step 3)
+// ============================================================================
+
+async function runFirstAnalysis(ticker, button = null, statusDiv = null) {
+  // Use provided elements or fall back to document search
+  button = button || document.getElementById('analyze-button');
+  statusDiv = statusDiv || document.getElementById('analysis-status');
+
+  if (!button || !statusDiv) {
+    console.error('Analysis UI elements not found');
+    return;
+  }
 
   button.disabled = true;
   button.innerHTML = '<span class="inline-block spinner mr-2" style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%;"></span> Starting analysis...';
