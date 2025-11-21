@@ -629,18 +629,21 @@ export async function autoDetectTemplate(
 
     // Last attempt - return what we found
     console.log(`❌ [autoDetectTemplate] Failed to find all components after ${maxAttempts} attempts`);
+    
+    // Calculate final found count
+    const finalFoundCount = [stockAnalysesDb, stockHistoryDb, stockEventsDb, marketContextDb, sageStocksPage].filter(Boolean).length;
+    
     console.log(`📊 [autoDetectTemplate] Final results:`, {
       stockAnalysesDb: stockAnalysesDb ? '✓' : '✗',
       stockHistoryDb: stockHistoryDb ? '✓' : '✗',
       stockEventsDb: stockEventsDb ? '✓' : '✗',
       marketContextDb: marketContextDb ? '✓' : '✗',
       sageStocksPage: sageStocksPage ? '✓' : '✗',
-      foundCount: [stockAnalysesDb, stockHistoryDb, stockEventsDb, marketContextDb, sageStocksPage].filter(Boolean).length,
+      foundCount: finalFoundCount,
     });
     
     // If we found NOTHING (0/5), this suggests a permissions issue, not timing
-    const foundCount = [stockAnalysesDb, stockHistoryDb, stockEventsDb, marketContextDb, sageStocksPage].filter(Boolean).length;
-    if (foundCount === 0) {
+    if (finalFoundCount === 0) {
       console.log('⚠️  [autoDetectTemplate] ZERO components found after all retries');
       console.log('   This strongly suggests a PERMISSIONS issue, not a timing issue.');
       console.log('   If it were timing, at least the Sage Stocks page should appear.');

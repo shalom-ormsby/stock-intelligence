@@ -12,8 +12,6 @@ import {
   storeUserSession,
   createOrUpdateUser,
   updateUserStatus,
-  updateUserDatabaseIds,
-  decryptToken,
 } from '../../lib/auth';
 
 interface NotionOAuthTokenResponse {
