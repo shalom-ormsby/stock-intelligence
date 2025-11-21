@@ -754,8 +754,8 @@ export class NotionClient {
       } catch (error: any) {
         // If Market Regime property doesn't exist, retry without it
         if (error.code === 'validation_error' &&
-            error.message?.includes('Market Regime') &&
-            marketRegime) {
+          error.message?.includes('Market Regime') &&
+          marketRegime) {
           console.warn('⚠️  Market Regime property not found in Stock History database - skipping');
           console.warn('   💡 To enable regime tracking, add a "Market Regime" select property to Stock History');
           console.warn('      Options: Risk-On, Risk-Off, Transition');

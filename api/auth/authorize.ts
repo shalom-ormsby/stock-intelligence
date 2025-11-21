@@ -50,8 +50,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     authUrl.searchParams.set('owner', 'user');
 
     // Notion OAuth requires explicit content scopes
-    const scopes = ['read_content', 'update_content', 'insert_content'];
-    authUrl.searchParams.set('scope', scopes.join(' '));
+    // v1.2.17: Reverted explicit scopes to rely on integration defaults (which worked previously)
+    // const scopes = ['read_content', 'update_content', 'insert_content'];
+    // authUrl.searchParams.set('scope', scopes.join(' '));
 
     // Add template_id for automatic template duplication
     // Uses SAGE_STOCKS_TEMPLATE_ID from env, falls back to hardcoded ID
