@@ -212,13 +212,33 @@ async function triggerAutoDetection() {
     if (data.success && data.detection) {
       const { stockAnalysesDb, stockHistoryDb, stockEventsDb, marketContextDb, sageStocksPage, needsManual } = data.detection;
 
+      // If setup is already complete, don't treat missing optional DBs as an error
+      if (data.alreadySetup) {
+        clearErrors();
+        console.log('✅ Auto-detection: user already set up. Using stored database IDs.', {
+          hasStockAnalyses: !!stockAnalysesDb,
+          hasStockHistory: !!stockHistoryDb,
+          hasStockEvents: !!stockEventsDb,
+          hasMarketContext: !!marketContextDb,
+          hasSageStocksPage: !!sageStocksPage,
+        });
+        // Nothing else to do here – backend has already saved IDs
+        return;
+      }
+
       // Check if all required databases were found
-      if (!needsManual && stockAnalysesDb && stockHistoryDb && stockEventsDb && marketContextDb && sageStocksPage) {
+      // For new users, the core requirement is: analyses DB, history DB, and Sage Stocks page.
+      // Stock Events and Market Context databases are required for best experience but
+      // shouldn't block setup UI if core pieces are present.
+      const hasCoreDbs = !!stockAnalysesDb && !!stockHistoryDb && !!sageStocksPage;
+
+      if (!needsManual && hasCoreDbs) {
+        clearErrors();
         console.log('✅ Auto-detection successful!');
         console.log('   Stock Analyses DB:', stockAnalysesDb.id);
         console.log('   Stock History DB:', stockHistoryDb.id);
-        console.log('   Stock Events DB:', stockEventsDb.id);
-        console.log('   Market Context DB:', marketContextDb.id);
+        console.log('   Stock Events DB:', stockEventsDb ? stockEventsDb.id : '(optional: not detected)');
+        console.log('   Market Context DB:', marketContextDb ? marketContextDb.id : '(optional: not detected)');
         console.log('   Sage Stocks Page:', sageStocksPage.id);
 
         // Database IDs are already saved by the backend (api/setup/detect.ts lines 71-102)
@@ -441,7 +461,7 @@ function updateProgressBadge() {
 
   if (!badge || !badgeStep) return;
 
-  if (currentState.currentStep <= 5) {
+  if (currentState.currentStep <= 3) {
     badge.classList.remove('hidden');
     badgeStep.textContent = currentState.currentStep;
   } else {
@@ -520,9 +540,12 @@ function createStep1Content() {
               <li>Click "Open Template in Notion" above</li>
               <li>In Notion, click the <strong>"Duplicate"</strong> button in the top-right</li>
               <li>Select your workspace and confirm</li>
-              <li>Wait for the template to finish duplicating (usually 10-30 seconds)</li>
+              <li>Wait for the template to finish duplicating (this can take up to 5–6 minutes)</li>
               <li>Come back here and check the box below to confirm</li>
             </ol>
+            <p class="text-xs text-yellow-700 mt-3">
+              If Notion is still working, give it time — every database needs to finish syncing before you continue.
+            </p>
           </div>
 
           <div class="mb-4 p-4 bg-white border border-green-200 rounded-lg">
@@ -533,11 +556,15 @@ function createStep1Content() {
                 class="mt-1 w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500"
               />
               <div class="flex-1">
-                <p class="text-sm font-medium text-gray-900">I've successfully duplicated the Sage Stocks template in my Notion workspace</p>
+                <p class="text-sm font-medium text-gray-900">I can see "Sage Stocks" in my Notion workspace sidebar</p>
                 <p class="text-xs text-gray-600 mt-1">Make sure the template has finished duplicating before checking this box</p>
               </div>
             </label>
           </div>
+
+          <p class="text-sm text-green-700 mb-4 hidden" id="template-duplicated-confirmation">
+            ✅ Great — your Sage Stocks workspace is ready. Next, you'll connect your Notion account and grant access to this template.
+          </p>
 
           <button
             id="template-duplicated-button"
@@ -556,6 +583,7 @@ function createStep1Content() {
     const openTemplateButton = section.querySelector('#open-template-button');
     const duplicatedButton = section.querySelector('#template-duplicated-button');
     const duplicatedCheckbox = section.querySelector('#template-duplicated-checkbox');
+    const duplicatedConfirmation = section.querySelector('#template-duplicated-confirmation');
 
     // Fetch template URL
     if (openTemplateButton) {
@@ -580,6 +608,9 @@ function createStep1Content() {
     if (duplicatedCheckbox && duplicatedButton) {
       duplicatedCheckbox.addEventListener('change', () => {
         duplicatedButton.disabled = !duplicatedCheckbox.checked;
+        if (duplicatedConfirmation) {
+          duplicatedConfirmation.classList.toggle('hidden', !duplicatedCheckbox.checked);
+        }
       });
     }
 
@@ -683,6 +714,12 @@ function createStep2Content() {
               </p>
             </div>
           ` : ''}
+
+          <div class="mb-4 p-4 bg-white border-2 border-yellow-200 rounded-lg">
+            <p class="text-sm font-semibold text-yellow-800 mb-2">When Notion asks "Which pages do you want to share?", select your duplicated Sage Stocks page.</p>
+            <p class="text-sm text-yellow-700">If you skip this step the integration can't reach your databases.</p>
+            <p class="text-xs text-yellow-600 mt-2"><strong>What if you don’t see it?</strong> Click “Select pages” → “Reload” in Notion, or go back to Step 1 to duplicate again.</p>
+          </div>
 
           <p class="text-sm text-gray-600 mb-4">
             By signing in, you authorize Sage Stocks to create and write to a template in your Notion workspace.
@@ -788,6 +825,7 @@ function createStep3Content() {
             <div class="p-4 bg-green-100 border-2 border-green-300 rounded-lg mb-4">
               <p class="text-green-800 font-medium mb-2">✅ Workspace Verified!</p>
               <p class="text-sm text-green-700">Your Sage Stocks workspace is set up and ready to use.</p>
+              <p class="text-xs text-green-700 mt-1">All required databases are connected. You're ready to run your first analysis.</p>
             </div>
             <!-- Analysis UI will be shown here -->
             <div id="step3-analysis-ui"></div>
@@ -802,9 +840,9 @@ function createStep3Content() {
               </p>
               <p class="text-sm text-red-700 font-semibold mb-2">To fix this:</p>
               <ol class="text-sm text-red-700 space-y-2 ml-4 list-decimal">
-                <li>Make sure you duplicated the Sage Stocks template in Step 1</li>
-                <li>Go back and re-authorize: Click "Start Over" below, then during OAuth, make sure to <strong>select the Sage Stocks page</strong> when Notion asks which pages to share</li>
-                <li>Or manually connect: In Notion, open your Sage Stocks page → Click <code>⋯</code> → "Add connections" → Select "Sage Stocks" integration</li>
+                <li>Make sure you duplicated the Sage Stocks template in Step 1.</li>
+                <li>Click "Start Over" below, redo Step 1 (duplicate) and Step 2 (connect), and when Notion shows “Select pages” choose your Sage Stocks page, then click Allow access.</li>
+                <li>Prefer not to redo OAuth? In Notion, open your Sage Stocks page → Click <code>⋯</code> → "Add connections" → Select "Sage Stocks" integration. This won’t delete any existing data.</li>
               </ol>
             </div>
             <div class="flex flex-col sm:flex-row gap-3">
@@ -908,6 +946,9 @@ function createAnalysisUI() {
           <p class="text-gray-700 mb-4">
             Your workspace is ready! Enter any ticker symbol (like AAPL, TSLA, or GOOGL) and we'll generate a comprehensive analysis in your Notion workspace.
           </p>
+          <p class="text-xs text-gray-600 mb-4">
+            This usually takes 1–3 minutes. You can keep this tab open — we'll update here when your Notion pages are ready.
+          </p>
           <div class="mb-4">
             <label class="block text-sm font-medium mb-2 text-gray-700">Enter Ticker Symbol</label>
             <input
@@ -926,6 +967,7 @@ function createAnalysisUI() {
             📊 Analyze Stock
           </button>
           <div id="analysis-status" class="hidden mt-4"></div>
+          <p class="text-xs text-gray-500 mt-3">Keep this tab open; we'll update this status as soon as your Notion workspace is ready.</p>
         </div>
       </div>
     </div>
@@ -1203,12 +1245,20 @@ function createStep6Content() {
 // Error Handling & UI Helpers
 // ============================================================================
 
+function clearErrors() {
+  const container = document.getElementById('setup-content');
+  if (!container) return;
+  container.querySelectorAll('.setup-error').forEach((node) => node.remove());
+}
+
 function showError(message) {
   const container = document.getElementById('setup-content');
   if (!container) return;
 
+  clearErrors();
+
   const errorDiv = document.createElement('div');
-  errorDiv.className = 'bg-red-50 border-l-4 border-red-400 p-4 mb-6 rounded slide-in';
+  errorDiv.className = 'setup-error bg-red-50 border-l-4 border-red-400 p-4 mb-6 rounded slide-in';
   errorDiv.innerHTML = `
     <div class="flex items-start gap-3">
       <span class="text-red-600 text-xl flex-shrink-0">⚠️</span>
