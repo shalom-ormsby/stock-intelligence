@@ -74,9 +74,57 @@ async function searchUserDatabases(notionToken: string): Promise<any[]> {
   if (databases.length === 0) {
     console.log('⚠️  [searchUserDatabases] NO DATA SOURCES FOUND!');
     console.log('⚠️  [searchUserDatabases] This could mean:');
-    console.log('   1. Template hasn\'t been duplicated yet');
-    console.log('   2. OAuth token lacks database permissions');
+    console.log('   1. Template hasn\'t been duplicated yet (OAuth template_id duplication may be in progress)');
+    console.log('   2. OAuth token lacks database permissions (integration not connected to duplicated databases)');
     console.log('   3. API version or filter is incorrect');
+    console.log('   4. Integration needs to be manually connected to duplicated databases');
+    console.log('');
+    console.log('🔍 [searchUserDatabases] DIAGNOSTIC: Testing if integration can access ANY content...');
+    
+    // Try to search for pages to verify integration has any access
+    // This helps distinguish timing issues (can access pages but not databases yet)
+    // from permission issues (can't access anything)
+    try {
+      const pageSearch = await notion.search({
+        filter: { property: 'object', value: 'page' },
+        page_size: 5,
+      });
+      
+      const pageTitles = pageSearch.results.map((p: any) => {
+        if (p.object === 'page') {
+          // Try to get title from different possible locations
+          const title = p.properties?.title?.title?.[0]?.plain_text ||
+                       p.properties?.Name?.title?.[0]?.plain_text ||
+                       'Untitled';
+          return title;
+        }
+        return 'Unknown';
+      });
+      
+      console.log('[diagnostic] Can access ANY pages?', {
+        pagesFound: pageSearch.results.length,
+        pageTitles: pageTitles,
+        hasAccess: pageSearch.results.length > 0,
+      });
+      
+      if (pageSearch.results.length > 0) {
+        console.log('   ✅ Integration CAN access pages - integration IS working');
+        console.log('   ⚠️  But no databases found - likely:');
+        console.log('      a) Template duplication not complete yet (timing issue)');
+        console.log('      b) Integration not connected to duplicated databases (permissions issue)');
+        console.log('      c) Databases exist but integration needs explicit connection');
+      } else {
+        console.log('   ⚠️  Integration cannot access ANY pages');
+        console.log('   This suggests broader permission issues with the OAuth token');
+      }
+    } catch (accessError) {
+      console.log('[diagnostic] Page access test FAILED:', {
+        error: accessError instanceof Error ? accessError.message : String(accessError),
+        errorType: accessError instanceof Error ? accessError.constructor.name : typeof accessError,
+      });
+      console.log('   ❌ Integration access test failed');
+      console.log('   This suggests the OAuth token may be invalid or integration lacks permissions');
+    }
   } else {
     console.log('📋 [searchUserDatabases] Data source details:');
     databases.forEach((db, index) => {
@@ -521,14 +569,19 @@ async function detectSageStocksPage(
 export async function autoDetectTemplate(
   notionToken: string
 ): Promise<DetectionResult> {
-  const maxAttempts = 3;
-  const delays = [0, 3000, 5000]; // 0ms, 3s, 5s
+  const maxAttempts = 4;
+  const delays = [5000, 10000, 15000]; // 5s, 10s, 15s - give Notion time to duplicate template
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     console.log(`🔍 [autoDetectTemplate] Attempt ${attempt}/${maxAttempts}`);
 
-    // Wait before retry (except first attempt)
-    if (attempt > 1) {
+    // Wait before each attempt (including first) to give Notion time to duplicate template
+    // Template duplication via OAuth template_id can take 5-15 seconds
+    if (attempt === 1) {
+      const initialDelay = delays[0];
+      console.log(`⏱️  [autoDetectTemplate] Initial delay ${initialDelay}ms to allow template duplication...`);
+      await new Promise(resolve => setTimeout(resolve, initialDelay));
+    } else if (attempt > 1) {
       const delay = delays[attempt - 1];
       console.log(`⏱️  [autoDetectTemplate] Waiting ${delay}ms before retry...`);
       await new Promise(resolve => setTimeout(resolve, delay));
@@ -576,6 +629,24 @@ export async function autoDetectTemplate(
 
     // Last attempt - return what we found
     console.log(`❌ [autoDetectTemplate] Failed to find all components after ${maxAttempts} attempts`);
+    console.log(`📊 [autoDetectTemplate] Final results:`, {
+      stockAnalysesDb: stockAnalysesDb ? '✓' : '✗',
+      stockHistoryDb: stockHistoryDb ? '✓' : '✗',
+      stockEventsDb: stockEventsDb ? '✓' : '✗',
+      marketContextDb: marketContextDb ? '✓' : '✗',
+      sageStocksPage: sageStocksPage ? '✓' : '✗',
+      foundCount: [stockAnalysesDb, stockHistoryDb, stockEventsDb, marketContextDb, sageStocksPage].filter(Boolean).length,
+    });
+    
+    // If we found NOTHING (0/5), this suggests a permissions issue, not timing
+    const foundCount = [stockAnalysesDb, stockHistoryDb, stockEventsDb, marketContextDb, sageStocksPage].filter(Boolean).length;
+    if (foundCount === 0) {
+      console.log('⚠️  [autoDetectTemplate] ZERO components found after all retries');
+      console.log('   This strongly suggests a PERMISSIONS issue, not a timing issue.');
+      console.log('   If it were timing, at least the Sage Stocks page should appear.');
+      console.log('   Check diagnostic logs above to see if integration can access ANY content.');
+    }
+    
     return {
       stockAnalysesDb,
       stockHistoryDb,

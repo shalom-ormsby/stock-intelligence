@@ -15,7 +15,6 @@ import {
   updateUserDatabaseIds,
   decryptToken,
 } from '../../lib/auth';
-import { autoDetectTemplate } from '../../lib/template-detection';
 
 interface NotionOAuthTokenResponse {
   access_token: string;
@@ -166,75 +165,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     // Step 5.5: Auto-detect databases from duplicated template
     // Run detection for new users or users without database IDs
+    // NOTE: We skip detection in OAuth callback to avoid timing issues.
+    // Detection will run in Step 2 of the setup flow instead, giving Notion
+    // more time to complete template duplication and grant integration access.
     const needsDetection = !user.stockAnalysesDbId || !user.stockHistoryDbId || !user.stockEventsDbId || !user.marketContextDbId;
 
     if (needsDetection) {
-      try {
-        log(LogLevel.INFO, 'Starting automatic database detection', {
-          userId: user.id,
-          email: userEmail,
-        });
-
-        // Decrypt the access token to use for detection
-        const userToken = await decryptToken(user.accessToken);
-
-        // Run auto-detection for all 4 databases + Sage Stocks page
-        const detection = await autoDetectTemplate(userToken);
-
-        log(LogLevel.INFO, 'Database detection completed', {
-          userId: user.id,
-          stockAnalysesDb: detection.stockAnalysesDb ? '✓ Found' : '✗ Not found',
-          stockHistoryDb: detection.stockHistoryDb ? '✓ Found' : '✗ Not found',
-          stockEventsDb: detection.stockEventsDb ? '✓ Found' : '✗ Not found',
-          marketContextDb: detection.marketContextDb ? '✓ Found' : '✗ Not found',
-          sageStocksPage: detection.sageStocksPage ? '✓ Found' : '✗ Not found',
-          needsManual: detection.needsManual,
-        });
-
-        // If all databases were found, save them to the user record
-        if (!detection.needsManual &&
-            detection.sageStocksPage &&
-            detection.stockAnalysesDb &&
-            detection.stockHistoryDb &&
-            detection.stockEventsDb &&
-            detection.marketContextDb) {
-
-          await updateUserDatabaseIds(user.id, {
-            sageStocksPageId: detection.sageStocksPage.id,
-            stockAnalysesDbId: detection.stockAnalysesDb.id,
-            stockHistoryDbId: detection.stockHistoryDb.id,
-            stockEventsDbId: detection.stockEventsDb.id,
-            marketContextDbId: detection.marketContextDb.id,
-          });
-
-          log(LogLevel.INFO, 'Database IDs saved to user record', {
-            userId: user.id,
-            sageStocksPageId: detection.sageStocksPage.id,
-            stockAnalysesDbId: detection.stockAnalysesDb.id,
-            stockHistoryDbId: detection.stockHistoryDb.id,
-            stockEventsDbId: detection.stockEventsDb.id,
-            marketContextDbId: detection.marketContextDb.id,
-          });
-        } else {
-          log(LogLevel.WARN, 'Partial database detection - some databases missing', {
-            userId: user.id,
-            foundDatabases: {
-              sageStocksPage: !!detection.sageStocksPage,
-              stockAnalysesDb: !!detection.stockAnalysesDb,
-              stockHistoryDb: !!detection.stockHistoryDb,
-              stockEventsDb: !!detection.stockEventsDb,
-              marketContextDb: !!detection.marketContextDb,
-            },
-          });
-        }
-      } catch (detectionError) {
-        // Log but don't fail the OAuth flow - user can retry detection later
-        log(LogLevel.ERROR, 'Database detection failed (non-critical)', {
-          userId: user.id,
-          error: detectionError instanceof Error ? detectionError.message : String(detectionError),
-          stack: detectionError instanceof Error ? detectionError.stack : undefined,
-        });
-      }
+      log(LogLevel.INFO, 'Database detection needed - will run in Step 2 setup flow', {
+        userId: user.id,
+        email: userEmail,
+        reason: 'Skipping immediate detection to allow template duplication to complete',
+      });
+      // Skip detection here - let Step 2 handle it with proper retry logic
+      // Template duplication via OAuth template_id can take 5-15 seconds, and the
+      // integration may not have immediate access to duplicated databases.
+      // Step 2's detection endpoint has better retry logic with longer delays.
     } else {
       log(LogLevel.INFO, 'Database detection skipped - user already has all database IDs', {
         userId: user.id,
