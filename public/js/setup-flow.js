@@ -668,15 +668,16 @@ function createStep2Content() {
           <!-- Workspace Not Found (Error State) -->
           <div id="step2-error" class="hidden">
             <div class="p-4 bg-red-100 border-2 border-red-300 rounded-lg mb-4">
-              <p class="text-red-800 font-medium mb-2">❌ Workspace Not Found</p>
+              <p class="text-red-800 font-medium mb-2">❌ Integration Cannot Access Your Workspace</p>
               <p class="text-sm text-red-700 mb-3">
-                We couldn't find a Sage Stocks workspace in your Notion account. This may be because:
+                The integration cannot see your Sage Stocks workspace. This usually means the integration wasn't connected to your duplicated pages during OAuth.
               </p>
-              <ul class="text-sm text-red-700 space-y-1 ml-4 list-disc">
-                <li>You didn't duplicate the template in the previous step</li>
-                <li>The duplication is still in progress (rare, but can take a moment)</li>
-                <li>You used a different Notion account than expected</li>
-              </ul>
+              <p class="text-sm text-red-700 font-semibold mb-2">To fix this:</p>
+              <ol class="text-sm text-red-700 space-y-2 ml-4 list-decimal">
+                <li>Make sure you duplicated the Sage Stocks template in Step 1</li>
+                <li>Go back and re-authorize: Click "Start Over" below, then during OAuth, make sure to <strong>select the Sage Stocks page</strong> when Notion asks which pages to share</li>
+                <li>Or manually connect: In Notion, open your Sage Stocks page → Click <code>⋯</code> → "Add connections" → Select "Sage Stocks" integration</li>
+              </ol>
             </div>
             <div class="flex flex-col sm:flex-row gap-3">
               <button

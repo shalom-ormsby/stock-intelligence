@@ -11,7 +11,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { log, LogLevel } from '../../lib/logger';
 import { validateSession } from '../../lib/auth';
-import { extractTemplateId } from '../../lib/utils';
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
@@ -54,12 +53,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     // const scopes = ['read_content', 'update_content', 'insert_content'];
     // authUrl.searchParams.set('scope', scopes.join(' '));
 
-    // Add template_id for automatic template duplication
-    // Uses SAGE_STOCKS_TEMPLATE_ID from env, falls back to hardcoded ID
-    // extractTemplateId handles both notion.so and notion.site URLs
-    const templateIdOrUrl = process.env.SAGE_STOCKS_TEMPLATE_ID || '2a9a1d1b67e0818b8e9fe451466994fc';
-    const templateId = extractTemplateId(templateIdOrUrl);
-    authUrl.searchParams.set('template_id', templateId);
+    // CRITICAL: Do NOT include template_id in OAuth URL
+    // When template_id is used, Notion duplicates the template but the integration
+    // doesn't automatically get access to the duplicated content. Users must manually
+    // connect the integration to duplicated pages, which breaks the flow.
+    // Instead, users should manually duplicate the template FIRST, then during OAuth
+    // they explicitly select the duplicated pages, ensuring the integration has access.
+    // See: https://www.notion.com/help/add-and-manage-integrations-with-the-api
 
     // Pass session data through OAuth state parameter (for callback to use)
     if (session) {
